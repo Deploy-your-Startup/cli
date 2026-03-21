@@ -39,6 +39,110 @@ def cli():
 
 
 # === SECRETS COMMANDS ===
+@cli.command("bootstrap")
+@click.option("--verbose", "-V", is_flag=True, help="Verbose output")
+def bootstrap(verbose):
+    """Bootstrap a new project from the Django template."""
+    from cli.bootstrap import bootstrap_project, _prompt_or_env
+    from cli.sync_commands import _github_owner
+
+    # Mode
+    mode = click.prompt(
+        "Mode",
+        type=click.Choice(["github", "local"]),
+        default="github",
+    )
+
+    # Project basics
+    project_name = click.prompt("Project name (kebab-case)")
+    base_domain = click.prompt("Base domain (e.g. example.com)")
+    additional_domains = click.prompt(
+        "Additional domains (comma-separated, or empty)",
+        default="",
+        show_default=False,
+    )
+
+    # GitHub
+    try:
+        default_username = _github_owner(None)
+    except Exception:
+        default_username = None
+
+    if mode == "github":
+        github_username = click.prompt(
+            "GitHub username/org",
+            default=default_username,
+        )
+    else:
+        github_username = click.prompt(
+            "GitHub username/org (for CI workflows)",
+            default=default_username,
+        )
+
+    # Docker registry — always ghcr.io for GitHub projects
+    docker_registry_host = "ghcr.io"
+
+    # Postgres
+    postgres_version = click.prompt("Postgres version", default="17")
+
+    # Tokens — check env vars, open browser if needed
+    hetzner_token = _prompt_or_env(
+        "Hetzner Cloud API token",
+        "HCLOUD_TOKEN",
+        signup_url="https://console.hetzner.cloud/register",
+        token_url="https://console.hetzner.cloud/projects → Security → API Tokens",
+    )
+
+    digital_ocean_token = _prompt_or_env(
+        "DigitalOcean API token",
+        "DO_TOKEN",
+        signup_url="https://cloud.digitalocean.com/registrations/new",
+        token_url="https://cloud.digitalocean.com/account/api/tokens",
+    )
+
+    # Optional
+    sentry_dsn = _prompt_or_env(
+        "Sentry DSN (optional, press Enter to skip)",
+        "SENTRY_DSN",
+        required=False,
+        hidden=False,
+        signup_url="https://sentry.io/signup/",
+        token_url="https://sentry.io → Settings → Projects → Client Keys (DSN)",
+    )
+
+    # Output directory
+    output_dir = click.prompt(
+        "Output directory",
+        default=str(Path.home() / "Projects"),
+    )
+
+    # Confirm
+    click.echo(f"\nProject: {project_name}")
+    click.echo(f"Domain: {base_domain}")
+    click.echo(f"Mode: {mode}")
+    click.echo(f"GitHub: {github_username}")
+    click.echo(f"Registry: ghcr.io/{github_username}")
+    click.echo(f"Postgres: {postgres_version}")
+    click.echo("")
+
+    if not click.confirm("Proceed?", default=True):
+        raise SystemExit(0)
+
+    bootstrap_project(
+        mode=mode,
+        project_name=project_name,
+        base_domain=base_domain,
+        additional_domains=additional_domains,
+        github_username=github_username,
+        docker_registry_host=docker_registry_host,
+        postgres_version=postgres_version,
+        hetzner_token=hetzner_token,
+        digital_ocean_token=digital_ocean_token,
+        sentry_dsn=sentry_dsn,
+        output_dir=Path(output_dir),
+    )
+
+
 @cli.group()
 def secrets():
     """Manage vault secrets"""
