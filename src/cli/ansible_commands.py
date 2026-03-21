@@ -24,6 +24,14 @@ SPARSE_PATHS = [
     "inventory.ini",
     "inventory.hcloud.yml",
 ]
+
+ROOT_SHARED_FILES = [
+    "ansible.cfg",
+    "requirements.yml",
+    "backup-playbook.yml",
+    "inventory.ini",
+    "inventory.hcloud.yml",
+]
 DEFAULT_SHARED_REPO_NAME = "deploy-your-startup"
 
 
@@ -243,6 +251,19 @@ def _configure_sparse_checkout(target_dir: Path, cwd: Path) -> None:
     )
     _run_command(
         ["git", "-C", str(target_dir), "read-tree", "-mu", "HEAD"],
+        cwd=cwd,
+    )
+    _run_command(
+        [
+            "git",
+            "-C",
+            str(target_dir),
+            "checkout",
+            "--force",
+            "HEAD",
+            "--",
+            *ROOT_SHARED_FILES,
+        ],
         cwd=cwd,
     )
 
