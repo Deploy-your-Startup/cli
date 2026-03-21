@@ -235,6 +235,10 @@ def _configure_sparse_checkout(target_dir: Path, cwd: Path) -> None:
         ],
         cwd=cwd,
     )
+    _run_command(
+        ["git", "-C", str(target_dir), "read-tree", "-mu", "HEAD"],
+        cwd=cwd,
+    )
 
 
 def _normalize_inventory_value(value: object) -> str | None:
