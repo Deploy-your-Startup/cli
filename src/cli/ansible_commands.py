@@ -72,6 +72,22 @@ def _extract_github_owner(remote_url: str) -> str | None:
     return None
 
 
+def _normalize_repo_url(repo_url: str) -> str:
+    normalized = repo_url.strip()
+    if normalized.startswith("git@github.com:"):
+        normalized = normalized.replace("git@github.com:", "https://github.com/", 1)
+    if normalized.startswith("ssh://git@github.com/"):
+        normalized = normalized.replace(
+            "ssh://git@github.com/", "https://github.com/", 1
+        )
+    normalized = re.sub(
+        r"https://x-access-token:[^@]+@github\.com/", "https://github.com/", normalized
+    )
+    if normalized.endswith(".git"):
+        normalized = normalized[:-4]
+    return normalized.rstrip("/")
+
+
 def _infer_roles_owner(working_dir: Path) -> str | None:
     explicit_owner = os.getenv("STARTUP_ANSIBLE_REPO_OWNER")
     if explicit_owner:
@@ -177,7 +193,7 @@ def _configure_sparse_checkout(target_dir: Path, cwd: Path) -> None:
             "set",
             "roles/*",
             "/backup-playbook.yml",
-            "requirements.yml",
+            "/requirements.yml",
         ],
         cwd=cwd,
     )
@@ -208,6 +224,25 @@ def clone_or_update_shared_roles(
 
     if target_dir.exists() and (target_dir / ".git").exists():
         try:
+            current_remote = _run_command(
+                ["git", "-C", str(target_dir), "remote", "get-url", "origin"],
+                cwd=working_dir,
+                capture_output=True,
+            ).stdout.strip()
+            normalized_current_remote = _normalize_repo_url(current_remote)
+            normalized_candidates = {
+                _normalize_repo_url(candidate) for candidate in candidates
+            }
+
+            if normalized_current_remote not in normalized_candidates:
+                click.echo(
+                    f"Replacing shared roles checkout from '{current_remote}' with current configured source ..."
+                )
+                shutil.rmtree(target_dir)
+                raise FileNotFoundError(
+                    "Recreate shared roles checkout with new source"
+                )
+
             _configure_sparse_checkout(target_dir, working_dir)
             _run_command(
                 ["git", "-C", str(target_dir), "fetch", "--tags", "origin"],
@@ -233,7 +268,7 @@ def clone_or_update_shared_roles(
                 except subprocess.CalledProcessError:
                     pass
             return target_dir
-        except subprocess.CalledProcessError as exc:
+        except (subprocess.CalledProcessError, FileNotFoundError) as exc:
             last_error = exc
 
     if target_dir.exists() and not (target_dir / ".git").exists():
