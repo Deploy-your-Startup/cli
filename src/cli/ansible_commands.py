@@ -309,6 +309,7 @@ def clone_or_update_shared_roles(
             _run_command(
                 ["git", "-C", str(target_dir), "checkout", version], cwd=working_dir
             )
+            _configure_sparse_checkout(target_dir, working_dir)
             if re.fullmatch(r"[A-Za-z0-9._/-]+", version):
                 try:
                     _run_command(
