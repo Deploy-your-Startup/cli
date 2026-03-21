@@ -16,7 +16,13 @@ import yaml
 
 DEFAULT_SHARED_DIR = ".shared-roles"
 DEFAULT_VERSION = "main"
-SPARSE_PATHS = ["roles", "requirements.yml", "backup-playbook.yml"]
+SPARSE_PATHS = [
+    "roles",
+    "requirements.yml",
+    "backup-playbook.yml",
+    "inventory.ini",
+    "inventory.hcloud.yml",
+]
 DEFAULT_SHARED_REPO_NAME = "deploy-your-startup"
 
 
