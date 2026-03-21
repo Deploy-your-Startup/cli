@@ -263,6 +263,16 @@ def bootstrap_project(
             [
                 "gh", "api", "-X", "PUT",
                 f"repos/{full_repo}/actions/permissions",
+                "-F", "enabled=true",
+                "-f", "allowed_actions=all",
+            ],
+            cwd=project_dir,
+            capture_output=True,
+        )
+        _run_command(
+            [
+                "gh", "api", "-X", "PUT",
+                f"repos/{full_repo}/actions/permissions/workflow",
                 "-f", "default_workflow_permissions=write",
                 "-F", "can_approve_pull_request_reviews=true",
             ],
