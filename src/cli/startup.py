@@ -462,6 +462,12 @@ def ansible():
     help="Target repository name",
 )
 @click.option(
+    "--roles-repo-name",
+    default="ansible-roles",
+    show_default=True,
+    help="Target roles repository name for template placeholders",
+)
+@click.option(
     "--source-owner",
     default="Deploy-your-Startup",
     show_default=True,
@@ -475,13 +481,16 @@ def ansible():
 )
 @click.option("--private/--public", default=True, show_default=True)
 @click.option("--dry-run", is_flag=True, help="Preview sync without commit/push")
-def sync_ci_actions_cmd(owner, repo_name, source_owner, source_repo, private, dry_run):
+def sync_ci_actions_cmd(
+    owner, repo_name, roles_repo_name, source_owner, source_repo, private, dry_run
+):
     """Sync the ci-actions template into your GitHub account"""
     from cli.sync_commands import sync_ci_actions
 
     sync_ci_actions(
         owner=owner,
         repo_name=repo_name,
+        roles_repo_name=roles_repo_name,
         source_owner=source_owner,
         source_repo=source_repo,
         private=private,
@@ -684,13 +693,14 @@ def github_deploy(
     "--shared-dir", "--shared_dir", default=".shared-roles", show_default=True
 )
 @click.option("--version", default="main", show_default=True)
+@click.option("--refresh/--no-refresh", default=True, show_default=True)
 @click.option(
     "--repo-url",
     "--repo_url",
     default=None,
     help="Override shared roles repository URL",
 )
-def ansible_setup_ansible(working_directory, shared_dir, version, repo_url):
+def ansible_setup_ansible(working_directory, shared_dir, version, refresh, repo_url):
     """Clone/pull shared roles and install Ansible collections"""
     from cli.ansible_commands import setup_ansible
 
@@ -698,6 +708,7 @@ def ansible_setup_ansible(working_directory, shared_dir, version, repo_url):
         working_directory=working_directory,
         shared_dir=shared_dir,
         version=version,
+        refresh=refresh,
         repo_url=repo_url,
     )
 
@@ -714,13 +725,14 @@ def ansible_setup_ansible(working_directory, shared_dir, version, repo_url):
     "--shared-dir", "--shared_dir", default=".shared-roles", show_default=True
 )
 @click.option("--version", default="main", show_default=True)
+@click.option("--refresh/--no-refresh", default=True, show_default=True)
 @click.option(
     "--repo-url",
     "--repo_url",
     default=None,
     help="Override shared roles repository URL",
 )
-def ansible_setup(working_directory, shared_dir, version, repo_url):
+def ansible_setup(working_directory, shared_dir, version, refresh, repo_url):
     """Install deployment dependencies and shared Ansible roles"""
     from cli.ansible_commands import setup
 
@@ -728,6 +740,7 @@ def ansible_setup(working_directory, shared_dir, version, repo_url):
         working_directory=working_directory,
         shared_dir=shared_dir,
         version=version,
+        refresh=refresh,
         repo_url=repo_url,
     )
 
@@ -755,6 +768,7 @@ def ansible_setup(working_directory, shared_dir, version, repo_url):
     "--shared-dir", "--shared_dir", default=".shared-roles", show_default=True
 )
 @click.option("--version", default="main", show_default=True)
+@click.option("--refresh/--no-refresh", default=True, show_default=True)
 @click.option(
     "--repo-url",
     "--repo_url",
@@ -768,6 +782,7 @@ def ansible_deploy(
     working_directory,
     shared_dir,
     version,
+    refresh,
     repo_url,
 ):
     """Deploy services via Ansible playbook"""
@@ -780,6 +795,7 @@ def ansible_deploy(
         working_directory=working_directory,
         shared_dir=shared_dir,
         version=version,
+        refresh=refresh,
         repo_url=repo_url,
     )
 
@@ -804,6 +820,7 @@ def ansible_deploy(
     "--shared-dir", "--shared_dir", default=".shared-roles", show_default=True
 )
 @click.option("--version", default="main", show_default=True)
+@click.option("--refresh/--no-refresh", default=True, show_default=True)
 @click.option(
     "--repo-url",
     "--repo_url",
@@ -811,7 +828,13 @@ def ansible_deploy(
     help="Override shared roles repository URL",
 )
 def ansible_infrastructure(
-    vault_password, environment, working_directory, shared_dir, version, repo_url
+    vault_password,
+    environment,
+    working_directory,
+    shared_dir,
+    version,
+    refresh,
+    repo_url,
 ):
     """Provision infrastructure via Ansible playbook"""
     from cli.ansible_commands import run_infrastructure
@@ -822,6 +845,7 @@ def ansible_infrastructure(
         working_directory=working_directory,
         shared_dir=shared_dir,
         version=version,
+        refresh=refresh,
         repo_url=repo_url,
     )
 
@@ -860,6 +884,7 @@ def ansible_infrastructure(
     "--shared-dir", "--shared_dir", default=".shared-roles", show_default=True
 )
 @click.option("--version", default="main", show_default=True)
+@click.option("--refresh/--no-refresh", default=True, show_default=True)
 @click.option(
     "--repo-url",
     "--repo_url",
@@ -879,6 +904,7 @@ def ansible_kubeconfig(
     make_current,
     shared_dir,
     version,
+    refresh,
     repo_url,
 ):
     """Fetch and merge the cluster kubeconfig"""
@@ -897,6 +923,7 @@ def ansible_kubeconfig(
         make_current=make_current,
         shared_dir=shared_dir,
         version=version,
+        refresh=refresh,
         repo_url=repo_url,
     )
 
@@ -925,6 +952,7 @@ def ansible_kubeconfig(
     "--shared-dir", "--shared_dir", default=".shared-roles", show_default=True
 )
 @click.option("--version", default="main", show_default=True)
+@click.option("--refresh/--no-refresh", default=True, show_default=True)
 @click.option(
     "--repo-url",
     "--repo_url",
@@ -939,6 +967,7 @@ def ansible_backup(
     playbook,
     shared_dir,
     version,
+    refresh,
     repo_url,
 ):
     """Run a backup playbook"""
@@ -952,6 +981,7 @@ def ansible_backup(
         playbook=playbook,
         shared_dir=shared_dir,
         version=version,
+        refresh=refresh,
         repo_url=repo_url,
     )
 

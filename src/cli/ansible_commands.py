@@ -229,11 +229,21 @@ def clone_or_update_shared_roles(
     shared_dir: str = DEFAULT_SHARED_DIR,
     version: str = DEFAULT_VERSION,
     repo_url: str | None = None,
+    refresh: bool = True,
 ) -> Path:
     working_dir = _resolve_working_dir(working_directory)
     target_dir = working_dir / shared_dir
     candidates = _candidate_repo_urls(working_dir, repo_url)
     last_error: Exception | None = None
+
+    if (
+        target_dir.exists()
+        and not (target_dir / ".git").exists()
+        and (target_dir / "roles").exists()
+        and not refresh
+    ):
+        click.echo(f"Using existing shared roles directory '{target_dir}' ...")
+        return target_dir
 
     if target_dir.exists() and (target_dir / ".git").exists():
         try:
@@ -369,12 +379,14 @@ def setup_ansible(
     shared_dir: str = DEFAULT_SHARED_DIR,
     version: str = DEFAULT_VERSION,
     repo_url: str | None = None,
+    refresh: bool = True,
 ) -> Path:
     shared_roles_dir = clone_or_update_shared_roles(
         working_directory=working_directory,
         shared_dir=shared_dir,
         version=version,
         repo_url=repo_url,
+        refresh=refresh,
     )
     install_collections(working_directory=working_directory, shared_dir=shared_dir)
     return shared_roles_dir
@@ -385,6 +397,7 @@ def setup(
     shared_dir: str = DEFAULT_SHARED_DIR,
     version: str = DEFAULT_VERSION,
     repo_url: str | None = None,
+    refresh: bool = True,
 ) -> Path:
     working_dir = _resolve_working_dir(working_directory)
     click.echo("Installing Python dependencies...")
@@ -394,6 +407,7 @@ def setup(
         shared_dir=shared_dir,
         version=version,
         repo_url=repo_url,
+        refresh=refresh,
     )
 
 
@@ -439,6 +453,7 @@ def run_deploy(
     shared_dir: str = DEFAULT_SHARED_DIR,
     version: str = DEFAULT_VERSION,
     repo_url: str | None = None,
+    refresh: bool = True,
 ) -> None:
     working_dir = _resolve_working_dir(working_directory)
     setup_ansible(
@@ -446,6 +461,7 @@ def run_deploy(
         shared_dir=shared_dir,
         version=version,
         repo_url=repo_url,
+        refresh=refresh,
     )
     hcloud_token = get_hcloud_token(working_directory, vault_password, environment)
     env = os.environ.copy()
@@ -479,6 +495,7 @@ def run_infrastructure(
     shared_dir: str = DEFAULT_SHARED_DIR,
     version: str = DEFAULT_VERSION,
     repo_url: str | None = None,
+    refresh: bool = True,
 ) -> None:
     _validated_environment(environment)
     working_dir = _resolve_working_dir(working_directory)
@@ -487,6 +504,7 @@ def run_infrastructure(
         shared_dir=shared_dir,
         version=version,
         repo_url=repo_url,
+        refresh=refresh,
     )
     hcloud_token = get_hcloud_token(working_directory, vault_password, environment)
     env = os.environ.copy()
@@ -551,6 +569,7 @@ def run_kubeconfig(
     shared_dir: str = DEFAULT_SHARED_DIR,
     version: str = DEFAULT_VERSION,
     repo_url: str | None = None,
+    refresh: bool = True,
 ) -> Path:
     working_dir = _resolve_working_dir(working_directory)
     setup_ansible(
@@ -558,6 +577,7 @@ def run_kubeconfig(
         shared_dir=shared_dir,
         version=version,
         repo_url=repo_url,
+        refresh=refresh,
     )
     hcloud_token = get_hcloud_token(working_directory, vault_password, environment)
     env = os.environ.copy()
@@ -713,6 +733,7 @@ def run_backup(
     shared_dir: str = DEFAULT_SHARED_DIR,
     version: str = DEFAULT_VERSION,
     repo_url: str | None = None,
+    refresh: bool = True,
 ) -> None:
     _validated_environment(environment)
     working_dir = _resolve_working_dir(working_directory)
@@ -721,6 +742,7 @@ def run_backup(
         shared_dir=shared_dir,
         version=version,
         repo_url=repo_url,
+        refresh=refresh,
     )
 
     playbook_path = working_dir / playbook

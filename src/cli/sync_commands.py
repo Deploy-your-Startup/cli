@@ -97,6 +97,21 @@ def _ensure_repo_exists(
     )
 
 
+def _set_actions_access(full_repo_name: str, access_level: str, *, cwd: Path) -> None:
+    _run_command(
+        [
+            "gh",
+            "api",
+            "-X",
+            "PUT",
+            f"repos/{full_repo_name}/actions/permissions/access",
+            "-f",
+            f"access_level={access_level}",
+        ],
+        cwd=cwd,
+    )
+
+
 def _clone_source_repo(source_repo: str, destination: Path, branch: str) -> None:
     _run_command(
         [
@@ -215,6 +230,7 @@ def _sync_repo(
     sync_paths: list[str] | None = None,
     dry_run: bool = False,
     replacements: dict[str, str] | None = None,
+    actions_access_level: str | None = None,
 ) -> bool:
     with tempfile.TemporaryDirectory(prefix="startup-sync-") as temp_dir:
         temp_root = Path(temp_dir)
@@ -224,11 +240,26 @@ def _sync_repo(
         if not _repo_exists(target_repo):
             if dry_run:
                 click.echo(f"Would create GitHub repository {target_repo}.")
+                if actions_access_level and private:
+                    click.echo(
+                        f"Would set GitHub Actions access for {target_repo} to '{actions_access_level}'."
+                    )
                 return True
 
             _ensure_repo_exists(
                 target_repo, private=private, description=description, cwd=temp_root
             )
+
+        if private and actions_access_level:
+            if dry_run:
+                click.echo(
+                    f"Would set GitHub Actions access for {target_repo} to '{actions_access_level}'."
+                )
+            else:
+                click.echo(
+                    f"Configuring GitHub Actions access for {target_repo} ({actions_access_level}) ..."
+                )
+                _set_actions_access(target_repo, actions_access_level, cwd=temp_root)
 
         click.echo(f"Cloning source repository {source_repo} ...")
         _clone_source_repo(source_repo, source_root, branch)
@@ -265,6 +296,7 @@ def sync_ci_actions(
     *,
     owner: str | None = None,
     repo_name: str = "ci-actions",
+    roles_repo_name: str = "ansible-roles",
     source_owner: str = DEFAULT_TEMPLATE_OWNER,
     source_repo: str = DEFAULT_CI_TEMPLATE_REPO,
     private: bool = True,
@@ -281,6 +313,7 @@ def sync_ci_actions(
         replacements={
             "§§deploy_your_startup.github_username§§": resolved_owner,
             "§§deploy_your_startup.ci_actions_repo_name§§": repo_name,
+            "§§deploy_your_startup.ansible_roles_repo_name§§": roles_repo_name,
         },
     )
 
@@ -302,6 +335,7 @@ def sync_roles(
         description="Shared Ansible roles and deployment assets",
         commit_message="sync shared ansible roles",
         dry_run=dry_run,
+        actions_access_level="user" if private else None,
     )
 
 
@@ -320,6 +354,7 @@ def sync_all(
     sync_ci_actions(
         owner=owner,
         repo_name=ci_repo_name,
+        roles_repo_name=roles_repo_name,
         source_owner=ci_source_owner,
         source_repo=ci_source_repo,
         private=private,
