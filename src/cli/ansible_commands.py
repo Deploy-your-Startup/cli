@@ -18,6 +18,7 @@ DEFAULT_SHARED_DIR = ".shared-roles"
 DEFAULT_VERSION = "main"
 SPARSE_PATHS = [
     "roles",
+    "ansible.cfg",
     "requirements.yml",
     "backup-playbook.yml",
     "inventory.ini",
@@ -192,6 +193,10 @@ def _copy_local_repo(source_dir: Path, target_dir: Path) -> Path:
     target_dir.mkdir(parents=True, exist_ok=True)
     shutil.copytree(source_dir / "roles", target_dir / "roles")
 
+    ansible_cfg = source_dir / "ansible.cfg"
+    if ansible_cfg.exists():
+        shutil.copy2(ansible_cfg, target_dir / "ansible.cfg")
+
     requirements_file = source_dir / "requirements.yml"
     if requirements_file.exists():
         shutil.copy2(requirements_file, target_dir / "requirements.yml")
@@ -228,6 +233,7 @@ def _configure_sparse_checkout(target_dir: Path, cwd: Path) -> None:
             "sparse-checkout",
             "set",
             "roles/*",
+            "/ansible.cfg",
             "/backup-playbook.yml",
             "/requirements.yml",
             "/inventory.ini",
