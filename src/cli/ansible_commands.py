@@ -300,6 +300,27 @@ def _normalize_inventory_value(value: object) -> str | None:
     return str(value)
 
 
+def _is_up_to_date(target_dir: Path, working_dir: Path, version: str) -> bool:
+    """Check if the local checkout is already up to date with the remote."""
+    try:
+        local_head = _run_command(
+            ["git", "-C", str(target_dir), "rev-parse", "HEAD"],
+            cwd=working_dir,
+            capture_output=True,
+        ).stdout.strip()
+        remote_ref = _run_command(
+            ["git", "-C", str(target_dir), "ls-remote", "origin", version],
+            cwd=working_dir,
+            capture_output=True,
+        ).stdout.strip()
+        if remote_ref:
+            remote_sha = remote_ref.split()[0]
+            return local_head == remote_sha
+    except (click.ClickException, IndexError):
+        pass
+    return False
+
+
 def clone_or_update_shared_roles(
     working_directory: str = ".",
     shared_dir: str = DEFAULT_SHARED_DIR,
@@ -341,6 +362,11 @@ def clone_or_update_shared_roles(
                 raise FileNotFoundError(
                     "Recreate shared roles checkout with new source"
                 )
+
+            # Quick check: skip fetch/pull if already up to date
+            if _is_up_to_date(target_dir, working_dir, version):
+                click.echo("Shared roles are up to date.")
+                return target_dir
 
             _configure_sparse_checkout(target_dir, working_dir)
             _run_command(
@@ -422,6 +448,21 @@ def clone_or_update_shared_roles(
     ) from last_error
 
 
+def _find_uv() -> str:
+    """Find the uv binary, checking common locations if not on PATH."""
+    uv_path = shutil.which("uv")
+    if uv_path:
+        return uv_path
+    for candidate in (
+        Path.home() / ".local" / "bin" / "uv",
+        Path.home() / ".cargo" / "bin" / "uv",
+        Path("/usr/local/bin/uv"),
+    ):
+        if candidate.exists():
+            return str(candidate)
+    return "uv"
+
+
 def install_collections(
     working_directory: str = ".",
     shared_dir: str = DEFAULT_SHARED_DIR,
@@ -437,7 +478,7 @@ def install_collections(
             click.echo(f"Installing Ansible collections from {requirements_file} ...")
             _run_command(
                 [
-                    "uv",
+                    _find_uv(),
                     "run",
                     "--project",
                     str(working_dir),
@@ -478,7 +519,7 @@ def setup(
 ) -> Path:
     working_dir = _resolve_working_dir(working_directory)
     click.echo("Installing Python dependencies...")
-    _run_command(["uv", "sync"], cwd=working_dir)
+    _run_command([_find_uv(), "sync"], cwd=working_dir)
     return setup_ansible(
         working_directory=working_directory,
         shared_dir=shared_dir,
@@ -498,7 +539,7 @@ def get_hcloud_token(
     env = _ansible_env(working_dir, shared_dir)
     result = _run_command(
         [
-            "uv",
+            _find_uv(),
             "run",
             "--project",
             str(working_dir),
@@ -552,7 +593,7 @@ def run_deploy(
     env["HCLOUD_TOKEN"] = hcloud_token
     _run_command(
         [
-            "uv",
+            _find_uv(),
             "run",
             "--project",
             str(working_dir),
@@ -597,7 +638,7 @@ def run_infrastructure(
     env["HCLOUD_TOKEN"] = hcloud_token
     _run_command(
         [
-            "uv",
+            _find_uv(),
             "run",
             "--project",
             str(working_dir),
@@ -676,7 +717,7 @@ def run_kubeconfig(
         inventory_path = working_dir / shared_dir / inventory
     inventory_result = _run_command(
         [
-            "uv",
+            _find_uv(),
             "run",
             "--project",
             str(working_dir),
@@ -860,7 +901,7 @@ def run_backup(
 
     _run_command(
         [
-            "uv",
+            _find_uv(),
             "run",
             "--project",
             str(working_dir),
