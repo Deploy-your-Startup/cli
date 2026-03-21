@@ -72,6 +72,17 @@ def _resolve_working_dir(working_directory: str) -> Path:
     return Path(working_directory).resolve()
 
 
+def _ansible_env(
+    working_dir: Path, shared_dir: str = DEFAULT_SHARED_DIR
+) -> dict[str, str]:
+    """Build an environment dict with ANSIBLE_CONFIG pointing to the shared config."""
+    env = os.environ.copy()
+    ansible_cfg = working_dir / shared_dir / "ansible.cfg"
+    if ansible_cfg.exists():
+        env["ANSIBLE_CONFIG"] = str(ansible_cfg)
+    return env
+
+
 def _extract_github_owner(remote_url: str) -> str | None:
     ssh_match = re.match(
         r"git@github\.com:(?P<owner>[^/]+)/[^/]+(?:\.git)?$", remote_url
@@ -469,9 +480,13 @@ def setup(
 
 
 def get_hcloud_token(
-    working_directory: str, vault_password: str, environment: str
+    working_directory: str,
+    vault_password: str,
+    environment: str,
+    shared_dir: str = DEFAULT_SHARED_DIR,
 ) -> str:
     working_dir = _resolve_working_dir(working_directory)
+    env = _ansible_env(working_dir, shared_dir)
     result = _run_command(
         [
             "uv",
@@ -485,6 +500,7 @@ def get_hcloud_token(
             "/bin/cat",
         ],
         cwd=working_dir,
+        env=env,
         input_text=vault_password,
         capture_output=True,
     )
@@ -520,8 +536,10 @@ def run_deploy(
         repo_url=repo_url,
         refresh=refresh,
     )
-    hcloud_token = get_hcloud_token(working_directory, vault_password, environment)
-    env = os.environ.copy()
+    hcloud_token = get_hcloud_token(
+        working_directory, vault_password, environment, shared_dir
+    )
+    env = _ansible_env(working_dir, shared_dir)
     env["HCLOUD_TOKEN"] = hcloud_token
     _run_command(
         [
@@ -563,8 +581,10 @@ def run_infrastructure(
         repo_url=repo_url,
         refresh=refresh,
     )
-    hcloud_token = get_hcloud_token(working_directory, vault_password, environment)
-    env = os.environ.copy()
+    hcloud_token = get_hcloud_token(
+        working_directory, vault_password, environment, shared_dir
+    )
+    env = _ansible_env(working_dir, shared_dir)
     env["HCLOUD_TOKEN"] = hcloud_token
     _run_command(
         [
@@ -636,8 +656,10 @@ def run_kubeconfig(
         repo_url=repo_url,
         refresh=refresh,
     )
-    hcloud_token = get_hcloud_token(working_directory, vault_password, environment)
-    env = os.environ.copy()
+    hcloud_token = get_hcloud_token(
+        working_directory, vault_password, environment, shared_dir
+    )
+    env = _ansible_env(working_dir, shared_dir)
     env["HCLOUD_TOKEN"] = hcloud_token
 
     inventory_result = _run_command(
@@ -818,14 +840,18 @@ def run_backup(
         if backup_dir
         else Path.home() / "Backups" / project_name
     )
-    hcloud_token = get_hcloud_token(working_directory, vault_password, environment)
-    env = os.environ.copy()
+    hcloud_token = get_hcloud_token(
+        working_directory, vault_password, environment, shared_dir
+    )
+    env = _ansible_env(working_dir, shared_dir)
     env["HCLOUD_TOKEN"] = hcloud_token
 
     _run_command(
         [
             "uv",
             "run",
+            "--project",
+            str(working_dir),
             "ansible-playbook",
             str(playbook_path),
             "--vault-password-file",
