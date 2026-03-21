@@ -144,9 +144,6 @@ Sync the shared template repositories into your own GitHub account using your lo
 # Sync the shared deploy repo
 startup sync
 
-# Explicit command name
-startup sync deploy
-
 # Preview changes without commit/push
 startup sync --dry-run
 ```
@@ -161,8 +158,8 @@ be consumed by other private repositories owned by the same user.
 You can override source and target names if needed:
 
 ```bash
-startup sync deploy --owner philipp-lein --repo-name deploy-your-startup
-startup sync deploy --source-owner Deploy-your-Startup --source-repo deploy-template
+startup sync --owner philipp-lein --repo-name deploy-your-startup
+startup sync --source-owner Deploy-your-Startup --source-repo deploy-template
 ```
 
 ### Shared Deploy Workflow
