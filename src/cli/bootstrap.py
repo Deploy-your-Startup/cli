@@ -246,55 +246,62 @@ def bootstrap_project(
         raise click.ClickException("Failed to rotate vault password.")
     click.echo("  Vault password rotated.")
 
-    # Step 6: Commit and push (GitHub mode) or just commit (local mode)
-    click.echo("\n--- Step 6/7: Committing changes ---")
-    _run_command(["git", "add", "-A"], cwd=project_dir)
-    _run_command(
-        ["git", "commit", "-m", "bootstrap: configure project"],
-        cwd=project_dir,
-    )
-
-    if mode == "github":
-        full_repo = f"{github_username}/{project_name}"
-
-        # Allow GitHub Actions workflows to write packages (for Docker image push)
-        click.echo("  Configuring GitHub Actions permissions ...")
+    # From here on, always show the vault password even if something fails
+    try:
+        # Step 6: Commit and push (GitHub mode) or just commit (local mode)
+        click.echo("\n--- Step 6/7: Committing changes ---")
+        _run_command(["git", "add", "-A"], cwd=project_dir)
         _run_command(
-            [
-                "gh", "api", "-X", "PUT",
-                f"repos/{full_repo}/actions/permissions",
-                "-F", "enabled=true",
-                "-f", "allowed_actions=all",
-            ],
+            ["git", "commit", "-m", "bootstrap: configure project"],
             cwd=project_dir,
-            capture_output=True,
-        )
-        _run_command(
-            [
-                "gh", "api", "-X", "PUT",
-                f"repos/{full_repo}/actions/permissions/workflow",
-                "-f", "default_workflow_permissions=write",
-                "-F", "can_approve_pull_request_reviews=true",
-            ],
-            cwd=project_dir,
-            capture_output=True,
         )
 
-        click.echo("  Setting GitHub Actions secret VAULT_PASSWORD ...")
-        _run_command(
-            ["gh", "secret", "set", "VAULT_PASSWORD", "--body", vault_password],
-            cwd=project_dir,
-            capture_output=True,
-        )
-        click.echo("  Pushing to GitHub ...")
-        _run_command(
-            ["git", "push", "origin", "main"],
-            cwd=project_dir,
-            capture_output=True,
-        )
+        if mode == "github":
+            full_repo = f"{github_username}/{project_name}"
 
-    # Step 7: Summary
-    click.echo("\n--- Step 7/7: Done! ---")
+            # Allow GitHub Actions workflows to write packages (for Docker image push)
+            click.echo("  Configuring GitHub Actions permissions ...")
+            _run_command(
+                [
+                    "gh", "api", "-X", "PUT",
+                    f"repos/{full_repo}/actions/permissions",
+                    "-F", "enabled=true",
+                    "-f", "allowed_actions=all",
+                ],
+                cwd=project_dir,
+                capture_output=True,
+            )
+            _run_command(
+                [
+                    "gh", "api", "-X", "PUT",
+                    f"repos/{full_repo}/actions/permissions/workflow",
+                    "-f", "default_workflow_permissions=write",
+                    "-F", "can_approve_pull_request_reviews=true",
+                ],
+                cwd=project_dir,
+                capture_output=True,
+            )
+
+            click.echo("  Setting GitHub Actions secret VAULT_PASSWORD ...")
+            _run_command(
+                ["gh", "secret", "set", "VAULT_PASSWORD", "--body", vault_password],
+                cwd=project_dir,
+                capture_output=True,
+            )
+            click.echo("  Pushing to GitHub ...")
+            _run_command(
+                ["git", "push", "origin", "main"],
+                cwd=project_dir,
+                capture_output=True,
+            )
+
+        # Step 7: Summary
+        click.echo("\n--- Step 7/7: Done! ---")
+    except Exception as exc:
+        click.echo(f"\n  Error during finalization: {exc}")
+        click.echo("  The project was created but some steps failed.")
+        click.echo("  You can fix the issue and retry manually.")
+
     click.echo("")
     click.echo("=" * 60)
     click.echo(f"  Project: {project_name}")
