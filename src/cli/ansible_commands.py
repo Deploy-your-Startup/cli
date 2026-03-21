@@ -200,6 +200,14 @@ def _copy_local_repo(source_dir: Path, target_dir: Path) -> Path:
     if backup_playbook.exists():
         shutil.copy2(backup_playbook, target_dir / "backup-playbook.yml")
 
+    inventory_ini = source_dir / "inventory.ini"
+    if inventory_ini.exists():
+        shutil.copy2(inventory_ini, target_dir / "inventory.ini")
+
+    inventory_hcloud = source_dir / "inventory.hcloud.yml"
+    if inventory_hcloud.exists():
+        shutil.copy2(inventory_hcloud, target_dir / "inventory.hcloud.yml")
+
     return target_dir
 
 
@@ -222,6 +230,8 @@ def _configure_sparse_checkout(target_dir: Path, cwd: Path) -> None:
             "roles/*",
             "/backup-playbook.yml",
             "/requirements.yml",
+            "/inventory.ini",
+            "/inventory.hcloud.yml",
         ],
         cwd=cwd,
     )
