@@ -671,6 +671,9 @@ def run_kubeconfig(
     env = _ansible_env(working_dir, shared_dir)
     env["HCLOUD_TOKEN"] = hcloud_token
 
+    inventory_path = working_dir / inventory
+    if not inventory_path.exists():
+        inventory_path = working_dir / shared_dir / inventory
     inventory_result = _run_command(
         [
             "uv",
@@ -679,7 +682,7 @@ def run_kubeconfig(
             str(working_dir),
             "ansible-inventory",
             "-i",
-            inventory,
+            str(inventory_path),
             "--list",
         ],
         cwd=working_dir,
