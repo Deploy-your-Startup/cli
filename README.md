@@ -158,11 +158,50 @@ Defaults:
 - `Deploy-your-Startup/ci-actions-template` -> `<your-user>/ci-actions`
 - `Deploy-your-Startup/ansible-roles-template` -> `<your-user>/ansible-roles`
 
+When you sync the roles repository as a private repo, `startup` also enables the
+GitHub Actions access mode that allows private actions and reusable workflows to
+be consumed by other private repositories owned by the same user.
+
 You can override source and target names if needed:
 
 ```bash
 startup sync roles --owner philipp-lein --repo-name ansible-roles
-startup sync ci-actions --source-owner Deploy-your-Startup --source-repo ci-actions-template
+startup sync ci-actions --roles-repo-name ansible-roles --source-owner Deploy-your-Startup --source-repo ci-actions-template
+```
+
+### Private Shared Roles Workflow
+
+The recommended private setup is now:
+
+1. Sync `Deploy-your-Startup/ansible-roles-template` to your own private
+   `<owner>/ansible-roles` repository with `startup sync roles`
+2. Sync `Deploy-your-Startup/ci-actions-template` to your own private
+   `<owner>/ci-actions` repository with `startup sync ci-actions`
+3. Let CI load the shared roles through the private composite action in your
+   synced `ansible-roles` repository
+
+This avoids per-repository secrets for shared roles access in GitHub Actions.
+
+In CI, the shared roles action exports the roles into `deployment/.shared-roles`
+before `startup` runs. The CI workflow then calls `startup` with
+`--no-refresh` so the exported copy is reused instead of trying to clone the
+private roles repository again.
+
+Locally, keep the default `--refresh` behavior so `startup` can still update the
+shared roles checkout from git.
+
+Examples:
+
+```bash
+# One-time setup for a user account
+startup sync roles --owner philipp-lein
+startup sync ci-actions --owner philipp-lein --roles-repo-name ansible-roles
+
+# Local deployment keeps refreshing the shared roles checkout
+uv run startup ansible setup_ansible --working-directory .
+
+# CI-style reuse of a pre-exported .shared-roles directory
+uv run startup ansible setup_ansible --working-directory . --no-refresh
 ```
 
 ## Development
