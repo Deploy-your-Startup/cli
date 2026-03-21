@@ -387,7 +387,7 @@ def deploy():
     "--roles-repo-name",
     default="ansible-roles",
     show_default=True,
-    help="Target roles repository name",
+    help="Target roles repository name used by synced CI workflows",
 )
 @click.option(
     "--ci-source-owner",
@@ -428,7 +428,7 @@ def sync(
     private,
     dry_run,
 ):
-    """Sync shared template repositories into your GitHub account"""
+    """Sync shared template repositories into your GitHub account."""
     if ctx.invoked_subcommand is None:
         from cli.sync_commands import sync_all
 
@@ -465,7 +465,7 @@ def ansible():
     "--roles-repo-name",
     default="ansible-roles",
     show_default=True,
-    help="Target roles repository name for template placeholders",
+    help="Target roles repository name used by synced CI workflows",
 )
 @click.option(
     "--source-owner",
@@ -484,7 +484,7 @@ def ansible():
 def sync_ci_actions_cmd(
     owner, repo_name, roles_repo_name, source_owner, source_repo, private, dry_run
 ):
-    """Sync the ci-actions template into your GitHub account"""
+    """Sync the ci-actions template into your GitHub account."""
     from cli.sync_commands import sync_ci_actions
 
     sync_ci_actions(
@@ -523,7 +523,7 @@ def sync_ci_actions_cmd(
 @click.option("--private/--public", default=True, show_default=True)
 @click.option("--dry-run", is_flag=True, help="Preview sync without commit/push")
 def sync_roles_cmd(owner, repo_name, source_owner, source_repo, private, dry_run):
-    """Sync the ansible-roles template into your GitHub account"""
+    """Sync the ansible-roles template and enable private Actions access."""
     from cli.sync_commands import sync_roles
 
     sync_roles(
@@ -589,7 +589,7 @@ def sync_all_cmd(
     private,
     dry_run,
 ):
-    """Sync ci-actions and ansible-roles templates into your GitHub account"""
+    """Sync ci-actions and ansible-roles templates into your GitHub account."""
     from cli.sync_commands import sync_all
 
     sync_all(
@@ -693,7 +693,12 @@ def github_deploy(
     "--shared-dir", "--shared_dir", default=".shared-roles", show_default=True
 )
 @click.option("--version", default="main", show_default=True)
-@click.option("--refresh/--no-refresh", default=True, show_default=True)
+@click.option(
+    "--refresh/--no-refresh",
+    default=True,
+    show_default=True,
+    help="Refresh `.shared-roles` from git instead of reusing an existing exported copy",
+)
 @click.option(
     "--repo-url",
     "--repo_url",
@@ -701,7 +706,7 @@ def github_deploy(
     help="Override shared roles repository URL",
 )
 def ansible_setup_ansible(working_directory, shared_dir, version, refresh, repo_url):
-    """Clone/pull shared roles and install Ansible collections"""
+    """Prepare shared roles and install Ansible collections."""
     from cli.ansible_commands import setup_ansible
 
     setup_ansible(
@@ -725,7 +730,12 @@ def ansible_setup_ansible(working_directory, shared_dir, version, refresh, repo_
     "--shared-dir", "--shared_dir", default=".shared-roles", show_default=True
 )
 @click.option("--version", default="main", show_default=True)
-@click.option("--refresh/--no-refresh", default=True, show_default=True)
+@click.option(
+    "--refresh/--no-refresh",
+    default=True,
+    show_default=True,
+    help="Refresh `.shared-roles` from git instead of reusing an existing exported copy",
+)
 @click.option(
     "--repo-url",
     "--repo_url",
@@ -733,7 +743,7 @@ def ansible_setup_ansible(working_directory, shared_dir, version, refresh, repo_
     help="Override shared roles repository URL",
 )
 def ansible_setup(working_directory, shared_dir, version, refresh, repo_url):
-    """Install deployment dependencies and shared Ansible roles"""
+    """Install deployment dependencies and prepare shared Ansible roles."""
     from cli.ansible_commands import setup
 
     setup(
@@ -768,7 +778,12 @@ def ansible_setup(working_directory, shared_dir, version, refresh, repo_url):
     "--shared-dir", "--shared_dir", default=".shared-roles", show_default=True
 )
 @click.option("--version", default="main", show_default=True)
-@click.option("--refresh/--no-refresh", default=True, show_default=True)
+@click.option(
+    "--refresh/--no-refresh",
+    default=True,
+    show_default=True,
+    help="Refresh `.shared-roles` from git instead of reusing an existing exported copy",
+)
 @click.option(
     "--repo-url",
     "--repo_url",
@@ -785,7 +800,7 @@ def ansible_deploy(
     refresh,
     repo_url,
 ):
-    """Deploy services via Ansible playbook"""
+    """Deploy services via Ansible playbook."""
     from cli.ansible_commands import run_deploy
 
     run_deploy(
@@ -820,7 +835,12 @@ def ansible_deploy(
     "--shared-dir", "--shared_dir", default=".shared-roles", show_default=True
 )
 @click.option("--version", default="main", show_default=True)
-@click.option("--refresh/--no-refresh", default=True, show_default=True)
+@click.option(
+    "--refresh/--no-refresh",
+    default=True,
+    show_default=True,
+    help="Refresh `.shared-roles` from git instead of reusing an existing exported copy",
+)
 @click.option(
     "--repo-url",
     "--repo_url",
@@ -836,7 +856,7 @@ def ansible_infrastructure(
     refresh,
     repo_url,
 ):
-    """Provision infrastructure via Ansible playbook"""
+    """Provision infrastructure via Ansible playbook."""
     from cli.ansible_commands import run_infrastructure
 
     run_infrastructure(
@@ -884,7 +904,12 @@ def ansible_infrastructure(
     "--shared-dir", "--shared_dir", default=".shared-roles", show_default=True
 )
 @click.option("--version", default="main", show_default=True)
-@click.option("--refresh/--no-refresh", default=True, show_default=True)
+@click.option(
+    "--refresh/--no-refresh",
+    default=True,
+    show_default=True,
+    help="Refresh `.shared-roles` from git instead of reusing an existing exported copy",
+)
 @click.option(
     "--repo-url",
     "--repo_url",
@@ -907,7 +932,7 @@ def ansible_kubeconfig(
     refresh,
     repo_url,
 ):
-    """Fetch and merge the cluster kubeconfig"""
+    """Fetch and merge the cluster kubeconfig."""
     from cli.ansible_commands import run_kubeconfig
 
     run_kubeconfig(
@@ -952,7 +977,12 @@ def ansible_kubeconfig(
     "--shared-dir", "--shared_dir", default=".shared-roles", show_default=True
 )
 @click.option("--version", default="main", show_default=True)
-@click.option("--refresh/--no-refresh", default=True, show_default=True)
+@click.option(
+    "--refresh/--no-refresh",
+    default=True,
+    show_default=True,
+    help="Refresh `.shared-roles` from git instead of reusing an existing exported copy",
+)
 @click.option(
     "--repo-url",
     "--repo_url",
@@ -970,7 +1000,7 @@ def ansible_backup(
     refresh,
     repo_url,
 ):
-    """Run a backup playbook"""
+    """Run a backup playbook."""
     from cli.ansible_commands import run_backup
 
     run_backup(
