@@ -260,6 +260,15 @@ def _configure_sparse_checkout(target_dir: Path, cwd: Path) -> None:
         ],
         cwd=cwd,
     )
+    # Only apply sparse checkout to working tree if HEAD exists (skip on fresh init)
+    try:
+        _run_command(
+            ["git", "-C", str(target_dir), "rev-parse", "--verify", "HEAD"],
+            cwd=cwd,
+            capture_output=True,
+        )
+    except click.ClickException:
+        return
     _run_command(
         ["git", "-C", str(target_dir), "read-tree", "-mu", "HEAD"],
         cwd=cwd,
