@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import tempfile
+import os
 from pathlib import Path
 
 import click
@@ -22,11 +23,16 @@ def _run_command(
     capture_output: bool = False,
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
+    command_env = os.environ.copy()
+    command_env.setdefault("GH_PAGER", "cat")
+    command_env.setdefault("PAGER", "cat")
+    command_env.setdefault("GIT_PAGER", "cat")
     try:
         return subprocess.run(
             command,
             cwd=str(cwd),
             text=True,
+            env=command_env,
             capture_output=capture_output,
             check=check,
         )
@@ -115,6 +121,7 @@ def _set_actions_access(full_repo_name: str, access_level: str, *, cwd: Path) ->
         [
             "gh",
             "api",
+            "--silent",
             "-X",
             "PUT",
             f"repos/{full_repo_name}/actions/permissions/access",
