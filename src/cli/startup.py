@@ -379,39 +379,39 @@ def deploy():
 )
 @click.option(
     "--ci-repo-name",
-    default="ci-actions",
+    default="deploy-your-startup",
     show_default=True,
-    help="Target CI repository name",
+    help="Target shared deploy repository name",
 )
 @click.option(
     "--roles-repo-name",
-    default="ansible-roles",
+    default="deploy-your-startup",
     show_default=True,
-    help="Target roles repository name used by synced CI workflows",
+    help="Deprecated alias for the shared deploy repository name",
 )
 @click.option(
     "--ci-source-owner",
     default="Deploy-your-Startup",
     show_default=True,
-    help="CI template owner",
+    help="Shared deploy template owner",
 )
 @click.option(
     "--ci-source-repo",
-    default="ci-actions-template",
+    default="deploy-template",
     show_default=True,
-    help="CI template repository",
+    help="Shared deploy template repository",
 )
 @click.option(
     "--roles-source-owner",
     default="Deploy-your-Startup",
     show_default=True,
-    help="Roles template owner",
+    help="Deprecated alias for the shared deploy template owner",
 )
 @click.option(
     "--roles-source-repo",
-    default="ansible-roles-template",
+    default="deploy-template",
     show_default=True,
-    help="Roles template repository",
+    help="Deprecated alias for the shared deploy template repository",
 )
 @click.option("--private/--public", default=True, show_default=True)
 @click.option("--dry-run", is_flag=True, help="Preview sync without commit/push")
@@ -428,7 +428,7 @@ def sync(
     private,
     dry_run,
 ):
-    """Sync shared template repositories into your GitHub account."""
+    """Sync the shared deploy template into your GitHub account."""
     if ctx.invoked_subcommand is None:
         from cli.sync_commands import sync_all
 
@@ -451,21 +451,15 @@ def ansible():
     pass
 
 
-@sync.command("ci-actions")
+@sync.command("deploy")
 @click.option(
     "--owner", default=None, help="Target GitHub owner (defaults to gh auth user)"
 )
 @click.option(
     "--repo-name",
-    default="ci-actions",
+    default="deploy-your-startup",
     show_default=True,
     help="Target repository name",
-)
-@click.option(
-    "--roles-repo-name",
-    default="ansible-roles",
-    show_default=True,
-    help="Target roles repository name used by synced CI workflows",
 )
 @click.option(
     "--source-owner",
@@ -475,7 +469,51 @@ def ansible():
 )
 @click.option(
     "--source-repo",
-    default="ci-actions-template",
+    default="deploy-template",
+    show_default=True,
+    help="Source template repository",
+)
+@click.option("--private/--public", default=True, show_default=True)
+@click.option("--dry-run", is_flag=True, help="Preview sync without commit/push")
+def sync_deploy_cmd(owner, repo_name, source_owner, source_repo, private, dry_run):
+    """Sync the shared deploy template into your GitHub account."""
+    from cli.sync_commands import sync_deploy_repo
+
+    sync_deploy_repo(
+        owner=owner,
+        repo_name=repo_name,
+        source_owner=source_owner,
+        source_repo=source_repo,
+        private=private,
+        dry_run=dry_run,
+    )
+
+
+@sync.command("ci-actions", hidden=True)
+@click.option(
+    "--owner", default=None, help="Target GitHub owner (defaults to gh auth user)"
+)
+@click.option(
+    "--repo-name",
+    default="deploy-your-startup",
+    show_default=True,
+    help="Target repository name",
+)
+@click.option(
+    "--roles-repo-name",
+    default="deploy-your-startup",
+    show_default=True,
+    help="Deprecated compatibility option",
+)
+@click.option(
+    "--source-owner",
+    default="Deploy-your-Startup",
+    show_default=True,
+    help="Source template owner",
+)
+@click.option(
+    "--source-repo",
+    default="deploy-template",
     show_default=True,
     help="Source template repository",
 )
@@ -484,13 +522,12 @@ def ansible():
 def sync_ci_actions_cmd(
     owner, repo_name, roles_repo_name, source_owner, source_repo, private, dry_run
 ):
-    """Sync the ci-actions template into your GitHub account."""
-    from cli.sync_commands import sync_ci_actions
+    """Backward-compatible alias for `startup sync deploy`."""
+    from cli.sync_commands import sync_deploy_repo
 
-    sync_ci_actions(
+    sync_deploy_repo(
         owner=owner,
         repo_name=repo_name,
-        roles_repo_name=roles_repo_name,
         source_owner=source_owner,
         source_repo=source_repo,
         private=private,
@@ -504,7 +541,7 @@ def sync_ci_actions_cmd(
 )
 @click.option(
     "--repo-name",
-    default="ansible-roles",
+    default="deploy-your-startup",
     show_default=True,
     help="Target repository name",
 )
@@ -516,17 +553,17 @@ def sync_ci_actions_cmd(
 )
 @click.option(
     "--source-repo",
-    default="ansible-roles-template",
+    default="deploy-template",
     show_default=True,
     help="Source template repository",
 )
 @click.option("--private/--public", default=True, show_default=True)
 @click.option("--dry-run", is_flag=True, help="Preview sync without commit/push")
 def sync_roles_cmd(owner, repo_name, source_owner, source_repo, private, dry_run):
-    """Sync the ansible-roles template and enable private Actions access."""
-    from cli.sync_commands import sync_roles
+    """Backward-compatible alias for `startup sync deploy`."""
+    from cli.sync_commands import sync_deploy_repo
 
-    sync_roles(
+    sync_deploy_repo(
         owner=owner,
         repo_name=repo_name,
         source_owner=source_owner,
@@ -542,39 +579,39 @@ def sync_roles_cmd(owner, repo_name, source_owner, source_repo, private, dry_run
 )
 @click.option(
     "--ci-repo-name",
-    default="ci-actions",
+    default="deploy-your-startup",
     show_default=True,
-    help="Target CI repository name",
+    help="Target shared deploy repository name",
 )
 @click.option(
     "--roles-repo-name",
-    default="ansible-roles",
+    default="deploy-your-startup",
     show_default=True,
-    help="Target roles repository name",
+    help="Deprecated alias for the shared deploy repository name",
 )
 @click.option(
     "--ci-source-owner",
     default="Deploy-your-Startup",
     show_default=True,
-    help="CI template owner",
+    help="Shared deploy template owner",
 )
 @click.option(
     "--ci-source-repo",
-    default="ci-actions-template",
+    default="deploy-template",
     show_default=True,
-    help="CI template repository",
+    help="Shared deploy template repository",
 )
 @click.option(
     "--roles-source-owner",
     default="Deploy-your-Startup",
     show_default=True,
-    help="Roles template owner",
+    help="Deprecated alias for the shared deploy template owner",
 )
 @click.option(
     "--roles-source-repo",
-    default="ansible-roles-template",
+    default="deploy-template",
     show_default=True,
-    help="Roles template repository",
+    help="Deprecated alias for the shared deploy template repository",
 )
 @click.option("--private/--public", default=True, show_default=True)
 @click.option("--dry-run", is_flag=True, help="Preview sync without commit/push")
@@ -589,7 +626,7 @@ def sync_all_cmd(
     private,
     dry_run,
 ):
-    """Sync ci-actions and ansible-roles templates into your GitHub account."""
+    """Sync the shared deploy template into your GitHub account."""
     from cli.sync_commands import sync_all
 
     sync_all(
