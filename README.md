@@ -6,7 +6,7 @@ A command-line tool for managing Deploy Your Startup operations, including secre
 
 - **Secrets Management**: Manage Ansible Vault secrets with easy commands
 - **GitHub Deployment**: Create new GitHub repositories from templates
-- **Template Sync**: Sync shared `ci-actions` and `ansible-roles` repositories into your GitHub account
+- **Template Sync**: Sync the shared `deploy-template` repository into your GitHub account
 - **Vault Rotation**: Rotate vault passwords across multiple files
 
 ## Installation
@@ -141,63 +141,58 @@ startup deploy github --repo-name REPO_NAME --repo-description "My new project"
 Sync the shared template repositories into your own GitHub account using your local `gh` login:
 
 ```bash
-# Sync both repositories
+# Sync the shared deploy repo
 startup sync
 
-# Sync only ci-actions
-startup sync ci-actions
-
-# Sync only ansible-roles
-startup sync roles
+# Explicit command name
+startup sync deploy
 
 # Preview changes without commit/push
 startup sync --dry-run
 ```
 
 Defaults:
-- `Deploy-your-Startup/ci-actions-template` -> `<your-user>/ci-actions`
-- `Deploy-your-Startup/ansible-roles-template` -> `<your-user>/ansible-roles`
+- `Deploy-your-Startup/deploy-template` -> `<your-user>/deploy-your-startup`
 
-When you sync the roles repository as a private repo, `startup` also enables the
+When you sync the deploy repository as a private repo, `startup` also enables the
 GitHub Actions access mode that allows private actions and reusable workflows to
 be consumed by other private repositories owned by the same user.
 
 You can override source and target names if needed:
 
 ```bash
-startup sync roles --owner philipp-lein --repo-name ansible-roles
-startup sync ci-actions --roles-repo-name ansible-roles --source-owner Deploy-your-Startup --source-repo ci-actions-template
+startup sync deploy --owner philipp-lein --repo-name deploy-your-startup
+startup sync deploy --source-owner Deploy-your-Startup --source-repo deploy-template
 ```
 
-### Private Shared Roles Workflow
+### Shared Deploy Workflow
 
-The recommended private setup is now:
+The recommended setup is now:
 
-1. Sync `Deploy-your-Startup/ansible-roles-template` to your own private
-   `<owner>/ansible-roles` repository with `startup sync roles`
-2. Sync `Deploy-your-Startup/ci-actions-template` to your own private
-   `<owner>/ci-actions` repository with `startup sync ci-actions`
-3. Let CI load the shared roles through the private composite action in your
-   synced `ansible-roles` repository
+1. Sync `Deploy-your-Startup/deploy-template` to your own private
+   `<owner>/deploy-your-startup` repository with `startup sync`
+2. Let project repositories call reusable workflows and composite actions from
+   that synced `deploy-your-startup` repository
 
-This avoids per-repository secrets for shared roles access in GitHub Actions.
+This avoids per-repository secrets for shared roles access in GitHub Actions and
+keeps shared CI logic and shared Ansible roles in one place.
 
-In CI, the shared roles action exports the roles into `deployment/.shared-roles`
-before `startup` runs. The CI workflow then calls `startup` with
+In CI, the shared deploy action exports the bundled roles into
+`deployment/.shared-roles` before `startup` runs. The CI workflow then calls
+`startup` with
 `--no-refresh` so the exported copy is reused instead of trying to clone the
-private roles repository again.
+shared repository again.
 
 Locally, keep the default `--refresh` behavior so `startup` can still update the
-shared roles checkout from git.
+shared deploy checkout from git.
 
 Examples:
 
 ```bash
 # One-time setup for a user account
-startup sync roles --owner philipp-lein
-startup sync ci-actions --owner philipp-lein --roles-repo-name ansible-roles
+startup sync --owner philipp-lein
 
-# Local deployment keeps refreshing the shared roles checkout
+# Local deployment keeps refreshing the shared checkout
 uv run startup ansible setup_ansible --working-directory .
 
 # CI-style reuse of a pre-exported .shared-roles directory

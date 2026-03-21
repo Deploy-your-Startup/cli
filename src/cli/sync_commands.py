@@ -12,8 +12,7 @@ import click
 
 DEFAULT_BRANCH = "main"
 DEFAULT_TEMPLATE_OWNER = "Deploy-your-Startup"
-DEFAULT_CI_TEMPLATE_REPO = "ci-actions-template"
-DEFAULT_ROLES_TEMPLATE_REPO = "ansible-roles-template"
+DEFAULT_DEPLOY_TEMPLATE_REPO = "deploy-template"
 
 
 def _run_command(
@@ -54,6 +53,20 @@ def _github_owner(owner: str | None) -> str:
     if not resolved_owner:
         raise click.ClickException("Could not determine GitHub username from gh auth.")
     return resolved_owner
+
+
+def _github_owner_type(owner: str) -> str:
+    result = _run_command(
+        ["gh", "api", f"users/{owner}", "-q", ".type"],
+        cwd=Path.cwd(),
+        capture_output=True,
+    )
+    owner_type = result.stdout.strip()
+    if owner_type not in {"User", "Organization"}:
+        raise click.ClickException(
+            f"Unsupported GitHub owner type for {owner}: {owner_type}"
+        )
+    return owner_type
 
 
 def _repo_exists(full_repo_name: str) -> bool:
@@ -292,79 +305,94 @@ def _sync_repo(
         return changed
 
 
-def sync_ci_actions(
+def sync_deploy_repo(
     *,
     owner: str | None = None,
-    repo_name: str = "ci-actions",
-    roles_repo_name: str = "ansible-roles",
+    repo_name: str = "deploy-your-startup",
     source_owner: str = DEFAULT_TEMPLATE_OWNER,
-    source_repo: str = DEFAULT_CI_TEMPLATE_REPO,
+    source_repo: str = DEFAULT_DEPLOY_TEMPLATE_REPO,
     private: bool = True,
     dry_run: bool = False,
 ) -> bool:
     resolved_owner = _github_owner(owner)
+    owner_type = _github_owner_type(resolved_owner)
     return _sync_repo(
         source_repo=_github_repo_url(source_owner, source_repo),
         target_repo=f"{resolved_owner}/{repo_name}",
         private=private,
-        description="Shared GitHub Actions workflows and composite actions",
-        commit_message="sync shared ci-actions",
+        description="Shared deploy workflows, actions, and Ansible roles",
+        commit_message="sync shared deploy repo",
         dry_run=dry_run,
         replacements={
             "§§deploy_your_startup.github_username§§": resolved_owner,
-            "§§deploy_your_startup.ci_actions_repo_name§§": repo_name,
-            "§§deploy_your_startup.ansible_roles_repo_name§§": roles_repo_name,
+            "§§deploy_your_startup.deploy_repo_name§§": repo_name,
         },
+        actions_access_level=(
+            "organization"
+            if private and owner_type == "Organization"
+            else "user"
+            if private
+            else None
+        ),
+    )
+
+
+def sync_ci_actions(
+    *,
+    owner: str | None = None,
+    repo_name: str = "deploy-your-startup",
+    roles_repo_name: str = "ansible-roles",
+    source_owner: str = DEFAULT_TEMPLATE_OWNER,
+    source_repo: str = DEFAULT_DEPLOY_TEMPLATE_REPO,
+    private: bool = True,
+    dry_run: bool = False,
+) -> bool:
+    return sync_deploy_repo(
+        owner=owner,
+        repo_name=repo_name,
+        source_owner=source_owner,
+        source_repo=source_repo,
+        private=private,
+        dry_run=dry_run,
     )
 
 
 def sync_roles(
     *,
     owner: str | None = None,
-    repo_name: str = "ansible-roles",
+    repo_name: str = "deploy-your-startup",
     source_owner: str = DEFAULT_TEMPLATE_OWNER,
-    source_repo: str = DEFAULT_ROLES_TEMPLATE_REPO,
+    source_repo: str = DEFAULT_DEPLOY_TEMPLATE_REPO,
     private: bool = True,
     dry_run: bool = False,
 ) -> bool:
-    resolved_owner = _github_owner(owner)
-    return _sync_repo(
-        source_repo=_github_repo_url(source_owner, source_repo),
-        target_repo=f"{resolved_owner}/{repo_name}",
+    return sync_deploy_repo(
+        owner=owner,
+        repo_name=repo_name,
+        source_owner=source_owner,
+        source_repo=source_repo,
         private=private,
-        description="Shared Ansible roles and deployment assets",
-        commit_message="sync shared ansible roles",
         dry_run=dry_run,
-        actions_access_level="user" if private else None,
     )
 
 
 def sync_all(
     *,
     owner: str | None = None,
-    ci_repo_name: str = "ci-actions",
-    roles_repo_name: str = "ansible-roles",
+    ci_repo_name: str = "deploy-your-startup",
+    roles_repo_name: str = "deploy-your-startup",
     ci_source_owner: str = DEFAULT_TEMPLATE_OWNER,
-    ci_source_repo: str = DEFAULT_CI_TEMPLATE_REPO,
+    ci_source_repo: str = DEFAULT_DEPLOY_TEMPLATE_REPO,
     roles_source_owner: str = DEFAULT_TEMPLATE_OWNER,
-    roles_source_repo: str = DEFAULT_ROLES_TEMPLATE_REPO,
+    roles_source_repo: str = DEFAULT_DEPLOY_TEMPLATE_REPO,
     private: bool = True,
     dry_run: bool = False,
 ) -> None:
-    sync_ci_actions(
+    sync_deploy_repo(
         owner=owner,
         repo_name=ci_repo_name,
-        roles_repo_name=roles_repo_name,
         source_owner=ci_source_owner,
         source_repo=ci_source_repo,
-        private=private,
-        dry_run=dry_run,
-    )
-    sync_roles(
-        owner=owner,
-        repo_name=roles_repo_name,
-        source_owner=roles_source_owner,
-        source_repo=roles_source_repo,
         private=private,
         dry_run=dry_run,
     )

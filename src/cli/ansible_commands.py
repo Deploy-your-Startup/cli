@@ -17,6 +17,7 @@ import yaml
 DEFAULT_SHARED_DIR = ".shared-roles"
 DEFAULT_VERSION = "main"
 SPARSE_PATHS = ["roles", "requirements.yml", "backup-playbook.yml"]
+DEFAULT_SHARED_REPO_NAME = "deploy-your-startup"
 
 
 def _run_command(
@@ -127,34 +128,42 @@ def _candidate_repo_urls(working_dir: Path, repo_url: str | None = None) -> list
     github_token = os.getenv("GITHUB_TOKEN")
     if inferred_owner and github_token:
         candidates.append(
-            f"https://x-access-token:{github_token}@github.com/{inferred_owner}/ansible-roles.git"
+            f"https://x-access-token:{github_token}@github.com/{inferred_owner}/{DEFAULT_SHARED_REPO_NAME}.git"
         )
 
     if inferred_owner:
         if prefer_https:
-            candidates.append(f"https://github.com/{inferred_owner}/ansible-roles.git")
-            candidates.append(f"git@github.com:{inferred_owner}/ansible-roles.git")
+            candidates.append(
+                f"https://github.com/{inferred_owner}/{DEFAULT_SHARED_REPO_NAME}.git"
+            )
+            candidates.append(
+                f"git@github.com:{inferred_owner}/{DEFAULT_SHARED_REPO_NAME}.git"
+            )
         else:
-            candidates.append(f"git@github.com:{inferred_owner}/ansible-roles.git")
-            candidates.append(f"https://github.com/{inferred_owner}/ansible-roles.git")
+            candidates.append(
+                f"git@github.com:{inferred_owner}/{DEFAULT_SHARED_REPO_NAME}.git"
+            )
+            candidates.append(
+                f"https://github.com/{inferred_owner}/{DEFAULT_SHARED_REPO_NAME}.git"
+            )
 
     fallback_owner = "Deploy-your-Startup"
     if github_token:
         candidates.append(
-            f"https://x-access-token:{github_token}@github.com/{fallback_owner}/ansible-roles.git"
+            f"https://x-access-token:{github_token}@github.com/{fallback_owner}/deploy-template.git"
         )
     if prefer_https:
         candidates.extend(
             [
-                f"https://github.com/{fallback_owner}/ansible-roles.git",
-                f"git@github.com:{fallback_owner}/ansible-roles.git",
+                f"https://github.com/{fallback_owner}/deploy-template.git",
+                f"git@github.com:{fallback_owner}/deploy-template.git",
             ]
         )
     else:
         candidates.extend(
             [
-                f"git@github.com:{fallback_owner}/ansible-roles.git",
-                f"https://github.com/{fallback_owner}/ansible-roles.git",
+                f"git@github.com:{fallback_owner}/deploy-template.git",
+                f"https://github.com/{fallback_owner}/deploy-template.git",
             ]
         )
 
