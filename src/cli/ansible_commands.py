@@ -831,7 +831,7 @@ def run_backup(
             "--vault-password-file",
             "/bin/cat",
             "--extra-vars",
-            f"backup_environment={environment} local_backup_root={resolved_backup_dir}",
+            f"project_name={project_name} backup_environment={environment} local_backup_root={resolved_backup_dir}",
         ],
         cwd=working_dir,
         env=env,
