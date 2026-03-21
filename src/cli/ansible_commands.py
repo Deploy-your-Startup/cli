@@ -303,7 +303,7 @@ def clone_or_update_shared_roles(
 
             _configure_sparse_checkout(target_dir, working_dir)
             _run_command(
-                ["git", "-C", str(target_dir), "fetch", "--tags", "origin"],
+                ["git", "-C", str(target_dir), "fetch", "--tags", "origin", version],
                 cwd=working_dir,
             )
             _run_command(
