@@ -255,6 +255,21 @@ def bootstrap_project(
     )
 
     if mode == "github":
+        full_repo = f"{github_username}/{project_name}"
+
+        # Allow GitHub Actions workflows to write packages (for Docker image push)
+        click.echo("  Configuring GitHub Actions permissions ...")
+        _run_command(
+            [
+                "gh", "api", "-X", "PUT",
+                f"repos/{full_repo}/actions/permissions",
+                "-f", "default_workflow_permissions=write",
+                "-F", "can_approve_pull_request_reviews=true",
+            ],
+            cwd=project_dir,
+            capture_output=True,
+        )
+
         click.echo("  Setting GitHub Actions secret VAULT_PASSWORD ...")
         _run_command(
             ["gh", "secret", "set", "VAULT_PASSWORD", "--body", vault_password],
