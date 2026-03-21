@@ -114,6 +114,7 @@ def _infer_roles_owner(working_dir: Path) -> str | None:
 
 def _candidate_repo_urls(working_dir: Path, repo_url: str | None = None) -> list[str]:
     candidates: list[str] = []
+    prefer_https = bool(os.getenv("GITHUB_ACTIONS") or os.getenv("CI"))
 
     if repo_url:
         candidates.append(repo_url)
@@ -130,20 +131,32 @@ def _candidate_repo_urls(working_dir: Path, repo_url: str | None = None) -> list
         )
 
     if inferred_owner:
-        candidates.append(f"git@github.com:{inferred_owner}/ansible-roles.git")
-        candidates.append(f"https://github.com/{inferred_owner}/ansible-roles.git")
+        if prefer_https:
+            candidates.append(f"https://github.com/{inferred_owner}/ansible-roles.git")
+            candidates.append(f"git@github.com:{inferred_owner}/ansible-roles.git")
+        else:
+            candidates.append(f"git@github.com:{inferred_owner}/ansible-roles.git")
+            candidates.append(f"https://github.com/{inferred_owner}/ansible-roles.git")
 
     fallback_owner = "Deploy-your-Startup"
     if github_token:
         candidates.append(
             f"https://x-access-token:{github_token}@github.com/{fallback_owner}/ansible-roles.git"
         )
-    candidates.extend(
-        [
-            f"git@github.com:{fallback_owner}/ansible-roles.git",
-            f"https://github.com/{fallback_owner}/ansible-roles.git",
-        ]
-    )
+    if prefer_https:
+        candidates.extend(
+            [
+                f"https://github.com/{fallback_owner}/ansible-roles.git",
+                f"git@github.com:{fallback_owner}/ansible-roles.git",
+            ]
+        )
+    else:
+        candidates.extend(
+            [
+                f"git@github.com:{fallback_owner}/ansible-roles.git",
+                f"https://github.com/{fallback_owner}/ansible-roles.git",
+            ]
+        )
 
     unique_candidates: list[str] = []
     for candidate in candidates:
