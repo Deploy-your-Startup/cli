@@ -116,18 +116,40 @@ def resolve_vault_password(
     vault_password_from_keychain: bool,
     working_directory: str,
 ) -> str:
+    project_name = _resolve_project_name(_resolve_working_dir(working_directory))
+    service_name = keychain_service_name(project_name)
+
     if vault_password and vault_password_from_keychain:
         raise click.ClickException(
             "Use either --vault-password or --vault-password-from-keychain, not both."
         )
     if vault_password:
         return vault_password
+
     if vault_password_from_keychain:
-        project_name = _resolve_project_name(_resolve_working_dir(working_directory))
         return _keychain_vault_password(project_name)
-    raise click.ClickException(
-        "Provide --vault-password or use --vault-password-from-keychain."
-    )
+
+    if os.environ.get("STARTUP_DISABLE_KEYCHAIN_VAULT", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }:
+        raise click.ClickException(
+            "No vault password provided. Set --vault-password, or remove STARTUP_DISABLE_KEYCHAIN_VAULT to allow the default macOS Keychain lookup."
+        )
+
+    try:
+        return _keychain_vault_password(project_name)
+    except click.ClickException as exc:
+        raise click.ClickException(
+            f'No vault password provided and no macOS Keychain entry found for "{service_name}".\n'
+            "\nDefault behavior:\n"
+            "- deployment commands use the macOS Keychain by default\n"
+            "- explicit --vault-password overrides the Keychain lookup\n"
+            "\nTo fix:\n"
+            f"- create the Keychain entry from the portfolio hub: scripts/secrets.sh store {project_name}\n"
+            "- or rerun with --vault-password <password>"
+        ) from exc
 
 
 def _ansible_env(

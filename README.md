@@ -199,9 +199,9 @@ uv run startup ansible setup_ansible --working-directory . --no-refresh
 ### Backup And Restore
 
 ```bash
-# Use the macOS Keychain instead of passing the vault password explicitly
-uv run startup ansible deploy --working-directory deployment --environment production --service backend --vault-password-from-keychain
-uv run startup ansible kubeconfig --working-directory deployment --environment production --vault-password-from-keychain
+# Default behavior: use the macOS Keychain when no vault password is passed
+uv run startup ansible deploy --working-directory deployment --environment production --service backend
+uv run startup ansible kubeconfig --working-directory deployment --environment production
 
 # Create a production backup on your local machine
 uv run startup ansible backup --working-directory deployment --environment production --vault-password PASSWORD
@@ -214,15 +214,15 @@ uv run startup ansible restore --working-directory deployment --environment prod
 uv run startup ansible restore --working-directory deployment --environment production --vault-password PASSWORD --db-file ~/Backups/about-phil/...sql.gz --no-restore-media --yes
 ```
 
-When `--vault-password-from-keychain` is set, `startup` derives the macOS Keychain service name from the project directory, for example `VAULT_PASSWORD_ABOUT_PHIL` or `VAULT_PASSWORD_GAMING_BUCH_CLUB`.
+When no `--vault-password` is passed, `startup` derives the macOS Keychain service name from the project directory, for example `VAULT_PASSWORD_ABOUT_PHIL` or `VAULT_PASSWORD_GAMING_BUCH_CLUB`. You can still force the same behavior explicitly with `--vault-password-from-keychain`.
 
 Project repositories can wrap this with local commands such as:
 
 ```bash
 cd deployment
-./make.sh deploy_keychain --environment production --service backend
-./make.sh kubeconfig_keychain --environment production
-./make.sh backup_keychain --environment production
+./make.sh deploy --environment production --service backend
+./make.sh kubeconfig --environment production
+./make.sh backup --environment production
 ```
 
 Use `scripts/secrets.sh store <project>` from the portfolio hub once to create the Keychain entry if it does not exist yet.
