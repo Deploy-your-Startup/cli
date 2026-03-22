@@ -683,7 +683,7 @@ def ansible_setup(working_directory, shared_dir, version, refresh, repo_url):
 @click.option(
     "--vault-password-from-keychain",
     is_flag=True,
-    help="Read the vault password from the macOS Keychain using the current project name",
+    help="Force reading the vault password from the macOS Keychain using the current project name",
 )
 @click.option("--environment", required=True, help="Target environment")
 @click.option(
@@ -754,7 +754,7 @@ def ansible_deploy(
 @click.option(
     "--vault-password-from-keychain",
     is_flag=True,
-    help="Read the vault password from the macOS Keychain using the current project name",
+    help="Force reading the vault password from the macOS Keychain using the current project name",
 )
 @click.option("--environment", required=True, help="Target environment")
 @click.option(
@@ -820,7 +820,7 @@ def ansible_infrastructure(
 @click.option(
     "--vault-password-from-keychain",
     is_flag=True,
-    help="Read the vault password from the macOS Keychain using the current project name",
+    help="Force reading the vault password from the macOS Keychain using the current project name",
 )
 @click.option("--environment", required=True, help="Target environment")
 @click.option(
@@ -914,7 +914,7 @@ def ansible_kubeconfig(
 @click.option(
     "--vault-password-from-keychain",
     is_flag=True,
-    help="Read the vault password from the macOS Keychain using the current project name",
+    help="Force reading the vault password from the macOS Keychain using the current project name",
 )
 @click.option("--environment", required=True, help="Target environment")
 @click.option(
@@ -988,7 +988,7 @@ def ansible_backup(
 @click.option(
     "--vault-password-from-keychain",
     is_flag=True,
-    help="Read the vault password from the macOS Keychain using the current project name",
+    help="Force reading the vault password from the macOS Keychain using the current project name",
 )
 @click.option("--environment", required=True, help="Target environment")
 @click.option(
