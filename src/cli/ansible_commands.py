@@ -286,6 +286,10 @@ def _copy_local_repo(source_dir: Path, target_dir: Path) -> Path:
     if restore_playbook.exists():
         shutil.copy2(restore_playbook, target_dir / "restore-playbook.yml")
 
+    update_vms_playbook = source_dir / "update-vms-playbook.yml"
+    if update_vms_playbook.exists():
+        shutil.copy2(update_vms_playbook, target_dir / "update-vms-playbook.yml")
+
     inventory_ini = source_dir / "inventory.ini"
     if inventory_ini.exists():
         shutil.copy2(inventory_ini, target_dir / "inventory.ini")
