@@ -199,6 +199,10 @@ uv run startup ansible setup_ansible --working-directory . --no-refresh
 ### Backup And Restore
 
 ```bash
+# Use the macOS Keychain instead of passing the vault password explicitly
+uv run startup ansible deploy --working-directory deployment --environment production --service backend --vault-password-from-keychain
+uv run startup ansible kubeconfig --working-directory deployment --environment production --vault-password-from-keychain
+
 # Create a production backup on your local machine
 uv run startup ansible backup --working-directory deployment --environment production --vault-password PASSWORD
 
@@ -209,6 +213,19 @@ uv run startup ansible restore --working-directory deployment --environment prod
 uv run startup ansible restore --working-directory deployment --environment production --vault-password PASSWORD --backup-dir ~/Backups/about-phil/2026-03-22_16-28-00 --yes
 uv run startup ansible restore --working-directory deployment --environment production --vault-password PASSWORD --db-file ~/Backups/about-phil/...sql.gz --no-restore-media --yes
 ```
+
+When `--vault-password-from-keychain` is set, `startup` derives the macOS Keychain service name from the project directory, for example `VAULT_PASSWORD_ABOUT_PHIL` or `VAULT_PASSWORD_GAMING_BUCH_CLUB`.
+
+Project repositories can wrap this with local commands such as:
+
+```bash
+cd deployment
+./make.sh deploy_keychain --environment production --service backend
+./make.sh kubeconfig_keychain --environment production
+./make.sh backup_keychain --environment production
+```
+
+Use `scripts/secrets.sh store <project>` from the portfolio hub once to create the Keychain entry if it does not exist yet.
 
 ### VM Updates
 
