@@ -358,19 +358,40 @@ def _configure_sparse_checkout(target_dir: Path, cwd: Path) -> None:
         ["git", "-C", str(target_dir), "read-tree", "-mu", "HEAD"],
         cwd=cwd,
     )
-    _run_command(
-        [
-            "git",
-            "-C",
-            str(target_dir),
-            "checkout",
-            "--force",
-            "HEAD",
-            "--",
-            *ROOT_SHARED_FILES,
-        ],
-        cwd=cwd,
-    )
+    existing_root_files = [
+        path
+        for path in ROOT_SHARED_FILES
+        if (
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(target_dir),
+                    "cat-file",
+                    "-e",
+                    f"HEAD:{path}",
+                ],
+                cwd=str(cwd),
+                capture_output=True,
+                text=True,
+            ).returncode
+            == 0
+        )
+    ]
+    if existing_root_files:
+        _run_command(
+            [
+                "git",
+                "-C",
+                str(target_dir),
+                "checkout",
+                "--force",
+                "HEAD",
+                "--",
+                *existing_root_files,
+            ],
+            cwd=cwd,
+        )
 
 
 def _normalize_inventory_value(value: object) -> str | None:
