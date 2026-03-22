@@ -237,6 +237,13 @@ def _commit_and_push(target_root: Path, message: str) -> bool:
 
     _run_command(["git", "add", "-A"], cwd=target_root)
     _run_command(["git", "commit", "-m", message], cwd=target_root)
+    # Ensure we push via SSH to avoid HTTPS auth issues with private repos
+    https_url = _run_command(
+        ["git", "remote", "get-url", "origin"], cwd=target_root, capture_output=True
+    ).stdout.strip()
+    if https_url.startswith("https://github.com/"):
+        ssh_url = https_url.replace("https://github.com/", "git@github.com:")
+        _run_command(["git", "remote", "set-url", "origin", ssh_url], cwd=target_root)
     _run_command(["git", "push", "origin", DEFAULT_BRANCH], cwd=target_root)
     return True
 
