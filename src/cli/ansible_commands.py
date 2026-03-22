@@ -324,6 +324,8 @@ def _copy_local_repo(source_dir: Path, target_dir: Path) -> Path:
 
 
 def _configure_sparse_checkout(target_dir: Path, cwd: Path) -> None:
+    sparse_entries = ["roles/*", *[f"/{path}" for path in ROOT_SHARED_FILES]]
+
     _run_command(
         ["git", "-C", str(target_dir), "config", "core.sparseCheckout", "true"],
         cwd=cwd,
@@ -339,13 +341,7 @@ def _configure_sparse_checkout(target_dir: Path, cwd: Path) -> None:
             str(target_dir),
             "sparse-checkout",
             "set",
-            "roles/*",
-            "/ansible.cfg",
-            "/backup-playbook.yml",
-            "/restore-playbook.yml",
-            "/requirements.yml",
-            "/inventory.ini",
-            "/inventory.hcloud.yml",
+            *sparse_entries,
         ],
         cwd=cwd,
     )
