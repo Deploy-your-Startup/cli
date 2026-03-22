@@ -678,8 +678,12 @@ def ansible_setup(working_directory, shared_dir, version, refresh, repo_url):
     "--vault-password",
     "--vault_password",
     "vault_password",
-    required=True,
     help="Vault password",
+)
+@click.option(
+    "--vault-password-from-keychain",
+    is_flag=True,
+    help="Read the vault password from the macOS Keychain using the current project name",
 )
 @click.option("--environment", required=True, help="Target environment")
 @click.option(
@@ -710,6 +714,7 @@ def ansible_setup(working_directory, shared_dir, version, refresh, repo_url):
 )
 def ansible_deploy(
     vault_password,
+    vault_password_from_keychain,
     environment,
     service,
     working_directory,
@@ -719,10 +724,16 @@ def ansible_deploy(
     repo_url,
 ):
     """Deploy services via Ansible playbook."""
-    from cli.ansible_commands import run_deploy
+    from cli.ansible_commands import resolve_vault_password, run_deploy
+
+    resolved_vault_password = resolve_vault_password(
+        vault_password=vault_password,
+        vault_password_from_keychain=vault_password_from_keychain,
+        working_directory=working_directory,
+    )
 
     run_deploy(
-        vault_password=vault_password,
+        vault_password=resolved_vault_password,
         environment=environment,
         service=service,
         working_directory=working_directory,
@@ -738,8 +749,12 @@ def ansible_deploy(
     "--vault-password",
     "--vault_password",
     "vault_password",
-    required=True,
     help="Vault password",
+)
+@click.option(
+    "--vault-password-from-keychain",
+    is_flag=True,
+    help="Read the vault password from the macOS Keychain using the current project name",
 )
 @click.option("--environment", required=True, help="Target environment")
 @click.option(
@@ -767,6 +782,7 @@ def ansible_deploy(
 )
 def ansible_infrastructure(
     vault_password,
+    vault_password_from_keychain,
     environment,
     working_directory,
     shared_dir,
@@ -775,10 +791,16 @@ def ansible_infrastructure(
     repo_url,
 ):
     """Provision infrastructure via Ansible playbook."""
-    from cli.ansible_commands import run_infrastructure
+    from cli.ansible_commands import resolve_vault_password, run_infrastructure
+
+    resolved_vault_password = resolve_vault_password(
+        vault_password=vault_password,
+        vault_password_from_keychain=vault_password_from_keychain,
+        working_directory=working_directory,
+    )
 
     run_infrastructure(
-        vault_password=vault_password,
+        vault_password=resolved_vault_password,
         environment=environment,
         working_directory=working_directory,
         shared_dir=shared_dir,
@@ -793,8 +815,12 @@ def ansible_infrastructure(
     "--vault-password",
     "--vault_password",
     "vault_password",
-    required=True,
     help="Vault password",
+)
+@click.option(
+    "--vault-password-from-keychain",
+    is_flag=True,
+    help="Read the vault password from the macOS Keychain using the current project name",
 )
 @click.option("--environment", required=True, help="Target environment")
 @click.option(
@@ -836,6 +862,7 @@ def ansible_infrastructure(
 )
 def ansible_kubeconfig(
     vault_password,
+    vault_password_from_keychain,
     environment,
     working_directory,
     inventory,
@@ -851,10 +878,16 @@ def ansible_kubeconfig(
     repo_url,
 ):
     """Fetch and merge the cluster kubeconfig."""
-    from cli.ansible_commands import run_kubeconfig
+    from cli.ansible_commands import resolve_vault_password, run_kubeconfig
+
+    resolved_vault_password = resolve_vault_password(
+        vault_password=vault_password,
+        vault_password_from_keychain=vault_password_from_keychain,
+        working_directory=working_directory,
+    )
 
     run_kubeconfig(
-        vault_password=vault_password,
+        vault_password=resolved_vault_password,
         environment=environment,
         working_directory=working_directory,
         inventory=inventory,
@@ -876,8 +909,12 @@ def ansible_kubeconfig(
     "--vault-password",
     "--vault_password",
     "vault_password",
-    required=True,
     help="Vault password",
+)
+@click.option(
+    "--vault-password-from-keychain",
+    is_flag=True,
+    help="Read the vault password from the macOS Keychain using the current project name",
 )
 @click.option("--environment", required=True, help="Target environment")
 @click.option(
@@ -909,6 +946,7 @@ def ansible_kubeconfig(
 )
 def ansible_backup(
     vault_password,
+    vault_password_from_keychain,
     environment,
     working_directory,
     backup_dir,
@@ -919,14 +957,222 @@ def ansible_backup(
     repo_url,
 ):
     """Run a backup playbook."""
-    from cli.ansible_commands import run_backup
+    from cli.ansible_commands import resolve_vault_password, run_backup
+
+    resolved_vault_password = resolve_vault_password(
+        vault_password=vault_password,
+        vault_password_from_keychain=vault_password_from_keychain,
+        working_directory=working_directory,
+    )
 
     run_backup(
-        vault_password=vault_password,
+        vault_password=resolved_vault_password,
         environment=environment,
         working_directory=working_directory,
         backup_dir=backup_dir,
         playbook=playbook,
+        shared_dir=shared_dir,
+        version=version,
+        refresh=refresh,
+        repo_url=repo_url,
+    )
+
+
+@ansible.command("update-vms")
+@click.option(
+    "--vault-password",
+    "--vault_password",
+    "vault_password",
+    help="Vault password",
+)
+@click.option(
+    "--vault-password-from-keychain",
+    is_flag=True,
+    help="Read the vault password from the macOS Keychain using the current project name",
+)
+@click.option("--environment", required=True, help="Target environment")
+@click.option(
+    "--working-directory",
+    "--working_directory",
+    "working_directory",
+    default=".",
+    show_default=True,
+)
+@click.option(
+    "--playbook",
+    default="update-vms-playbook.yml",
+    show_default=True,
+    help="Playbook that updates VM packages",
+)
+@click.option(
+    "--limit",
+    default=None,
+    help="Optional extra Ansible limit expression within the environment",
+)
+@click.option(
+    "--reboot/--no-reboot",
+    default=False,
+    show_default=True,
+    help="Reboot hosts after package upgrades when required",
+)
+@click.option(
+    "--shared-dir", "--shared_dir", default=".shared-roles", show_default=True
+)
+@click.option("--version", default="main", show_default=True)
+@click.option(
+    "--refresh/--no-refresh",
+    default=True,
+    show_default=True,
+    help="Refresh `.shared-roles` from git instead of reusing an existing exported copy",
+)
+@click.option(
+    "--repo-url",
+    "--repo_url",
+    default=None,
+    help="Override shared roles repository URL",
+)
+def ansible_update_vms(
+    vault_password,
+    vault_password_from_keychain,
+    environment,
+    working_directory,
+    playbook,
+    limit,
+    reboot,
+    shared_dir,
+    version,
+    refresh,
+    repo_url,
+):
+    """Update Hetzner VM packages via Ansible playbook."""
+    from cli.ansible_commands import resolve_vault_password, run_update_vms
+
+    resolved_vault_password = resolve_vault_password(
+        vault_password=vault_password,
+        vault_password_from_keychain=vault_password_from_keychain,
+        working_directory=working_directory,
+    )
+
+    run_update_vms(
+        vault_password=resolved_vault_password,
+        environment=environment,
+        working_directory=working_directory,
+        playbook=playbook,
+        limit=limit,
+        reboot=reboot,
+        shared_dir=shared_dir,
+        version=version,
+        refresh=refresh,
+        repo_url=repo_url,
+    )
+
+
+@ansible.command("restore")
+@click.option(
+    "--vault-password",
+    "--vault_password",
+    "vault_password",
+    help="Vault password",
+)
+@click.option(
+    "--vault-password-from-keychain",
+    is_flag=True,
+    help="Read the vault password from the macOS Keychain using the current project name",
+)
+@click.option("--environment", required=True, help="Target environment")
+@click.option(
+    "--working-directory",
+    "--working_directory",
+    "working_directory",
+    default=".",
+    show_default=True,
+)
+@click.option(
+    "--backup-dir",
+    "--backup_dir",
+    default=None,
+    help="Directory containing backup artifacts (defaults to ~/Backups/<project>)",
+)
+@click.option(
+    "--db-file", "--db_file", default=None, help="Specific database dump to restore"
+)
+@click.option(
+    "--media-file",
+    "--media_file",
+    default=None,
+    help="Specific media archive to restore",
+)
+@click.option("--playbook", default="restore-playbook.yml", show_default=True)
+@click.option(
+    "--restore-db/--no-restore-db",
+    default=True,
+    show_default=True,
+    help="Restore the PostgreSQL database",
+)
+@click.option(
+    "--restore-media/--no-restore-media",
+    default=True,
+    show_default=True,
+    help="Restore the media volume",
+)
+@click.option(
+    "--yes",
+    is_flag=True,
+    help="Confirm destructive restore into the selected environment",
+)
+@click.option(
+    "--shared-dir", "--shared_dir", default=".shared-roles", show_default=True
+)
+@click.option("--version", default="main", show_default=True)
+@click.option(
+    "--refresh/--no-refresh",
+    default=True,
+    show_default=True,
+    help="Refresh `.shared-roles` from git instead of reusing an existing exported copy",
+)
+@click.option(
+    "--repo-url",
+    "--repo_url",
+    default=None,
+    help="Override shared roles repository URL",
+)
+def ansible_restore(
+    vault_password,
+    vault_password_from_keychain,
+    environment,
+    working_directory,
+    backup_dir,
+    db_file,
+    media_file,
+    playbook,
+    restore_db,
+    restore_media,
+    yes,
+    shared_dir,
+    version,
+    refresh,
+    repo_url,
+):
+    """Run a restore playbook."""
+    from cli.ansible_commands import resolve_vault_password, run_restore
+
+    resolved_vault_password = resolve_vault_password(
+        vault_password=vault_password,
+        vault_password_from_keychain=vault_password_from_keychain,
+        working_directory=working_directory,
+    )
+
+    run_restore(
+        vault_password=resolved_vault_password,
+        environment=environment,
+        working_directory=working_directory,
+        backup_dir=backup_dir,
+        db_file=db_file,
+        media_file=media_file,
+        playbook=playbook,
+        restore_db=restore_db,
+        restore_media=restore_media,
+        confirm=yes,
         shared_dir=shared_dir,
         version=version,
         refresh=refresh,

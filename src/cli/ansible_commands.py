@@ -21,6 +21,8 @@ SPARSE_PATHS = [
     "ansible.cfg",
     "requirements.yml",
     "backup-playbook.yml",
+    "restore-playbook.yml",
+    "update-vms-playbook.yml",
     "inventory.ini",
     "inventory.hcloud.yml",
 ]
@@ -29,6 +31,8 @@ ROOT_SHARED_FILES = [
     "ansible.cfg",
     "requirements.yml",
     "backup-playbook.yml",
+    "restore-playbook.yml",
+    "update-vms-playbook.yml",
     "inventory.ini",
     "inventory.hcloud.yml",
 ]
@@ -70,6 +74,60 @@ def _run_command(
 
 def _resolve_working_dir(working_directory: str) -> Path:
     return Path(working_directory).resolve()
+
+
+def keychain_service_name(project_name: str) -> str:
+    return f"VAULT_PASSWORD_{project_name}".upper().replace("-", "_")
+
+
+def _keychain_vault_password(project_name: str) -> str:
+    service_name = keychain_service_name(project_name)
+
+    try:
+        result = _run_command(
+            [
+                "security",
+                "find-generic-password",
+                "-a",
+                os.environ.get("USER", ""),
+                "-s",
+                service_name,
+                "-w",
+            ],
+            cwd=Path.cwd(),
+            capture_output=True,
+        )
+    except click.ClickException as exc:
+        raise click.ClickException(
+            f'No vault password found in macOS Keychain for "{service_name}". '
+            f"Store it first, for example from the portfolio hub with: scripts/secrets.sh store {project_name}"
+        ) from exc
+
+    vault_password = result.stdout.strip()
+    if not vault_password:
+        raise click.ClickException(
+            f'Found empty macOS Keychain entry for "{service_name}".'
+        )
+    return vault_password
+
+
+def resolve_vault_password(
+    vault_password: str | None,
+    vault_password_from_keychain: bool,
+    working_directory: str,
+) -> str:
+    if vault_password and vault_password_from_keychain:
+        raise click.ClickException(
+            "Use either --vault-password or --vault-password-from-keychain, not both."
+        )
+    if vault_password:
+        return vault_password
+    if vault_password_from_keychain:
+        project_name = _resolve_project_name(_resolve_working_dir(working_directory))
+        return _keychain_vault_password(project_name)
+    raise click.ClickException(
+        "Provide --vault-password or use --vault-password-from-keychain."
+    )
 
 
 def _ansible_env(
@@ -224,6 +282,10 @@ def _copy_local_repo(source_dir: Path, target_dir: Path) -> Path:
     if backup_playbook.exists():
         shutil.copy2(backup_playbook, target_dir / "backup-playbook.yml")
 
+    restore_playbook = source_dir / "restore-playbook.yml"
+    if restore_playbook.exists():
+        shutil.copy2(restore_playbook, target_dir / "restore-playbook.yml")
+
     inventory_ini = source_dir / "inventory.ini"
     if inventory_ini.exists():
         shutil.copy2(inventory_ini, target_dir / "inventory.ini")
@@ -254,6 +316,7 @@ def _configure_sparse_checkout(target_dir: Path, cwd: Path) -> None:
             "roles/*",
             "/ansible.cfg",
             "/backup-playbook.yml",
+            "/restore-playbook.yml",
             "/requirements.yml",
             "/inventory.ini",
             "/inventory.hcloud.yml",
@@ -567,6 +630,55 @@ def _validated_environment(environment: str) -> None:
         raise click.ClickException("--environment must be production or staging")
 
 
+def _resolve_project_name(working_dir: Path) -> str:
+    return (
+        working_dir.parent.name
+        if working_dir.name == "deployment"
+        else working_dir.name
+    )
+
+
+def _resolve_playbook_path(
+    working_dir: Path, playbook: str, label: str, shared_dir: str = DEFAULT_SHARED_DIR
+) -> Path:
+    playbook_path = working_dir / playbook
+    if not playbook_path.exists():
+        playbook_path = working_dir / shared_dir / playbook
+    if not playbook_path.exists():
+        raise click.ClickException(f"{label} playbook not found: {playbook_path}")
+    return playbook_path
+
+
+def _latest_matching_file(search_root: Path, pattern: str) -> Path | None:
+    candidates = [path for path in search_root.rglob(pattern) if path.is_file()]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda path: path.stat().st_mtime)
+
+
+def _resolve_restore_file(
+    explicit_file: str | None,
+    *,
+    search_root: Path,
+    pattern: str,
+    label: str,
+) -> Path:
+    if explicit_file:
+        resolved = Path(explicit_file).expanduser().resolve()
+        if not resolved.exists():
+            raise click.ClickException(f"{label} backup file not found: {resolved}")
+        if not resolved.is_file():
+            raise click.ClickException(f"{label} backup path is not a file: {resolved}")
+        return resolved
+
+    resolved = _latest_matching_file(search_root, pattern)
+    if resolved is None:
+        raise click.ClickException(
+            f"Could not find a {label.lower()} backup file matching '{pattern}' in {search_root}"
+        )
+    return resolved
+
+
 def run_deploy(
     vault_password: str,
     environment: str,
@@ -877,17 +989,8 @@ def run_backup(
         refresh=refresh,
     )
 
-    playbook_path = working_dir / playbook
-    if not playbook_path.exists():
-        playbook_path = working_dir / shared_dir / playbook
-    if not playbook_path.exists():
-        raise click.ClickException(f"Backup playbook not found: {playbook_path}")
-
-    project_name = (
-        working_dir.parent.name
-        if working_dir.name == "deployment"
-        else working_dir.name
-    )
+    playbook_path = _resolve_playbook_path(working_dir, playbook, "Backup", shared_dir)
+    project_name = _resolve_project_name(working_dir)
     resolved_backup_dir = (
         Path(backup_dir).expanduser()
         if backup_dir
@@ -911,6 +1014,161 @@ def run_backup(
             "/bin/cat",
             "--extra-vars",
             f"project_name={project_name} backup_environment={environment} local_backup_root={resolved_backup_dir}",
+        ],
+        cwd=working_dir,
+        env=env,
+        input_text=vault_password,
+    )
+
+
+def run_update_vms(
+    vault_password: str,
+    environment: str,
+    *,
+    working_directory: str = ".",
+    playbook: str = "update-vms-playbook.yml",
+    limit: str | None = None,
+    reboot: bool = False,
+    shared_dir: str = DEFAULT_SHARED_DIR,
+    version: str = DEFAULT_VERSION,
+    repo_url: str | None = None,
+    refresh: bool = True,
+) -> None:
+    _validated_environment(environment)
+    working_dir = _resolve_working_dir(working_directory)
+    setup_ansible(
+        working_directory=working_directory,
+        shared_dir=shared_dir,
+        version=version,
+        repo_url=repo_url,
+        refresh=refresh,
+    )
+
+    playbook_path = _resolve_playbook_path(
+        working_dir, playbook, "Update VMs", shared_dir
+    )
+    hcloud_token = get_hcloud_token(
+        working_directory, vault_password, environment, shared_dir
+    )
+    env = _ansible_env(working_dir, shared_dir)
+    env["HCLOUD_TOKEN"] = hcloud_token
+
+    effective_limit = f"{environment},{limit}" if limit else environment
+    extra_vars = {
+        "update_reboot": reboot,
+        "update_environment": environment,
+    }
+
+    _run_command(
+        [
+            _find_uv(),
+            "run",
+            "--project",
+            str(working_dir),
+            "ansible-playbook",
+            str(playbook_path),
+            "--vault-password-file",
+            "/bin/cat",
+            "-l",
+            effective_limit,
+            "--extra-vars",
+            json.dumps(extra_vars),
+        ],
+        cwd=working_dir,
+        env=env,
+        input_text=vault_password,
+    )
+
+
+def run_restore(
+    vault_password: str,
+    environment: str,
+    *,
+    working_directory: str = ".",
+    backup_dir: str | None = None,
+    db_file: str | None = None,
+    media_file: str | None = None,
+    playbook: str = "restore-playbook.yml",
+    shared_dir: str = DEFAULT_SHARED_DIR,
+    version: str = DEFAULT_VERSION,
+    repo_url: str | None = None,
+    refresh: bool = True,
+    restore_db: bool = True,
+    restore_media: bool = True,
+    confirm: bool = False,
+) -> None:
+    _validated_environment(environment)
+    if not restore_db and not restore_media:
+        raise click.ClickException("Enable at least one restore target.")
+    if not confirm:
+        raise click.ClickException(
+            "Restore is destructive. Re-run with --yes after verifying the backup files."
+        )
+
+    working_dir = _resolve_working_dir(working_directory)
+    setup_ansible(
+        working_directory=working_directory,
+        shared_dir=shared_dir,
+        version=version,
+        repo_url=repo_url,
+        refresh=refresh,
+    )
+
+    playbook_path = _resolve_playbook_path(working_dir, playbook, "Restore", shared_dir)
+    project_name = _resolve_project_name(working_dir)
+    search_root = (
+        Path(backup_dir).expanduser().resolve()
+        if backup_dir
+        else (Path.home() / "Backups" / project_name).resolve()
+    )
+    if not search_root.exists():
+        raise click.ClickException(f"Backup directory not found: {search_root}")
+
+    resolved_db_file = None
+    if restore_db:
+        resolved_db_file = _resolve_restore_file(
+            db_file,
+            search_root=search_root,
+            pattern=f"{project_name}-db-*.sql*",
+            label="Database",
+        )
+
+    resolved_media_file = None
+    if restore_media:
+        resolved_media_file = _resolve_restore_file(
+            media_file,
+            search_root=search_root,
+            pattern=f"{project_name}-media-*.tar*",
+            label="Media",
+        )
+
+    hcloud_token = get_hcloud_token(
+        working_directory, vault_password, environment, shared_dir
+    )
+    env = _ansible_env(working_dir, shared_dir)
+    env["HCLOUD_TOKEN"] = hcloud_token
+
+    extra_vars = {
+        "project_name": project_name,
+        "restore_environment": environment,
+        "restore_db": restore_db,
+        "restore_media": restore_media,
+        "db_backup_file": str(resolved_db_file) if resolved_db_file else "",
+        "media_backup_file": str(resolved_media_file) if resolved_media_file else "",
+    }
+
+    _run_command(
+        [
+            _find_uv(),
+            "run",
+            "--project",
+            str(working_dir),
+            "ansible-playbook",
+            str(playbook_path),
+            "--vault-password-file",
+            "/bin/cat",
+            "--extra-vars",
+            json.dumps(extra_vars),
         ],
         cwd=working_dir,
         env=env,

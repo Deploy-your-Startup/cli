@@ -196,6 +196,30 @@ uv run startup ansible setup_ansible --working-directory .
 uv run startup ansible setup_ansible --working-directory . --no-refresh
 ```
 
+### Backup And Restore
+
+```bash
+# Create a production backup on your local machine
+uv run startup ansible backup --working-directory deployment --environment production --vault-password PASSWORD
+
+# Restore the latest backup set back into the cluster
+uv run startup ansible restore --working-directory deployment --environment production --vault-password PASSWORD --yes
+
+# Restore a specific backup directory or only one artifact type
+uv run startup ansible restore --working-directory deployment --environment production --vault-password PASSWORD --backup-dir ~/Backups/about-phil/2026-03-22_16-28-00 --yes
+uv run startup ansible restore --working-directory deployment --environment production --vault-password PASSWORD --db-file ~/Backups/about-phil/...sql.gz --no-restore-media --yes
+```
+
+### VM Updates
+
+```bash
+# Update all package-managed hosts in production
+uv run startup ansible update-vms --working-directory deployment --environment production --vault-password PASSWORD
+
+# Limit updates to a subset of hosts and reboot if the OS requests it
+uv run startup ansible update-vms --working-directory deployment --environment production --vault-password PASSWORD --limit workers --reboot
+```
+
 ## Development
 
 ### Quick Start
