@@ -135,14 +135,16 @@ def _set_actions_access(full_repo_name: str, access_level: str, *, cwd: Path) ->
 def _clone_source_repo(source_repo: str, destination: Path, branch: str) -> None:
     _run_command(
         [
-            "git",
+            "gh",
+            "repo",
             "clone",
+            source_repo,
+            str(destination),
+            "--",
             "--depth",
             "1",
             "--branch",
             branch,
-            source_repo,
-            str(destination),
         ],
         cwd=destination.parent,
     )
@@ -324,7 +326,7 @@ def sync_deploy_repo(
     resolved_owner = _github_owner(owner)
     owner_type = _github_owner_type(resolved_owner)
     return _sync_repo(
-        source_repo=_github_repo_url(source_owner, source_repo),
+        source_repo=f"{source_owner}/{source_repo}",
         target_repo=f"{resolved_owner}/{repo_name}",
         private=private,
         description="Shared deploy workflows, actions, and Ansible roles",
