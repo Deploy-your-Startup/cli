@@ -66,12 +66,8 @@ def _generate_docker_config_b64(github_username: str) -> str:
             "Make sure you're logged in with 'gh auth login'."
         )
 
-    auth_value = base64.b64encode(
-        f"{github_username}:{gh_token}".encode()
-    ).decode()
-    docker_config = json.dumps(
-        {"auths": {"ghcr.io": {"auth": auth_value}}}
-    )
+    auth_value = base64.b64encode(f"{github_username}:{gh_token}".encode()).decode()
+    docker_config = json.dumps({"auths": {"ghcr.io": {"auth": auth_value}}})
     return base64.b64encode(docker_config.encode()).decode()
 
 
@@ -108,7 +104,6 @@ def bootstrap_project(
     docker_registry_host: str,
     postgres_version: str,
     hetzner_token: str,
-    digital_ocean_token: str,
     sentry_dsn: str,
     output_dir: Path,
 ) -> None:
@@ -210,7 +205,6 @@ def bootstrap_project(
     field_random = ["k3s_token", "backend_db_password", "postgres_admin_password"]
     field_set = [
         ("postgres_admin_username", "admin"),
-        ("digital_ocean_token", digital_ocean_token),
         ("docker_config_json_b64", docker_config_b64),
     ]
     if sentry_dsn:
@@ -263,20 +257,30 @@ def bootstrap_project(
             click.echo("  Configuring GitHub Actions permissions ...")
             _run_command(
                 [
-                    "gh", "api", "-X", "PUT",
+                    "gh",
+                    "api",
+                    "-X",
+                    "PUT",
                     f"repos/{full_repo}/actions/permissions",
-                    "-F", "enabled=true",
-                    "-f", "allowed_actions=all",
+                    "-F",
+                    "enabled=true",
+                    "-f",
+                    "allowed_actions=all",
                 ],
                 cwd=project_dir,
                 capture_output=True,
             )
             _run_command(
                 [
-                    "gh", "api", "-X", "PUT",
+                    "gh",
+                    "api",
+                    "-X",
+                    "PUT",
                     f"repos/{full_repo}/actions/permissions/workflow",
-                    "-f", "default_workflow_permissions=write",
-                    "-F", "can_approve_pull_request_reviews=true",
+                    "-f",
+                    "default_workflow_permissions=write",
+                    "-F",
+                    "can_approve_pull_request_reviews=true",
                 ],
                 cwd=project_dir,
                 capture_output=True,
@@ -307,9 +311,7 @@ def bootstrap_project(
     click.echo(f"  Project: {project_name}")
     click.echo(f"  Location: {project_dir}")
     if mode == "github":
-        click.echo(
-            f"  GitHub: https://github.com/{github_username}/{project_name}"
-        )
+        click.echo(f"  GitHub: https://github.com/{github_username}/{project_name}")
     click.echo(f"  Domain: {base_domain}")
     click.echo("")
     click.echo(f"  Vault Password: {vault_password}")

@@ -93,13 +93,6 @@ def bootstrap(verbose):
         token_url="https://console.hetzner.cloud/projects → Security → API Tokens",
     )
 
-    digital_ocean_token = _prompt_or_env(
-        "DigitalOcean API token",
-        "DO_TOKEN",
-        signup_url="https://cloud.digitalocean.com/registrations/new",
-        token_url="https://cloud.digitalocean.com/account/api/tokens",
-    )
-
     # Optional
     sentry_dsn = _prompt_or_env(
         "Sentry DSN (optional, press Enter to skip)",
@@ -137,7 +130,6 @@ def bootstrap(verbose):
         docker_registry_host=docker_registry_host,
         postgres_version=postgres_version,
         hetzner_token=hetzner_token,
-        digital_ocean_token=digital_ocean_token,
         sentry_dsn=sentry_dsn,
         output_dir=Path(output_dir),
     )
