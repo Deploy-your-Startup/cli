@@ -628,10 +628,14 @@ For more help: startup secrets update --help
             # Find the file in the workspace
             matches = list(work_dir.glob(f"**/{file_path}"))
             if not matches:
-                print(f"Warning: File {file_path} not found in {work_dir}")
-                continue
+                matches = [work_dir / file_path]
+                if verbose:
+                    print(
+                        f"File {file_path} not found in {work_dir}; creating it before encrypting"
+                    )
 
             for path in matches:
+                path.parent.mkdir(parents=True, exist_ok=True)
                 rel = path.relative_to(work_dir)
 
                 # If verify-password is enabled and it's a vault file, check if we can decrypt it
