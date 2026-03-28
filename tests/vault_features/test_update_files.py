@@ -137,6 +137,52 @@ def test_update_encrypted_file_with_specific_value():
         shutil.rmtree(temp_dir)
 
 
+def test_create_missing_encrypted_file_with_specific_value():
+    """Test creating a new encrypted vault file when the target file is missing"""
+    get_ansible_vault_cmd()
+
+    temp_dir = tempfile.mkdtemp()
+    try:
+        test_data_dir = Path(temp_dir) / "data"
+        test_data_dir.mkdir(exist_ok=True)
+
+        test_password = "test"
+        specific_content = "new_encrypted_token_content"
+        test_token_file = test_data_dir / "hcloud_token"
+
+        assert not test_token_file.exists()
+
+        dyscli_path = get_dyscli_path()
+
+        result = subprocess.run(
+            [
+                "python",
+                str(dyscli_path),
+                "secrets",
+                "update",
+                "--repo",
+                str(test_data_dir),
+                "--vault-password",
+                test_password,
+                "--set-file-content",
+                "hcloud_token",
+                specific_content,
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 0, f"Command failed: {result.stderr}"
+        assert test_token_file.exists(), "Vault file was not created"
+        assert is_full_vault_file(test_token_file), "Created file is not vaulted"
+
+        updated_content = get_vault_file_content(test_token_file, test_password)
+        assert updated_content == specific_content
+
+    finally:
+        shutil.rmtree(temp_dir)
+
+
 def test_direct_update_with_utility_function():
     """Test directly updating a file using our utility function"""
     # GIVEN an existing encrypted vault file
