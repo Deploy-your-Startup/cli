@@ -38,76 +38,209 @@ def cli():
     pass
 
 
-# === SECRETS COMMANDS ===
+# === BOOTSTRAP COMMAND ===
 @cli.command("bootstrap")
+@click.option(
+    "--mode",
+    type=click.Choice(["github", "local"]),
+    default=None,
+    help="github or local (default: github)",
+)
+@click.option(
+    "--project-name",
+    "--project_name",
+    "project_name",
+    default=None,
+    help="Project name (kebab-case)",
+)
+@click.option(
+    "--base-domain",
+    "--base_domain",
+    "base_domain",
+    default=None,
+    help="Base domain (e.g. example.com)",
+)
+@click.option(
+    "--additional-domains",
+    "--additional_domains",
+    "additional_domains",
+    default=None,
+    help="Additional domains (comma-separated)",
+)
+@click.option(
+    "--github-username",
+    "--github_username",
+    "github_username",
+    default=None,
+    help="GitHub username/org",
+)
+@click.option(
+    "--postgres-version",
+    "--postgres_version",
+    "postgres_version",
+    default=None,
+    help="Postgres version (default: 17)",
+)
+@click.option(
+    "--hetzner-token",
+    "--hetzner_token",
+    "hetzner_token",
+    default=None,
+    envvar="HCLOUD_TOKEN",
+    help="Hetzner Cloud API token",
+)
+@click.option(
+    "--sentry-dsn",
+    "--sentry_dsn",
+    "sentry_dsn",
+    default=None,
+    envvar="SENTRY_DSN",
+    help="Sentry DSN (optional)",
+)
+@click.option(
+    "--output-dir",
+    "--output_dir",
+    "output_dir",
+    default=None,
+    type=click.Path(),
+    help="Output directory",
+)
+@click.option("--skip-domain", is_flag=True, help="Skip domain registration prompt")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
 @click.option("--verbose", "-V", is_flag=True, help="Verbose output")
-def bootstrap(verbose):
-    """Bootstrap a new project from the Django template."""
+def bootstrap(
+    mode,
+    project_name,
+    base_domain,
+    additional_domains,
+    github_username,
+    postgres_version,
+    hetzner_token,
+    sentry_dsn,
+    output_dir,
+    skip_domain,
+    yes,
+    verbose,
+):
+    """Bootstrap a new project from the Django template.
+
+    Guides you through the full setup interactively. When no Hetzner token
+    is provided (via --hetzner-token or HCLOUD_TOKEN env var), offers to
+    open a browser to create a Hetzner project and API token automatically.
+    Also offers to register the domain via Hetzner Robot.
+
+    For fully non-interactive use, provide --project-name, --base-domain,
+    --hetzner-token, and --yes.
+    """
     from cli.bootstrap import bootstrap_project, _prompt_or_env
     from cli.sync_commands import _github_owner
 
     # Mode
-    mode = click.prompt(
-        "Mode",
-        type=click.Choice(["github", "local"]),
-        default="github",
-    )
+    if mode is None:
+        mode = click.prompt(
+            "Mode",
+            type=click.Choice(["github", "local"]),
+            default="github",
+        )
 
     # Project basics
-    project_name = click.prompt("Project name (kebab-case)")
-    base_domain = click.prompt("Base domain (e.g. example.com)")
-    additional_domains = click.prompt(
-        "Additional domains (comma-separated, or empty)",
-        default="",
-        show_default=False,
-    )
+    if project_name is None:
+        project_name = click.prompt("Project name (kebab-case)")
+    if base_domain is None:
+        base_domain = click.prompt("Base domain (e.g. example.com)")
+    if additional_domains is None:
+        additional_domains = click.prompt(
+            "Additional domains (comma-separated, or empty)",
+            default="",
+            show_default=False,
+        )
 
     # GitHub
-    try:
-        default_username = _github_owner(None)
-    except Exception:
-        default_username = None
+    if github_username is None:
+        try:
+            default_username = _github_owner(None)
+        except Exception:
+            default_username = None
 
-    if mode == "github":
-        github_username = click.prompt(
-            "GitHub username/org",
-            default=default_username,
-        )
-    else:
-        github_username = click.prompt(
-            "GitHub username/org (for CI workflows)",
-            default=default_username,
-        )
+        if mode == "github":
+            github_username = click.prompt(
+                "GitHub username/org",
+                default=default_username,
+            )
+        else:
+            github_username = click.prompt(
+                "GitHub username/org (for CI workflows)",
+                default=default_username,
+            )
 
     # Docker registry — always ghcr.io for GitHub projects
     docker_registry_host = "ghcr.io"
 
     # Postgres
-    postgres_version = click.prompt("Postgres version", default="17")
+    if postgres_version is None:
+        postgres_version = click.prompt("Postgres version", default="17")
 
-    # Tokens — check env vars, open browser if needed
-    hetzner_token = _prompt_or_env(
-        "Hetzner Cloud API token",
-        "HCLOUD_TOKEN",
-        signup_url="https://console.hetzner.cloud/register",
-        token_url="https://console.hetzner.cloud/projects → Security → API Tokens",
-    )
+    # Hetzner token — if not provided, offer browser automation
+    if hetzner_token is None:
+        # Check env var first (Click's envvar only sets the default,
+        # but _prompt_or_env also checks it)
+        import os
 
-    # Optional
-    sentry_dsn = _prompt_or_env(
-        "Sentry DSN (optional, press Enter to skip)",
-        "SENTRY_DSN",
-        required=False,
-        hidden=False,
-        signup_url="https://sentry.io/signup/",
-        token_url="https://sentry.io → Settings → Projects → Client Keys (DSN)",
-    )
+        hetzner_token = os.environ.get("HCLOUD_TOKEN", "")
+
+        if not hetzner_token:
+            # Offer browser automation or manual paste
+            click.echo("\n  No Hetzner Cloud API token found.")
+            choice = click.prompt(
+                "  How to get the token?\n"
+                "    [b] Open browser to create Hetzner project + token (recommended)\n"
+                "    [p] Paste an existing token\n"
+                "  Choice",
+                type=click.Choice(["b", "p"]),
+                default="b",
+            )
+
+            if choice == "b":
+                from cli.hetzner import get_or_create_token
+
+                hetzner_token = get_or_create_token(project_name=project_name)
+                if not hetzner_token:
+                    raise click.ClickException(
+                        "Could not obtain Hetzner token. "
+                        "Retry or pass --hetzner-token manually."
+                    )
+            else:
+                hetzner_token = click.prompt(
+                    "  Hetzner Cloud API token", hide_input=True
+                )
+
+    # Domain registration — offer if not skipped
+    if not skip_domain:
+        if click.confirm(
+            f'\n  Register domain "{base_domain}" via Hetzner Robot?',
+            default=True,
+        ):
+            from cli.hetzner import register_domain
+
+            register_domain(domain=base_domain)
+
+    # Sentry DSN
+    if sentry_dsn is None:
+        sentry_dsn = _prompt_or_env(
+            "Sentry DSN (optional, press Enter to skip)",
+            "SENTRY_DSN",
+            required=False,
+            hidden=False,
+            signup_url="https://sentry.io/signup/",
+            token_url="https://sentry.io → Settings → Projects → Client Keys (DSN)",
+        )
 
     # Output directory
-    output_dir = click.prompt(
-        "Output directory",
-        default=str(Path.home() / "Projects"),
-    )
+    if output_dir is None:
+        output_dir = click.prompt(
+            "Output directory",
+            default=str(Path.home() / "Projects"),
+        )
 
     # Confirm
     click.echo(f"\nProject: {project_name}")
@@ -118,7 +251,7 @@ def bootstrap(verbose):
     click.echo(f"Postgres: {postgres_version}")
     click.echo("")
 
-    if not click.confirm("Proceed?", default=True):
+    if not yes and not click.confirm("Proceed?", default=True):
         raise SystemExit(0)
 
     bootstrap_project(
@@ -1170,6 +1303,135 @@ def ansible_restore(
         refresh=refresh,
         repo_url=repo_url,
     )
+
+
+# === HETZNER COMMANDS ===
+@cli.group()
+def hetzner():
+    """Hetzner Cloud account, project, domain & token management via browser automation."""
+    pass
+
+
+@hetzner.command("setup")
+@click.option(
+    "--headless",
+    is_flag=True,
+    default=False,
+    help="Run browser in headless mode (not recommended)",
+)
+@click.option(
+    "--project", "-p", default=None, help="Project name (prompted if not given)"
+)
+@click.option(
+    "--token-name",
+    "--token_name",
+    "token_name",
+    default="deploy-cli",
+    help="Name for the API token",
+)
+@click.option(
+    "--register",
+    is_flag=True,
+    default=False,
+    help="Register a new account instead of logging in",
+)
+@click.option("--email", default=None, help="Email for account registration")
+def hetzner_setup(headless, project, token_name, register, email):
+    """Full interactive setup: Login/Register -> Project -> API Token."""
+    from cli.hetzner import get_or_create_token
+
+    if not project:
+        project = click.prompt("  Project name")
+
+    token = get_or_create_token(
+        project_name=project,
+        token_name=token_name,
+        headless=headless,
+        register=register,
+        email=email,
+    )
+
+    if token:
+        click.echo(f"\n  Token: {token[:8]}...{token[-4:]}")
+        click.echo(f"  Use with: startup bootstrap --hetzner-token <token>")
+    else:
+        click.echo("\n  No token obtained.", err=True)
+        raise SystemExit(1)
+
+
+@hetzner.command("domain")
+@click.option(
+    "--headless",
+    is_flag=True,
+    default=False,
+    help="Run browser in headless mode (not recommended)",
+)
+@click.argument("domain", required=False)
+def hetzner_domain(headless, domain):
+    """Register a domain via Hetzner Robot."""
+    from cli.hetzner import register_domain as do_register
+
+    if not domain:
+        domain = click.prompt("  Domain to register (e.g. example.com)")
+
+    ok = do_register(domain=domain, headless=headless)
+    if not ok:
+        raise SystemExit(1)
+
+
+@hetzner.command("token")
+@click.option(
+    "--headless",
+    is_flag=True,
+    default=False,
+    help="Run browser in headless mode (not recommended)",
+)
+@click.option(
+    "--token-name",
+    "--token_name",
+    "token_name",
+    default="deploy-cli",
+    help="Name for the API token",
+)
+def hetzner_token(headless, token_name):
+    """Create a new API token only (requires existing login session)."""
+    from cli.hetzner import get_or_create_token
+
+    project = click.prompt("  Project name (for reference)")
+
+    token = get_or_create_token(
+        project_name=project,
+        token_name=token_name,
+        headless=headless,
+    )
+
+    if token:
+        click.echo(f"\n  Token: {token[:8]}...{token[-4:]}")
+    else:
+        click.echo("\n  No token obtained.", err=True)
+        raise SystemExit(1)
+
+
+@hetzner.command("status")
+def hetzner_status():
+    """Show stored token information."""
+    from cli.hetzner.credentials import show_token_info
+
+    show_token_info()
+
+
+@hetzner.command("clean")
+def hetzner_clean():
+    """Remove stored credentials and browser state."""
+    import shutil
+    from cli.hetzner.config import CONFIG_DIR
+
+    if click.confirm(f"  Delete all stored data in {CONFIG_DIR}?", default=False):
+        if CONFIG_DIR.exists():
+            shutil.rmtree(CONFIG_DIR)
+            click.echo(f"  Deleted: {CONFIG_DIR}")
+        else:
+            click.echo("  Nothing to delete.")
 
 
 def main():

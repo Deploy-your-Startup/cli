@@ -29,6 +29,9 @@ server = [
     "fastapi>=0.115.12",
     "uvicorn>=0.34.2",
 ]
+browser = [
+    "playwright>=1.40.0",
+]
 
 [project.urls]
 "Homepage" = "https://github.com/Deploy-your-Startup/cli"
