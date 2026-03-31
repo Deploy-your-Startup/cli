@@ -50,13 +50,11 @@ class HetznerAutomation:
             viewport={"width": 1280, "height": 900},
             locale="de-DE",
             args=config.chrome_launch_args(),
-            # Keep extensions enabled so Apple Passwords works
             ignore_default_args=[
                 "--disable-extensions",
                 "--disable-component-extensions-with-background-pages",
             ],
         )
-        # Persistent context always has at least one page
         self._page = (
             self._context.pages[0]
             if self._context.pages
@@ -76,14 +74,21 @@ class HetznerAutomation:
         assert self._page is not None, "Browser not started"
         return self._page
 
-    # ── Registration ────���────────────────────────────────────────────
+    @staticmethod
+    def _in_project(url: str) -> bool:
+        """Return True if the URL points inside a specific project (has numeric ID)."""
+        if "/projects/" not in url:
+            return False
+        segment = url.split("/projects/")[1].split("/")[0]
+        return segment.isdigit()
+
+    # ── Registration ────────────────────────────────────────────────────
 
     async def register_account(self, email: str) -> bool:
         """Open registration page — user completes manually."""
         ui.info("Opening Hetzner registration page...")
         await self.page.goto(config.HETZNER_REGISTER_URL, wait_until="networkidle")
 
-        # Try to pre-fill email
         try:
             email_input = self.page.locator(
                 'input[name="email"], input[type="email"]'
@@ -110,11 +115,10 @@ class HetznerAutomation:
         except Exception:
             return False
 
-    # ── Login ───────��────────────────────────────────────────────────
+    # ── Login ───────────────────────────────────────────────────────────
 
     async def login(self) -> bool:
         """Navigate to login and wait for user to complete (incl. 2FA)."""
-        # Check if already logged in
         try:
             await self.page.goto(config.HETZNER_PROJECTS_URL, wait_until="networkidle")
             if "/projects" in self.page.url and "accounts.hetzner" not in self.page.url:
@@ -141,139 +145,166 @@ class HetznerAutomation:
         except Exception:
             return False
 
-    # ���─ Project Creation ────────────────��────────────────────────────
+    # ── Project Creation ────────────────────────────────────────────────
 
     async def create_project(self, project_name: str) -> bool:
-        """Create a new project in Hetzner Cloud Console."""
+        """Create or navigate to a project in Hetzner Cloud Console."""
         ui.info(f'Creating project "{project_name}"...')
 
         await self.page.goto(config.HETZNER_PROJECTS_URL, wait_until="networkidle")
-        await asyncio.sleep(1)
 
-        # Click "New Project" button
+        # Fast path: project already exists → navigate into it
         try:
-            new_project_btn = self.page.locator(
-                config.SELECTORS_NEW_PROJECT_BUTTON
-            ).first
-            await new_project_btn.click(timeout=10000)
+            existing = self.page.locator(f'[data-projectname="{project_name}"]').first
+            if await existing.is_visible(timeout=2000):
+                ui.success(f'Project "{project_name}" already exists — navigating to it.')
+                await self._navigate_into_project(project_name)
+                return self._in_project(self.page.url)
+        except Exception:
+            pass
+
+        # Click "New Project"
+        try:
+            btn = self.page.locator(config.SELECTORS_NEW_PROJECT_BUTTON).first
+            await btn.click(timeout=10000)
         except Exception:
             try:
-                add_btn = self.page.locator(config.SELECTORS_ADD_BUTTON_FALLBACK).first
-                await add_btn.click(timeout=5000)
+                btn = self.page.locator(config.SELECTORS_ADD_BUTTON_FALLBACK).first
+                await btn.click(timeout=5000)
             except Exception:
                 ui.error("Could not find the 'New Project' button.")
-                ui.warning("Please create the project manually in the browser.")
                 return await self._wait_for_manual_project_creation(project_name)
 
-        await asyncio.sleep(1)
-
-        # Fill in project name
+        # Fill name and submit
         try:
             name_input = self.page.locator(config.SELECTORS_PROJECT_NAME_INPUT).first
-            await name_input.fill(project_name, timeout=5000)
+            await name_input.wait_for(state="visible", timeout=5000)
+            await name_input.fill(project_name)
         except Exception:
             ui.warning("Could not fill project name — please enter manually.")
 
-        # Submit
         try:
             submit_btn = self.page.locator(config.SELECTORS_SUBMIT_BUTTON).first
             await submit_btn.click(timeout=5000)
         except Exception:
             ui.warning("Please confirm the dialog in the browser.")
 
-        await asyncio.sleep(2)
-
-        # Verify
+        # Wait for redirect into the new project
         try:
-            await self.page.wait_for_url("**/projects/**", timeout=15000)
-            return True
+            await self.page.wait_for_url("**/projects/**", timeout=10000)
         except Exception:
-            if "/projects" in self.page.url:
-                return True
-            return False
+            pass
+
+        if self._in_project(self.page.url):
+            return True
+
+        # Not inside a project — might be "name taken" error, navigate to existing
+        ui.info(f'Navigating to existing project "{project_name}"...')
+        try:
+            await self.page.keyboard.press("Escape")
+        except Exception:
+            pass
+        await self._navigate_into_project(project_name)
+        return self._in_project(self.page.url)
+
+    async def _navigate_into_project(self, project_name: str) -> None:
+        """Navigate into the named project by finding its href on the projects list."""
+        try:
+            await self.page.goto(config.HETZNER_PROJECTS_URL, wait_until="networkidle")
+
+            card_link = self.page.locator(
+                f'a.project-card:has([data-projectname="{project_name}"])'
+            ).first
+            href = await card_link.get_attribute("href", timeout=5000)
+            if href:
+                url = href if href.startswith("http") else f"{config.HETZNER_BASE_URL}{href}"
+                await self.page.goto(url, wait_until="networkidle")
+                return
+
+            # Fallback: click the span directly
+            card = self.page.locator(f'[data-projectname="{project_name}"]').first
+            await card.click(timeout=10000)
+            await self.page.wait_for_url("**/projects/**", timeout=10000)
+        except Exception:
+            ui.warning(f'Could not navigate into project "{project_name}" automatically.')
 
     async def _wait_for_manual_project_creation(self, project_name: str) -> bool:
-        """Fallback: wait for user to manually create the project."""
-        ui.info(f'Please create a project named "{project_name}" manually.')
+        """Fallback: wait for user to manually create and open the project."""
+        ui.info(f'Please create a project named "{project_name}" and open it in the browser.')
         try:
             await self.page.wait_for_url(
                 "**/projects/**", timeout=config.LOGIN_WAIT_TIMEOUT
             )
-            return True
         except Exception:
-            return False
+            pass
+        return self._in_project(self.page.url)
 
-    # ── Token Creation ────────────���───────────────────────────��──────
+    # ── Token Creation ──────────────────────────────────────────────────
 
     async def create_api_token(self, token_name: str = "deploy-cli") -> str | None:
         """Create an API token in the current project. Returns the token string."""
         ui.info(f'Creating API token "{token_name}"...')
 
-        # Navigate to Security / API Tokens
-        current_url = self.page.url
-        if "/projects/" in current_url:
-            base = current_url.split("/projects/")[0] + "/projects/"
-            project_segment = current_url.split("/projects/")[1].split("/")[0]
-            tokens_url = f"{base}{project_segment}/security/api-tokens"
-        else:
-            tokens_url = current_url.rstrip("/") + "/security/api-tokens"
-
+        # Navigate to API tokens via sidebar (avoids URL guessing)
+        navigated = False
         try:
-            await self.page.goto(tokens_url, wait_until="networkidle")
+            security_link = self.page.locator(config.SELECTORS_SECURITY_LINK).first
+            await security_link.click(timeout=10000)
+            tokens_link = self.page.locator(config.SELECTORS_API_TOKENS_LINK).first
+            await tokens_link.click(timeout=10000)
+            navigated = True
         except Exception:
-            # Fallback: navigate via sidebar
-            try:
-                security_link = self.page.locator(config.SELECTORS_SECURITY_LINK).first
-                await security_link.click(timeout=5000)
-                await asyncio.sleep(1)
+            pass
 
-                tokens_link = self.page.locator(config.SELECTORS_API_TOKENS_LINK).first
-                await tokens_link.click(timeout=5000)
-                await asyncio.sleep(1)
-            except Exception:
-                ui.warning("Could not navigate to the API tokens page automatically.")
+        if not navigated:
+            # Fallback: try direct URL from current project
+            current_url = self.page.url
+            if "/projects/" in current_url:
+                segment = current_url.split("/projects/")[1].split("/")[0]
+                if segment.isdigit():
+                    base = current_url.split("/projects")[0]
+                    tokens_url = f"{base}/projects/{segment}/security/api-tokens"
+                    try:
+                        await self.page.goto(tokens_url, wait_until="networkidle")
+                    except Exception:
+                        ui.warning("Could not navigate to the API tokens page.")
 
-        await asyncio.sleep(1)
-
-        # Click "Generate API Token"
+        # Click "Add API Token"
         try:
             gen_btn = self.page.locator(config.SELECTORS_GENERATE_TOKEN_BUTTON).first
             await gen_btn.click(timeout=10000)
         except Exception:
-            ui.warning("Could not find 'Generate API Token' button.")
-            ui.info("Please click 'Generate API Token' manually.")
-            await asyncio.sleep(5)
+            ui.warning("Could not find 'Add API Token' button — please click it manually.")
 
-        await asyncio.sleep(1)
-
-        # Fill token description
+        # Fill description (wait for modal)
+        desc_input = self.page.locator(config.SELECTORS_TOKEN_DESCRIPTION_INPUT).first
         try:
-            desc_input = self.page.locator(
-                config.SELECTORS_TOKEN_DESCRIPTION_INPUT
-            ).first
-            await desc_input.fill(token_name, timeout=5000)
+            await desc_input.wait_for(state="visible", timeout=10000)
+            await desc_input.fill(token_name)
         except Exception:
             ui.warning("Could not fill token name — please enter manually.")
 
-        # Select "Read & Write" permission
+        # Select "Read & Write"
         try:
             rw_option = self.page.locator(config.SELECTORS_TOKEN_READWRITE).first
             await rw_option.click(timeout=5000)
         except Exception:
-            ui.warning(
-                "Could not set permission automatically — please select 'Read & Write'."
-            )
+            ui.warning("Could not select 'Read & Write' — please select manually.")
 
-        # Submit
+        # Submit the modal
         try:
             submit_btn = self.page.locator(config.SELECTORS_TOKEN_SUBMIT).first
             await submit_btn.click(timeout=5000)
         except Exception:
             ui.warning("Please confirm the dialog in the browser.")
 
-        await asyncio.sleep(2)
+        # Reveal token (click "Klicken um anzuzeigen")
+        try:
+            reveal = self.page.locator('.click-to-show, :text("Klicken um anzuzeigen"), :text("Click to show")').first
+            await reveal.click(timeout=10000)
+        except Exception:
+            pass
 
-        # Extract token
         token = await self._extract_token()
 
         if not token:
@@ -291,7 +322,6 @@ class HetznerAutomation:
                 count = await elements.count()
                 for i in range(count):
                     el = elements.nth(i)
-                    # Try inner text
                     try:
                         text = await el.inner_text(timeout=2000)
                         text = text.strip()
@@ -299,7 +329,6 @@ class HetznerAutomation:
                             return text
                     except Exception:
                         pass
-                    # Try input value
                     try:
                         val = await el.get_attribute("value")
                         if val and self._looks_like_token(val):
