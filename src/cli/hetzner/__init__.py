@@ -130,19 +130,14 @@ async def _async_get_or_create_token(
             else:
                 ui.success("Login successful!")
 
-        # Step 2: Project
+        # Step 2: Project — create directly, no confirmation needed
         ui.step(2, "Create Project")
-        create_new = ui.confirm(f'Create new project "{project_name}"?', default=True)
-        if create_new:
-            ok = await bot.create_project(project_name)
-            if ok:
-                ui.success(f'Project "{project_name}" created!')
-            else:
-                ui.error("Project creation failed.")
-                ui.info("Please select the desired project manually in the browser.")
-                ui.ask("Press Enter when ready", default="")
+        ok = await bot.create_project(project_name)
+        if ok:
+            ui.success(f'Project "{project_name}" created!')
         else:
-            ui.info("Please select an existing project in the browser.")
+            ui.error("Project creation failed.")
+            ui.info("Please select the desired project manually in the browser.")
             ui.ask("Press Enter when ready", default="")
 
         # Step 3: API Token

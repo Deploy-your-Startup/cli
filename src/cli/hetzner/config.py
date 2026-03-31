@@ -84,6 +84,9 @@ SELECTORS_SUBMIT_BUTTON = (
 )
 
 SELECTORS_GENERATE_TOKEN_BUTTON = (
+    '[data-test="tokens-add-btn"], '
+    'button:has-text("API-Token hinzufügen"), '
+    'button:has-text("Add API token"), '
     'button:has-text("Generate API token"), '
     'button:has-text("API-Token generieren"), '
     'button:has-text("Generate"), '
@@ -92,40 +95,41 @@ SELECTORS_GENERATE_TOKEN_BUTTON = (
 )
 
 SELECTORS_TOKEN_DESCRIPTION_INPUT = (
+    '[data-test="description"] [data-test="input"], '
+    '[data-test="description"] input, '
     'input[name="description"], '
     'input[placeholder*="Description" i], '
-    'input[placeholder*="Beschreibung" i], '
-    'input[name="name"]'
+    'input[placeholder*="Beschreibung" i]'
 )
 
 SELECTORS_TOKEN_READWRITE = (
-    'label:has-text("Read & Write"), '
+    '[data-test="radio-item--read_write"], '
     'label:has-text("Lesen & Schreiben"), '
-    'input[value="readwrite"], '
-    '[data-testid*="readwrite"]'
+    'label:has-text("Read & Write"), '
+    'input[value="readwrite"]'
 )
 
 SELECTORS_TOKEN_SUBMIT = (
-    'button:has-text("Generate API token"), '
-    'button:has-text("API-Token generieren"), '
-    'button[type="submit"]'
+    '.hc-modal__footer [data-test="testAcceptButton"] button, '
+    '.hc-modal__footer button:has-text("API-Token hinzufügen"), '
+    '.hc-modal__footer button:has-text("Add API token"), '
+    '[data-test="testAcceptButton"] button'
 )
 
 SELECTORS_TOKEN_VALUE = [
+    ".click-to-copy__content",
     '[data-testid*="token-value"]',
     ".token-display code",
     ".token-value",
     "code",
     "pre",
     "input[readonly]",
-    ".modal code",
-    ".modal input[readonly]",
-    '[class*="token"] code',
-    '[class*="token"] input',
 ]
 
 SELECTORS_COPY_BUTTON = (
-    'button:has-text("Copy"), button:has-text("Kopieren"), button[aria-label*="copy" i]'
+    '.click-to-copy__box, '
+    '[data-copy="Kopieren"], [data-copy="Copy"], '
+    'button:has-text("Copy"), button:has-text("Kopieren")'
 )
 
 SELECTORS_SECURITY_LINK = (
