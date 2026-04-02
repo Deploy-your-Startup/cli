@@ -8,6 +8,7 @@ what happens and complete manual steps (login, 2FA, captcha).
 from __future__ import annotations
 
 import asyncio
+import re
 
 from . import config
 from . import _output as ui
@@ -74,13 +75,50 @@ class HetznerAutomation:
         assert self._page is not None, "Browser not started"
         return self._page
 
-    @staticmethod
-    def _in_project(url: str) -> bool:
-        """Return True if the URL points inside a specific project (has numeric ID)."""
-        if "/projects/" not in url:
-            return False
-        segment = url.split("/projects/")[1].split("/")[0]
-        return segment.isdigit()
+    def _is_project_page(self, url: str) -> bool:
+        """Return True when the browser is inside a specific project."""
+        return bool(re.search(r"/projects/[^/]+", url)) and "/404" not in url
+
+    async def _get_project_card(self, project_name: str):
+        """Return the matching project card locator from the projects list."""
+        cards = self.page.locator('a[data-test="project"], a.project-card')
+
+        try:
+            await cards.first.wait_for(state="visible", timeout=10_000)
+        except Exception:
+            return None
+
+        count = await cards.count()
+        for i in range(count):
+            card = cards.nth(i)
+
+            try:
+                name = await card.locator("span[data-projectname]").first.get_attribute(
+                    "data-projectname"
+                )
+                if name and name.strip() == project_name:
+                    return card
+            except Exception:
+                pass
+
+            for selector in (".project-name", "[data-projectname]"):
+                try:
+                    text = await card.locator(selector).first.inner_text(timeout=1000)
+                    if text.strip() == project_name:
+                        return card
+                except Exception:
+                    pass
+
+        return None
+
+    async def _recover_from_404(self) -> None:
+        """Hetzner sometimes drops back to a 404 page after navigation."""
+        if "/404" in self.page.url:
+            ui.warning(
+                "Hetzner redirected to a 404 page. Returning to the project list..."
+            )
+            await self.page.goto(config.HETZNER_PROJECTS_URL, wait_until="networkidle")
+            await asyncio.sleep(1)
 
     # ── Registration ────────────────────────────────────────────────────
 
@@ -141,27 +179,126 @@ class HetznerAutomation:
                 f"{config.HETZNER_BASE_URL}/**",
                 timeout=config.LOGIN_WAIT_TIMEOUT,
             )
+            await self._recover_from_404()
             return True
         except Exception:
             return False
 
     # ── Project Creation ────────────────────────────────────────────────
 
+    async def find_existing_project(self, project_name: str) -> str | None:
+        """Check if a project with the given name already exists.
+
+        Returns the project URL path (e.g. '/projects/13998655') if found, None otherwise.
+        """
+        await self.page.goto(config.HETZNER_PROJECTS_URL, wait_until="networkidle")
+        await asyncio.sleep(1)
+
+        card_link = await self._get_project_card(project_name)
+        if card_link is None:
+            return None
+
+        try:
+            href = await card_link.first.get_attribute("href", timeout=5000)
+            if href:
+                return href
+        except Exception:
+            pass
+
+        # Fallback: click the card link directly
+        try:
+            await card_link.first.click(timeout=5000)
+            await asyncio.sleep(2)
+            await self._recover_from_404()
+            if self._is_project_page(self.page.url):
+                return self.page.url
+        except Exception:
+            pass
+        return None
+
+    async def _navigate_into_project(self, project_name: str) -> bool:
+        """After project creation, find and navigate into the project."""
+        # Ensure we're on the projects list page
+        if "/projects" not in self.page.url or self._is_project_page(self.page.url):
+            await self.page.goto(config.HETZNER_PROJECTS_URL, wait_until="networkidle")
+            await asyncio.sleep(1)
+
+        await self._recover_from_404()
+
+        for attempt in range(2):
+            card_link = await self._get_project_card(project_name)
+            if card_link is not None:
+                try:
+                    await card_link.click(timeout=10_000)
+                    await self.page.wait_for_function(
+                        "() => /\\/projects\\/[^/]+/.test(window.location.pathname)",
+                        timeout=10_000,
+                    )
+
+                    await self._recover_from_404()
+                    if self._is_project_page(self.page.url):
+                        return True
+                except Exception:
+                    pass
+
+            if attempt == 0:
+                await self.page.goto(
+                    config.HETZNER_PROJECTS_URL, wait_until="networkidle"
+                )
+                await asyncio.sleep(2)
+                await self._recover_from_404()
+
+        ui.warning(f'Could not navigate into project "{project_name}" automatically.')
+        ui.info("Please click on the project in the browser.")
+        try:
+            await self.page.wait_for_function(
+                "() => /\\/projects\\/[^/]+/.test(window.location.pathname)",
+                timeout=config.LOGIN_WAIT_TIMEOUT,
+            )
+            await self._recover_from_404()
+            return self._is_project_page(self.page.url)
+        except Exception:
+            return False
+
+    async def open_project(self, project_ref: str) -> bool:
+        """Navigate into an existing project.
+
+        ``project_ref`` can be either the project name or the href/path returned
+        by ``find_existing_project()``. Using the href directly avoids an extra
+        click on the project list, which is where Hetzner occasionally bounces to
+        a 404 page.
+        """
+        if project_ref.startswith("http://") or project_ref.startswith("https://"):
+            target_url = project_ref
+        elif project_ref.startswith("/"):
+            target_url = f"{config.HETZNER_BASE_URL}{project_ref}"
+        else:
+            return await self._navigate_into_project(project_ref)
+
+        try:
+            await self.page.goto(target_url, wait_until="networkidle")
+            await asyncio.sleep(1)
+            await self._recover_from_404()
+            if self._is_project_page(self.page.url):
+                return True
+        except Exception:
+            pass
+
+        ui.warning("Direct navigation to the existing project failed.")
+        ui.info("Falling back to selecting the project from the list...")
+        return await self._navigate_into_project(project_ref)
+
     async def create_project(self, project_name: str) -> bool:
-        """Create or navigate to a project in Hetzner Cloud Console."""
+        """Create a new project in Hetzner Cloud Console and navigate into it."""
         ui.info(f'Creating project "{project_name}"...')
 
         await self.page.goto(config.HETZNER_PROJECTS_URL, wait_until="networkidle")
+        await asyncio.sleep(1)
 
-        # Fast path: project already exists → navigate into it
-        try:
-            existing = self.page.locator(f'[data-projectname="{project_name}"]').first
-            if await existing.is_visible(timeout=2000):
-                ui.success(f'Project "{project_name}" already exists — navigating to it.')
-                await self._navigate_into_project(project_name)
-                return self._in_project(self.page.url)
-        except Exception:
-            pass
+        existing = await self.find_existing_project(project_name)
+        if existing:
+            ui.success(f'Project "{project_name}" already exists — navigating to it.')
+            return await self.open_project(existing)
 
         # Click "New Project"
         try:
@@ -173,7 +310,7 @@ class HetznerAutomation:
                 await btn.click(timeout=5000)
             except Exception:
                 ui.error("Could not find the 'New Project' button.")
-                return await self._wait_for_manual_project_creation(project_name)
+                return False
 
         # Fill name and submit
         try:
@@ -189,55 +326,11 @@ class HetznerAutomation:
         except Exception:
             ui.warning("Please confirm the dialog in the browser.")
 
-        # Wait for redirect into the new project
-        try:
-            await self.page.wait_for_url("**/projects/**", timeout=10000)
-        except Exception:
-            pass
+        await asyncio.sleep(2)
 
-        if self._in_project(self.page.url):
-            return True
-
-        # Not inside a project — might be "name taken" error, navigate to existing
-        ui.info(f'Navigating to existing project "{project_name}"...')
-        try:
-            await self.page.keyboard.press("Escape")
-        except Exception:
-            pass
-        await self._navigate_into_project(project_name)
-        return self._in_project(self.page.url)
-
-    async def _navigate_into_project(self, project_name: str) -> None:
-        """Navigate into the named project by finding its href on the projects list."""
-        try:
-            await self.page.goto(config.HETZNER_PROJECTS_URL, wait_until="networkidle")
-
-            card_link = self.page.locator(
-                f'a.project-card:has([data-projectname="{project_name}"])'
-            ).first
-            href = await card_link.get_attribute("href", timeout=5000)
-            if href:
-                url = href if href.startswith("http") else f"{config.HETZNER_BASE_URL}{href}"
-                await self.page.goto(url, wait_until="networkidle")
-                return
-
-            # Fallback: click the span directly
-            card = self.page.locator(f'[data-projectname="{project_name}"]').first
-            await card.click(timeout=10000)
-            await self.page.wait_for_url("**/projects/**", timeout=10000)
-        except Exception:
-            ui.warning(f'Could not navigate into project "{project_name}" automatically.')
-
-    async def _wait_for_manual_project_creation(self, project_name: str) -> bool:
-        """Fallback: wait for user to manually create and open the project."""
-        ui.info(f'Please create a project named "{project_name}" and open it in the browser.')
-        try:
-            await self.page.wait_for_url(
-                "**/projects/**", timeout=config.LOGIN_WAIT_TIMEOUT
-            )
-        except Exception:
-            pass
-        return self._in_project(self.page.url)
+        # Navigate into the newly created project
+        ui.info("Navigating into the new project...")
+        return await self._navigate_into_project(project_name)
 
     # ── Token Creation ──────────────────────────────────────────────────
 
@@ -274,7 +367,9 @@ class HetznerAutomation:
             gen_btn = self.page.locator(config.SELECTORS_GENERATE_TOKEN_BUTTON).first
             await gen_btn.click(timeout=10000)
         except Exception:
-            ui.warning("Could not find 'Add API Token' button — please click it manually.")
+            ui.warning(
+                "Could not find 'Add API Token' button — please click it manually."
+            )
 
         # Fill description (wait for modal)
         desc_input = self.page.locator(config.SELECTORS_TOKEN_DESCRIPTION_INPUT).first
@@ -300,7 +395,9 @@ class HetznerAutomation:
 
         # Reveal token (click "Klicken um anzuzeigen")
         try:
-            reveal = self.page.locator('.click-to-show, :text("Klicken um anzuzeigen"), :text("Click to show")').first
+            reveal = self.page.locator(
+                '.click-to-show, :text("Klicken um anzuzeigen"), :text("Click to show")'
+            ).first
             await reveal.click(timeout=10000)
         except Exception:
             pass
