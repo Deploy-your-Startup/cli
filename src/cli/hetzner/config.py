@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 # ── Hetzner Cloud Console URLs ────────────────────────────────────────
-HETZNER_BASE_URL = "https://console.hetzner.com"
+HETZNER_BASE_URL = "https://console.hetzner.cloud"
 HETZNER_REGISTER_URL = "https://accounts.hetzner.com/signUp"
 HETZNER_LOGIN_URL = "https://accounts.hetzner.com/login"
 HETZNER_PROJECTS_URL = f"{HETZNER_BASE_URL}/projects"
@@ -52,10 +52,11 @@ NAVIGATION_TIMEOUT = 30_000
 # Collected here so Hetzner UI changes only require a single-file update.
 
 SELECTORS_NEW_PROJECT_BUTTON = (
-    '[data-test="create-project-btn"] button, '
-    '[data-test="create-project-btn"], '
+    'button:has-text("New project"), '
     'button:has-text("Neues Projekt"), '
-    'button:has-text("New project")'
+    'a:has-text("New project"), '
+    'a:has-text("Neues Projekt"), '
+    '[data-testid="projects-new-project-button"]'
 )
 
 SELECTORS_ADD_BUTTON_FALLBACK = (
@@ -66,7 +67,6 @@ SELECTORS_ADD_BUTTON_FALLBACK = (
 )
 
 SELECTORS_PROJECT_NAME_INPUT = (
-    '[data-test="create-project-name-input"] input, '
     'input[name="name"], '
     'input[placeholder*="Project" i], '
     'input[placeholder*="Projekt" i], '
@@ -74,8 +74,6 @@ SELECTORS_PROJECT_NAME_INPUT = (
 )
 
 SELECTORS_SUBMIT_BUTTON = (
-    '[data-test="create-project-submit-btn"] button, '
-    '[data-test="create-project-submit-btn"], '
     'button[type="submit"], '
     'button:has-text("Add"), '
     'button:has-text("Hinzufügen"), '
@@ -93,7 +91,7 @@ SELECTORS_GENERATE_TOKEN_BUTTON = (
     'button:has-text("API-Token generieren"), '
     'button:has-text("Generate"), '
     'button:has-text("Generieren"), '
-    '[data-test*="generate-token"]'
+    '[data-testid*="generate-token"]'
 )
 
 SELECTORS_TOKEN_DESCRIPTION_INPUT = (
@@ -108,8 +106,7 @@ SELECTORS_TOKEN_READWRITE = (
     '[data-test="radio-item--read_write"], '
     'label:has-text("Lesen & Schreiben"), '
     'label:has-text("Read & Write"), '
-    'input[value="readwrite"], '
-    '[data-test*="readwrite"]'
+    'input[value="readwrite"]'
 )
 
 SELECTORS_TOKEN_SUBMIT = (
@@ -121,7 +118,6 @@ SELECTORS_TOKEN_SUBMIT = (
 
 SELECTORS_TOKEN_VALUE = [
     ".click-to-copy__content",
-    '[data-test*="token-value"]',
     '[data-testid*="token-value"]',
     ".token-display code",
     ".token-value",
@@ -137,7 +133,7 @@ SELECTORS_COPY_BUTTON = (
 )
 
 SELECTORS_SECURITY_LINK = (
-    'a:has-text("Security"), a:has-text("Sicherheit"), [data-test*="security"]'
+    'a:has-text("Security"), a:has-text("Sicherheit"), [data-testid*="security"]'
 )
 
 SELECTORS_API_TOKENS_LINK = 'a:has-text("API Tokens"), a:has-text("API-Tokens")'
