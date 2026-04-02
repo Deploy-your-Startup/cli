@@ -55,6 +55,14 @@ def token_exists() -> bool:
     return config.TOKEN_FILE.exists() and load_token() is not None
 
 
+def delete_token() -> bool:
+    """Delete the stored token file. Returns True if deleted, False if not found."""
+    if config.TOKEN_FILE.exists():
+        config.TOKEN_FILE.unlink()
+        return True
+    return False
+
+
 def show_token_info():
     """Display info about stored token."""
     if not config.TOKEN_FILE.exists():
