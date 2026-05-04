@@ -399,7 +399,7 @@ class ProjectStep(WizardStep):
 
 
 def _is_pushed(project_dir: Path) -> bool:
-    """Check if local branch is up to date with remote."""
+    """Check if working tree is clean and the branch is in sync with origin."""
     try:
         result = subprocess.run(
             ["git", "status", "--branch", "--porcelain=v2"],
@@ -407,13 +407,16 @@ def _is_pushed(project_dir: Path) -> bool:
             capture_output=True,
             text=True,
         )
-        # If there's an "ahead" marker, we're not pushed yet
+        ahead_in_sync = False
         for line in result.stdout.splitlines():
             if line.startswith("# branch.ab"):
-                # Format: # branch.ab +N -M
                 parts = line.split()
                 ahead = int(parts[2].lstrip("+"))
-                return ahead == 0
+                ahead_in_sync = ahead == 0
+            elif not line.startswith("#") and line.strip():
+                # Any tracked or untracked change → not finalized yet
+                return False
+        return ahead_in_sync
     except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
         pass
     return False
