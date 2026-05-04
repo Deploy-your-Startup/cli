@@ -379,7 +379,14 @@ class ProjectStep(WizardStep):
             raise click.ClickException("Fehler beim Rotieren des Vault-Passworts.")
         ui.action_done("Vault-Passwort rotiert")
 
-        # 3f. Token cleanup — immediately after vault encryption
+        # 3f. Remove .bak files left behind by vault encryption
+        for bak in ctx.project_dir.rglob("*.bak"):
+            try:
+                bak.unlink()
+            except OSError:
+                pass
+
+        # 3g. Token cleanup — immediately after vault encryption
         ui.action_start("Hetzner Token aufräumen...")
         from cli.hetzner.credentials import delete_token
 
@@ -511,7 +518,29 @@ class FinalizeStep(WizardStep):
             )
             ui.action_done("Gepusht")
 
-        # 4e. Store vault password in Keychain
+            # 4e. Trigger infrastructure provisioning workflow
+            ui.action_start("Infrastructure-Workflow starten...")
+            try:
+                _run_command(
+                    [
+                        "gh",
+                        "workflow",
+                        "run",
+                        "deploy-infrastructure.yml",
+                        "--ref",
+                        "main",
+                    ],
+                    cwd=ctx.project_dir,
+                    capture_output=True,
+                )
+                ui.action_done("Infrastructure-Workflow läuft (siehe Actions-Tab)")
+            except subprocess.CalledProcessError as exc:
+                ui.action_fail("Workflow-Start fehlgeschlagen")
+                ui.warning(
+                    f"Bitte manuell starten: gh workflow run deploy-infrastructure.yml ({exc})"
+                )
+
+        # 4f. Store vault password in Keychain
         ui.action_start("Vault-Passwort in Keychain speichern...")
         try:
             _store_vault_password_in_keychain(ctx.project_name, ctx.vault_password)
