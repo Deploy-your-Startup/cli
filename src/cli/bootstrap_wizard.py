@@ -257,50 +257,27 @@ class ProjectStep(WizardStep):
     def run(self, ctx: BootstrapContext) -> None:
         need_clone = not ctx.project_dir.exists()
 
-        # 3a. Clone template
+        # 3a. Clone template locally as a fresh repo (no GitHub repo yet —
+        # we only create it in Step 4 once everything is configured, so
+        # the remote starts with a single clean Initial commit).
         if need_clone:
-            if ctx.mode == "github":
-                if _repo_exists(ctx.full_repo):
-                    ui.action_start("Existierendes Repository klonen...")
-                    _run_command(
-                        ["gh", "repo", "clone", ctx.full_repo],
-                        cwd=ctx.output_dir,
-                    )
-                    ui.action_done("Repository geklont")
-                else:
-                    ui.action_start("Repository aus Template erstellen...")
-                    _run_command(
-                        [
-                            "gh",
-                            "repo",
-                            "create",
-                            ctx.full_repo,
-                            "--template",
-                            f"{TEMPLATE_OWNER}/{TEMPLATE_REPO}",
-                            "--private",
-                            "--clone",
-                        ],
-                        cwd=ctx.output_dir,
-                    )
-                    ui.action_done("Repository erstellt")
-            else:
-                import shutil
+            import shutil
 
-                ui.action_start("Template klonen...")
-                _run_command(
-                    [
-                        "git",
-                        "clone",
-                        "--depth",
-                        "1",
-                        f"https://github.com/{TEMPLATE_OWNER}/{TEMPLATE_REPO}.git",
-                        str(ctx.project_dir),
-                    ],
-                    cwd=ctx.output_dir,
-                )
-                shutil.rmtree(ctx.project_dir / ".git")
-                _run_command(["git", "init"], cwd=ctx.project_dir)
-                ui.action_done("Template geklont")
+            ui.action_start("Template klonen...")
+            _run_command(
+                [
+                    "git",
+                    "clone",
+                    "--depth",
+                    "1",
+                    f"https://github.com/{TEMPLATE_OWNER}/{TEMPLATE_REPO}.git",
+                    str(ctx.project_dir),
+                ],
+                cwd=ctx.output_dir,
+            )
+            shutil.rmtree(ctx.project_dir / ".git")
+            _run_command(["git", "init", "-b", "main"], cwd=ctx.project_dir)
+            ui.action_done("Template geklont")
 
         # 3b. SSH Keys
         ui.action_start("SSH Keys generieren...")
@@ -460,17 +437,66 @@ class FinalizeStep(WizardStep):
         return False
 
     def run(self, ctx: BootstrapContext) -> None:
-        # 4a. Commit
+        # 4a. Commit (only if there's something to commit — empty commits
+        # error out with "nothing to commit").
         ui.action_start("Code committen...")
         _run_command(["git", "add", "-A"], cwd=ctx.project_dir)
-        _run_command(
-            ["git", "commit", "-m", "bootstrap: configure project"],
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
             cwd=ctx.project_dir,
+            capture_output=True,
+            text=True,
         )
-        ui.action_done("Committed")
+        if status.stdout.strip():
+            _run_command(
+                ["git", "commit", "-m", "bootstrap: configure project"],
+                cwd=ctx.project_dir,
+            )
+            ui.action_done("Committed")
+        else:
+            ui.action_done("Nichts zu committen")
 
         if ctx.mode == "github":
-            # 4b. GitHub Actions config
+            # 4b. Create GitHub repo if it doesn't exist yet, set as origin
+            if not _repo_exists(ctx.full_repo):
+                ui.action_start("GitHub-Repository erstellen...")
+                _run_command(
+                    [
+                        "gh",
+                        "repo",
+                        "create",
+                        ctx.full_repo,
+                        "--private",
+                        "--source",
+                        ".",
+                    ],
+                    cwd=ctx.project_dir,
+                )
+                ui.action_done("Repository erstellt")
+            else:
+                # Repo exists (retry case) — make sure origin points there
+                _run_command(
+                    [
+                        "git",
+                        "remote",
+                        "remove",
+                        "origin",
+                    ],
+                    cwd=ctx.project_dir,
+                    capture_output=True,
+                )
+                _run_command(
+                    [
+                        "git",
+                        "remote",
+                        "add",
+                        "origin",
+                        f"https://github.com/{ctx.full_repo}.git",
+                    ],
+                    cwd=ctx.project_dir,
+                )
+
+            # 4c. GitHub Actions config
             ui.action_start("GitHub Actions konfigurieren...")
             _run_command(
                 [
@@ -504,7 +530,7 @@ class FinalizeStep(WizardStep):
             )
             ui.action_done("GitHub Actions konfiguriert")
 
-            # 4c. Vault password as GitHub secret
+            # 4d. Vault password as GitHub secret
             ui.action_start("Vault-Passwort als GitHub Secret...")
             _run_command(
                 ["gh", "secret", "set", "VAULT_PASSWORD", "--body", ctx.vault_password],
@@ -513,16 +539,16 @@ class FinalizeStep(WizardStep):
             )
             ui.action_done("GitHub Secret gesetzt")
 
-            # 4d. Push
+            # 4e. Push
             ui.action_start("Push nach GitHub...")
             _run_command(
-                ["git", "push", "origin", "main"],
+                ["git", "push", "-u", "origin", "main"],
                 cwd=ctx.project_dir,
                 capture_output=True,
             )
             ui.action_done("Gepusht")
 
-            # 4e. Trigger infrastructure provisioning workflow
+            # 4f. Trigger infrastructure provisioning workflow
             ui.action_start("Infrastructure-Workflow starten...")
             try:
                 _run_command(
@@ -544,7 +570,7 @@ class FinalizeStep(WizardStep):
                     f"Bitte manuell starten: gh workflow run deploy-infrastructure.yml ({exc})"
                 )
 
-        # 4f. Store vault password in Keychain
+        # 4g. Store vault password in Keychain
         ui.action_start("Vault-Passwort in Keychain speichern...")
         try:
             _store_vault_password_in_keychain(ctx.project_name, ctx.vault_password)
