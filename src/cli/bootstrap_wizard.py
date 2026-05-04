@@ -259,21 +259,29 @@ class ProjectStep(WizardStep):
         # 3a. Clone template
         if need_clone:
             if ctx.mode == "github":
-                ui.action_start("Repository aus Template erstellen...")
-                _run_command(
-                    [
-                        "gh",
-                        "repo",
-                        "create",
-                        ctx.full_repo,
-                        "--template",
-                        f"{TEMPLATE_OWNER}/{TEMPLATE_REPO}",
-                        "--private",
-                        "--clone",
-                    ],
-                    cwd=ctx.output_dir,
-                )
-                ui.action_done("Repository erstellt")
+                if _repo_exists(ctx.full_repo):
+                    ui.action_start("Existierendes Repository klonen...")
+                    _run_command(
+                        ["gh", "repo", "clone", ctx.full_repo],
+                        cwd=ctx.output_dir,
+                    )
+                    ui.action_done("Repository geklont")
+                else:
+                    ui.action_start("Repository aus Template erstellen...")
+                    _run_command(
+                        [
+                            "gh",
+                            "repo",
+                            "create",
+                            ctx.full_repo,
+                            "--template",
+                            f"{TEMPLATE_OWNER}/{TEMPLATE_REPO}",
+                            "--private",
+                            "--clone",
+                        ],
+                        cwd=ctx.output_dir,
+                    )
+                    ui.action_done("Repository erstellt")
             else:
                 import shutil
 
