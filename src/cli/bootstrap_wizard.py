@@ -460,8 +460,8 @@ class FinalizeStep(WizardStep):
             # 4b. Create GitHub repo if it doesn't exist yet, set as origin
             # Drop any leftover origin from a previous attempt — both
             # `gh repo create --source=.` and the manual `git remote add`
-            # below fail if origin already exists.
-            _run_command(
+            # below fail if origin already exists. Tolerate "no such remote".
+            subprocess.run(
                 ["git", "remote", "remove", "origin"],
                 cwd=ctx.project_dir,
                 capture_output=True,
