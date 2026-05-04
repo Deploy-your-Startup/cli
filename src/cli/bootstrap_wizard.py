@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -547,10 +548,16 @@ class FinalizeStep(WizardStep):
             )
             ui.action_done("Gepusht")
 
-            # 4f. Trigger infrastructure provisioning workflow
+            # 4f. Trigger infrastructure provisioning workflow.
+            # GitHub needs a few seconds to index newly pushed workflow files
+            # before `gh workflow run` can find them — retry briefly.
             ui.action_start("Infrastructure-Workflow starten...")
-            try:
-                _run_command(
+            triggered = False
+            last_err: str | None = None
+            for attempt in range(6):
+                if attempt:
+                    time.sleep(2)
+                proc = subprocess.run(
                     [
                         "gh",
                         "workflow",
@@ -561,12 +568,21 @@ class FinalizeStep(WizardStep):
                     ],
                     cwd=ctx.project_dir,
                     capture_output=True,
+                    text=True,
                 )
+                if proc.returncode == 0:
+                    triggered = True
+                    break
+                last_err = (proc.stderr or proc.stdout or "").strip()
+
+            if triggered:
                 ui.action_done("Infrastructure-Workflow läuft (siehe Actions-Tab)")
-            except subprocess.CalledProcessError as exc:
+            else:
                 ui.action_fail("Workflow-Start fehlgeschlagen")
                 ui.warning(
-                    f"Bitte manuell starten: gh workflow run deploy-infrastructure.yml ({exc})"
+                    "Bitte manuell starten: "
+                    "gh workflow run deploy-infrastructure.yml --ref main"
+                    + (f" ({last_err})" if last_err else "")
                 )
 
         # 4g. Store vault password in Keychain
