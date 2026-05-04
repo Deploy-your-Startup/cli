@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 from abc import ABC, abstractmethod
@@ -557,8 +558,36 @@ STEPS: list[type[WizardStep]] = [DomainStep, HetznerStep, ProjectStep, FinalizeS
 TOTAL_STEPS = len(STEPS)
 
 
+def _check_prerequisites(ctx: BootstrapContext) -> None:
+    """Fail fast if required external tools are missing."""
+    required = [
+        ("git", "Git: https://git-scm.com/downloads"),
+        ("ssh-keygen", "OpenSSH (sollte mit dem System geliefert werden)"),
+    ]
+    if ctx.mode == "github":
+        required.append(("gh", "GitHub CLI: https://cli.github.com (brew install gh)"))
+
+    missing = [(name, hint) for name, hint in required if shutil.which(name) is None]
+    if missing:
+        lines = [f"  • {name} — {hint}" for name, hint in missing]
+        raise click.ClickException(
+            "Fehlende Tools:\n" + "\n".join(lines)
+        )
+
+    if ctx.mode == "github":
+        result = subprocess.run(
+            ["gh", "auth", "status"], capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            raise click.ClickException(
+                "GitHub CLI ist nicht eingeloggt. Bitte `gh auth login` ausführen."
+            )
+
+
 def run_wizard(ctx: BootstrapContext) -> None:
     """Run the full bootstrap wizard pipeline."""
+    _check_prerequisites(ctx)
+
     completed = 0
 
     for step_cls in STEPS:
