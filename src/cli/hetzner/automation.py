@@ -87,7 +87,7 @@ class HetznerAutomation:
     async def register_account(self, email: str) -> bool:
         """Open registration page — user completes manually."""
         ui.info("Opening Hetzner registration page...")
-        await self.page.goto(config.HETZNER_REGISTER_URL, wait_until="networkidle")
+        await self.page.goto(config.HETZNER_REGISTER_URL, wait_until="domcontentloaded")
 
         try:
             email_input = self.page.locator(
@@ -120,7 +120,7 @@ class HetznerAutomation:
     async def login(self) -> bool:
         """Navigate to login and wait for user to complete (incl. 2FA)."""
         try:
-            await self.page.goto(config.HETZNER_PROJECTS_URL, wait_until="networkidle")
+            await self.page.goto(config.HETZNER_PROJECTS_URL, wait_until="domcontentloaded")
             if "/projects" in self.page.url and "accounts.hetzner" not in self.page.url:
                 ui.success("Already logged in (saved session).")
                 return True
@@ -128,7 +128,7 @@ class HetznerAutomation:
             pass
 
         ui.info("Opening Hetzner login page...")
-        await self.page.goto(config.HETZNER_LOGIN_URL, wait_until="networkidle")
+        await self.page.goto(config.HETZNER_LOGIN_URL, wait_until="domcontentloaded")
 
         ui.info(
             "Please log in via the browser:\n"
@@ -151,7 +151,7 @@ class HetznerAutomation:
         """Create or navigate to a project in Hetzner Cloud Console."""
         ui.info(f'Creating project "{project_name}"...')
 
-        await self.page.goto(config.HETZNER_PROJECTS_URL, wait_until="networkidle")
+        await self.page.goto(config.HETZNER_PROJECTS_URL, wait_until="domcontentloaded")
 
         # Fast path: project already exists → navigate into it
         try:
@@ -212,7 +212,7 @@ class HetznerAutomation:
     async def _navigate_into_project(self, project_name: str) -> None:
         """Navigate into the named project by finding its href on the projects list."""
         try:
-            await self.page.goto(config.HETZNER_PROJECTS_URL, wait_until="networkidle")
+            await self.page.goto(config.HETZNER_PROJECTS_URL, wait_until="domcontentloaded")
 
             card_link = self.page.locator(
                 f'a.project-card:has([data-projectname="{project_name}"])'
@@ -224,7 +224,7 @@ class HetznerAutomation:
                     if href.startswith("http")
                     else f"{config.HETZNER_BASE_URL}{href}"
                 )
-                await self.page.goto(url, wait_until="networkidle")
+                await self.page.goto(url, wait_until="domcontentloaded")
                 return
 
             # Fallback: click the span directly
@@ -275,7 +275,7 @@ class HetznerAutomation:
                     base = current_url.split("/projects")[0]
                     tokens_url = f"{base}/projects/{segment}/security/api-tokens"
                     try:
-                        await self.page.goto(tokens_url, wait_until="networkidle")
+                        await self.page.goto(tokens_url, wait_until="domcontentloaded")
                     except Exception:
                         ui.warning("Could not navigate to the API tokens page.")
 
