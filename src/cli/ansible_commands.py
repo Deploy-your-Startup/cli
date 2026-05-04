@@ -13,6 +13,8 @@ from pathlib import Path
 import click
 import yaml
 
+from .ansible_bin import ansible_bin
+
 
 DEFAULT_SHARED_DIR = ".shared-roles"
 DEFAULT_VERSION = "main"
@@ -649,7 +651,7 @@ def get_hcloud_token(
             "run",
             "--project",
             str(working_dir),
-            "ansible-vault",
+            ansible_bin("ansible-vault"),
             "view",
             f"hcloud_token_{environment}",
             "--vault-password-file",
@@ -752,7 +754,7 @@ def run_deploy(
             "run",
             "--project",
             str(working_dir),
-            "ansible-playbook",
+            ansible_bin("ansible-playbook"),
             "playbook.yml",
             "--vault-password-file",
             "/bin/cat",
@@ -797,7 +799,7 @@ def run_infrastructure(
             "run",
             "--project",
             str(working_dir),
-            "ansible-playbook",
+            ansible_bin("ansible-playbook"),
             "playbook.yml",
             "--vault-password-file",
             "/bin/cat",
@@ -1051,7 +1053,7 @@ def run_backup(
             "run",
             "--project",
             str(working_dir),
-            "ansible-playbook",
+            ansible_bin("ansible-playbook"),
             str(playbook_path),
             "--vault-password-file",
             "/bin/cat",
@@ -1108,7 +1110,7 @@ def run_update_vms(
             "run",
             "--project",
             str(working_dir),
-            "ansible-playbook",
+            ansible_bin("ansible-playbook"),
             str(playbook_path),
             "--vault-password-file",
             "/bin/cat",
@@ -1206,7 +1208,7 @@ def run_restore(
             "run",
             "--project",
             str(working_dir),
-            "ansible-playbook",
+            ansible_bin("ansible-playbook"),
             str(playbook_path),
             "--vault-password-file",
             "/bin/cat",

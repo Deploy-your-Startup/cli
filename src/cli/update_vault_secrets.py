@@ -10,6 +10,8 @@ import string
 from ansible.parsing.vault import VaultLib, VaultSecret
 from ansible.constants import DEFAULT_VAULT_IDENTITY
 
+from .ansible_bin import ansible_bin
+
 
 def verify_vault_password(vault_text, vault_password):
     """Verify if the provided vault password can decrypt the vault text."""
@@ -121,7 +123,7 @@ def rotate_full_vault_file(
                 # Encrypt the plaintext file with the new password
                 subprocess.run(
                     [
-                        "ansible-vault",
+                        ansible_bin("ansible-vault"),
                         "encrypt",
                         "--vault-password-file",
                         new_pass_path,
@@ -171,7 +173,7 @@ def regen_vault_string(name, plaintext, vault_pass_file):
     """Encrypt a plaintext into an inline Ansible vault block."""
     # Use '--' to prevent plaintext starting with '-' being parsed as option
     cmd = [
-        "ansible-vault",
+        ansible_bin("ansible-vault"),
         "encrypt_string",
         "--name",
         name,

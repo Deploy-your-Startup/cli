@@ -11,6 +11,7 @@ from tempfile import NamedTemporaryFile
 from ansible.parsing.vault import VaultLib, VaultSecret, VaultEditor
 
 from .common import verify_vault_password, create_vault_lib
+from ..ansible_bin import ansible_bin
 
 DEFAULT_VAULT_IDENTITY = "default"
 
@@ -151,7 +152,7 @@ def regen_vault_string(name, plaintext, vault_pass_file):
     """
     # Use '--' to prevent plaintext starting with '-' being parsed as option
     cmd = [
-        "ansible-vault",
+        ansible_bin("ansible-vault"),
         "encrypt_string",
         "--name",
         name,
@@ -222,7 +223,7 @@ def get_inline_vault_value(
             # Use ansible-vault directly for most reliable decryption
             result = subprocess.run(
                 [
-                    "ansible-vault",
+                    ansible_bin("ansible-vault"),
                     "view",
                     "--vault-password-file",
                     pwd_file_path,
@@ -250,7 +251,7 @@ def get_inline_vault_value(
             # Try using decrypt instead of view as backup approach
             result = subprocess.run(
                 [
-                    "ansible-vault",
+                    ansible_bin("ansible-vault"),
                     "decrypt",
                     "--vault-password-file",
                     pwd_file_path,
