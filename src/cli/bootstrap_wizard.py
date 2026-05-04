@@ -458,6 +458,15 @@ class FinalizeStep(WizardStep):
 
         if ctx.mode == "github":
             # 4b. Create GitHub repo if it doesn't exist yet, set as origin
+            # Drop any leftover origin from a previous attempt — both
+            # `gh repo create --source=.` and the manual `git remote add`
+            # below fail if origin already exists.
+            _run_command(
+                ["git", "remote", "remove", "origin"],
+                cwd=ctx.project_dir,
+                capture_output=True,
+            )
+
             if not _repo_exists(ctx.full_repo):
                 ui.action_start("GitHub-Repository erstellen...")
                 _run_command(
@@ -474,17 +483,7 @@ class FinalizeStep(WizardStep):
                 )
                 ui.action_done("Repository erstellt")
             else:
-                # Repo exists (retry case) — make sure origin points there
-                _run_command(
-                    [
-                        "git",
-                        "remote",
-                        "remove",
-                        "origin",
-                    ],
-                    cwd=ctx.project_dir,
-                    capture_output=True,
-                )
+                # Repo exists (retry case) — wire origin manually
                 _run_command(
                     [
                         "git",
