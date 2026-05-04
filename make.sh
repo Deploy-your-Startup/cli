@@ -7,7 +7,7 @@ if [ "$1" == "setup_local" ]; then
   echo "Installing ruff..."
   uv tool install ruff@latest
   echo "Installing deploy-your-startup-cli..."
-  uv tool install deploy-your-startup-cli --from .
+  uv tool install --reinstall deploy-your-startup-cli --from .
   echo "Setup complete!"
 fi
 
@@ -24,7 +24,7 @@ fi
 
 if [ "$1" == "install_tool" ]; then
   echo "Installing deploy-your-startup-cli as a global tool..."
-  uv tool install deploy-your-startup-cli --from .
+  uv tool install --reinstall deploy-your-startup-cli --from .
 fi
 
 if [ "$1" == "dev_install" ]; then

@@ -553,11 +553,13 @@ def run_wizard(ctx: BootstrapContext) -> None:
             raise click.ClickException(str(exc))
 
     # All steps done — show summary
+    from cli.ansible_commands import keychain_service_name
+
     github_url = ctx.github_url if ctx.mode == "github" else None
     ui.summary_box(
         project_name=ctx.project_name,
         project_dir=str(ctx.project_dir),
         github_url=github_url,
         domain=ctx.base_domain,
-        keychain=True,
+        keychain_service=keychain_service_name(ctx.project_name),
     )

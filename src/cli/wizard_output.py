@@ -176,10 +176,10 @@ def summary_box(
     project_dir: str,
     github_url: str | None,
     domain: str,
-    keychain: bool = True,
+    keychain_service: str | None = None,
 ) -> None:
     """Display the framed final summary with next steps."""
-    W = 56  # total width including borders
+    W = 64  # total width including borders
 
     def _pad(text: str) -> str:
         inner = W - 6
@@ -201,19 +201,29 @@ def summary_box(
     if github_url:
         click.echo(click.style(_pad(f"🔗 {github_url}"), fg="green"))
     click.echo(click.style(_pad(f"🌐 {domain}"), fg="green"))
-    if keychain:
-        click.echo(click.style(_pad("🔑 Vault-Passwort → macOS Keychain"), fg="green"))
+    if keychain_service:
+        click.echo(
+            click.style(_pad(f"🔑 Keychain-Eintrag: {keychain_service}"), fg="green")
+        )
     click.echo(click.style(_empty(), fg="green"))
     click.echo(click.style(mid, fg="green"))
     click.echo(click.style(_empty(), fg="green"))
-    click.echo(click.style(_pad("Nächste Schritte:"), fg="green"))
+    click.echo(
+        click.style(
+            _pad("Build & Deploy laufen automatisch via GitHub Actions"), fg="green"
+        )
+    )
+    click.echo(click.style(_pad("(Push auf main → backend & deployment)."), fg="green"))
+    click.echo(click.style(_empty(), fg="green"))
+    click.echo(
+        click.style(_pad("Einmalig die Infrastruktur provisionieren:"), fg="green")
+    )
     click.echo(click.style(_empty(), fg="green"))
     click.echo(click.style(_pad(f"  cd {project_name}/deployment"), fg="green"))
     click.echo(click.style(_pad("  startup ansible setup"), fg="green"))
     click.echo(
         click.style(_pad("  startup ansible infrastructure   # ~5-10 min"), fg="green")
     )
-    click.echo(click.style(_pad("  startup ansible deploy"), fg="green"))
     click.echo(click.style(_pad("  startup ansible kubeconfig"), fg="green"))
     click.echo(click.style(_empty(), fg="green"))
     click.echo(click.style(bot, fg="green"))
