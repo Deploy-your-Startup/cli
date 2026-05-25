@@ -15,9 +15,11 @@ authors = [
 dependencies = [
     "ansible>=11.4.0",
     "click>=8.1.0",
+    "hcloud>=2.0.0",
     "httpx>=0.28.1",
     "playwright>=1.40.0",
     "pygithub>=2.6.1",
+    "python-dateutil>=2.8.0",
     "pyyaml>=6.0.2",
 ]
 
