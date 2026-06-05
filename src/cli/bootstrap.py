@@ -52,8 +52,37 @@ def _prompt_or_env(
         return click.prompt(label, default="", hide_input=hidden, show_default=False)
 
 
+def _gh_token_has_scope(scope: str) -> bool:
+    """Return True if the gh CLI token includes the given OAuth scope."""
+    result = subprocess.run(
+        ["gh", "auth", "status"],
+        capture_output=True,
+        text=True,
+    )
+    # Scopes line looks like:  "- Token scopes: 'gist', 'read:org', 'repo', 'workflow'"
+    for line in (result.stdout + result.stderr).splitlines():
+        if "Token scopes" in line:
+            return f"'{scope}'" in line
+    return False
+
+
+def _ensure_ghcr_scopes() -> None:
+    """Ensure gh CLI token has read:packages — needed for ghcr.io pulls from K8s."""
+    if _gh_token_has_scope("read:packages"):
+        return
+    click.echo(
+        "  gh CLI Token fehlt 'read:packages' Scope (für ghcr.io Image-Pulls). "
+        "Öffne Browser für gh auth refresh..."
+    )
+    subprocess.run(
+        ["gh", "auth", "refresh", "-h", "github.com", "-s", "read:packages,write:packages"],
+        check=True,
+    )
+
+
 def _generate_docker_config_b64(github_username: str) -> str:
     """Generate base64-encoded Docker config JSON for ghcr.io using gh auth token."""
+    _ensure_ghcr_scopes()
     result = _run_command(
         ["gh", "auth", "token"],
         cwd=Path.cwd(),
