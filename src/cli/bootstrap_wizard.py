@@ -455,7 +455,7 @@ class FinalizeStep(WizardStep):
             return False
         if not ctx.project_dir.exists():
             return False
-        if _is_pushed(ctx.project_dir):
+        if _is_pushed(ctx.project_dir) and _repo_exists(ctx.full_repo):
             ui.skip_indicator("Code bereits gepusht")
             return True
         return False
