@@ -57,6 +57,17 @@ def bootstrap(verbose):
 
     ui.banner()
 
+    # ── Mode selection ───────────────────────────────────────────
+
+    choice = ui.numbered_choice(
+        "Welcher Bootstrap-Modus?",
+        [
+            "Full-Stack — Django + k3s + Hetzner (für Apps mit Backend)",
+            "Pitch     — Astro Landing → Cloudflare Pages (für Coming-Soon/Marketing)",
+        ],
+    )
+    kind = "fullstack" if choice == 1 else "pitch"
+
     # ── Collect inputs ───────────────────────────────────────────
 
     # Project name (kebab-case validated)
@@ -69,23 +80,23 @@ def bootstrap(verbose):
     # Domain
     base_domain = ui.text_input("Domain (z.B. mein-startup.de)")
 
-    # Optional: additional domains
-    additional_domains = ui.text_input(
-        "Weitere Domains (komma-getrennt, Enter zum Überspringen)",
-        default="",
-        show_default=False,
-    )
-
-    # Optional: Sentry DSN
-    import os
-
-    sentry_dsn = os.environ.get("SENTRY_DSN", "")
-    if not sentry_dsn:
-        sentry_dsn = ui.text_input(
-            "Sentry DSN (optional, Enter zum Überspringen)",
+    # Full-stack-only inputs
+    additional_domains = ""
+    sentry_dsn = ""
+    if kind == "fullstack":
+        additional_domains = ui.text_input(
+            "Weitere Domains (komma-getrennt, Enter zum Überspringen)",
             default="",
             show_default=False,
         )
+        import os
+        sentry_dsn = os.environ.get("SENTRY_DSN", "")
+        if not sentry_dsn:
+            sentry_dsn = ui.text_input(
+                "Sentry DSN (optional, Enter zum Überspringen)",
+                default="",
+                show_default=False,
+            )
 
     # Auto-detect GitHub username
     try:
@@ -102,15 +113,16 @@ def bootstrap(verbose):
 
     # ── Summary + confirmation ───────────────────────────────────
 
-    ui.input_summary(
-        {
-            "Projekt": project_name,
-            "Domain": base_domain,
-            "GitHub": f"{github_username}/{project_name}",
-            "Registry": f"ghcr.io/{github_username}",
-            "Postgres": "17",
-        }
-    )
+    summary = {
+        "Modus":   "Full-Stack" if kind == "fullstack" else "Pitch (Cloudflare Pages)",
+        "Projekt": project_name,
+        "Domain":  base_domain,
+        "GitHub":  f"{github_username}/{project_name}",
+    }
+    if kind == "fullstack":
+        summary["Registry"] = f"ghcr.io/{github_username}"
+        summary["Postgres"] = "17"
+    ui.input_summary(summary)
 
     if not ui.confirm("Passt das?", default=True):
         raise SystemExit(0)
@@ -125,6 +137,7 @@ def bootstrap(verbose):
         postgres_version="17",
         sentry_dsn=sentry_dsn,
         output_dir=Path(output_dir),
+        kind=kind,
     )
 
     run_wizard(ctx)
