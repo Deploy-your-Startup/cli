@@ -222,15 +222,15 @@ source = { editable = "." }
 dependencies = [
     { name = "ansible" },
     { name = "click" },
+    { name = "hcloud" },
     { name = "httpx" },
+    { name = "playwright" },
     { name = "pygithub" },
+    { name = "python-dateutil" },
     { name = "pyyaml" },
 ]
 
 [package.optional-dependencies]
-browser = [
-    { name = "playwright" },
-]
 dev = [
     { name = "pytest" },
     { name = "ruff" },
@@ -245,15 +245,17 @@ requires-dist = [
     { name = "ansible", specifier = ">=11.4.0" },
     { name = "click", specifier = ">=8.1.0" },
     { name = "fastapi", marker = "extra == 'server'", specifier = ">=0.115.12" },
+    { name = "hcloud", specifier = ">=2.0.0" },
     { name = "httpx", specifier = ">=0.28.1" },
-    { name = "playwright", marker = "extra == 'browser'", specifier = ">=1.40.0" },
+    { name = "playwright", specifier = ">=1.40.0" },
     { name = "pygithub", specifier = ">=2.6.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.5" },
+    { name = "python-dateutil", specifier = ">=2.8.0" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8.0" },
     { name = "uvicorn", marker = "extra == 'server'", specifier = ">=0.34.2" },
 ]
-provides-extras = ["dev", "server", "browser"]
+provides-extras = ["dev", "server"]
 
 [[package]]
 name = "deprecated"
@@ -340,6 +342,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/01/ee/02a2c011bdab74c6fb3c75474d40b3052059d95df7e73351460c8588d963/h11-0.16.0.tar.gz", hash = "sha256:4e35b956cf45792e4caa5885e69fba00bdbc6ffafbfa020300e549b208ee5ff1", size = 101250, upload-time = "2025-04-24T03:35:25.427Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl", hash = "sha256:63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86", size = 37515, upload-time = "2025-04-24T03:35:24.344Z" },
+]
+
+[[package]]
+name = "hcloud"
+version = "2.20.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "python-dateutil" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/43/0c/69b03f17185582631c991e7ad11c3b77c41b37d6e479729286452d9e0711/hcloud-2.20.0.tar.gz", hash = "sha256:27052effab1a25bb3cbfc8e2d2472e0e8503b20aecab5bbad5c4b0e8697696d5", size = 155249, upload-time = "2026-05-07T20:05:41.635Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/42/b1/ecb2bf25a2a1333bd85d29e13db91085a88e4ef32e77afbc57cbe2fc524f/hcloud-2.20.0-py3-none-any.whl", hash = "sha256:7373c807c3dbbe5e35e25945e7c1a54d66b6b126d700cc2b8accf0c160f035a6", size = 112086, upload-time = "2026-05-07T20:05:39.723Z" },
 ]
 
 [[package]]
@@ -653,6 +668,18 @@ wheels = [
 ]
 
 [[package]]
+name = "python-dateutil"
+version = "2.9.0.post0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/66/c0/0c8b6ad9f17a802ee498c46e004a0eb49bc148f2fd230864601a86dcf6db/python-dateutil-2.9.0.post0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 342432, upload-time = "2024-03-01T18:36:20.211Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl", hash = "sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427", size = 229892, upload-time = "2024-03-01T18:36:18.57Z" },
+]
+
+[[package]]
 name = "pyyaml"
 version = "6.0.2"
 source = { registry = "https://pypi.org/simple" }
@@ -735,6 +762,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/c3/07/3c45562c67933cc35f6d5df4ca77dabbcd88fddaca0d6b8371693d29fd56/ruff-0.14.1-py3-none-win32.whl", hash = "sha256:e037ea374aaaff4103240ae79168c0945ae3d5ae8db190603de3b4012bd1def6", size = 12319467, upload-time = "2025-10-16T18:05:33.261Z" },
     { url = "https://files.pythonhosted.org/packages/02/88/0ee4ca507d4aa05f67e292d2e5eb0b3e358fbcfe527554a2eda9ac422d6b/ruff-0.14.1-py3-none-win_amd64.whl", hash = "sha256:59d599cdff9c7f925a017f6f2c256c908b094e55967f93f2821b1439928746a1", size = 13401123, upload-time = "2025-10-16T18:05:35.984Z" },
     { url = "https://files.pythonhosted.org/packages/b8/81/4b6387be7014858d924b843530e1b2a8e531846807516e9bea2ee0936bf7/ruff-0.14.1-py3-none-win_arm64.whl", hash = "sha256:e3b443c4c9f16ae850906b8d0a707b2a4c16f8d2f0a7fe65c475c5886665ce44", size = 12436636, upload-time = "2025-10-16T18:05:38.995Z" },
+]
+
+[[package]]
+name = "six"
+version = "1.17.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/94/e7/b2c673351809dca68a0e064b6af791aa332cf192da575fd474ed7d6f16a2/six-1.17.0.tar.gz", hash = "sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81", size = 34031, upload-time = "2024-12-04T17:35:28.174Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274", size = 11050, upload-time = "2024-12-04T17:35:26.475Z" },
 ]
 
 [[package]]

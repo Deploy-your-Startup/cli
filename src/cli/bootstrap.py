@@ -22,6 +22,7 @@ from cli.sync_commands import (
 TEMPLATE_OWNER = "Deploy-your-Startup"
 TEMPLATE_REPO = "django-backend-template"
 TEMPLATE_VAULT_PASSWORD = "ranhah-ceqZu9-fihfez"
+PITCH_TEMPLATE_REPO = "pitch-template"
 
 
 def _prompt_or_env(

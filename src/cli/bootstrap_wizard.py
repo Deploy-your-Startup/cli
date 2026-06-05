@@ -21,6 +21,7 @@ import httpx
 
 from cli import wizard_output as ui
 from cli.bootstrap import (
+    PITCH_TEMPLATE_REPO,
     TEMPLATE_OWNER,
     TEMPLATE_REPO,
     TEMPLATE_VAULT_PASSWORD,
@@ -45,11 +46,14 @@ class BootstrapContext:
     sentry_dsn: str
     output_dir: Path
     mode: str = "github"
+    kind: str = "fullstack"  # "fullstack" | "pitch"
     docker_registry_host: str = "ghcr.io"
 
     # Populated by steps
     hetzner_token: str | None = None
     vault_password: str | None = None
+    cloudflare_account_id: str | None = None
+    cloudflare_api_token: str | None = None
 
     @property
     def project_dir(self) -> Path:
@@ -618,19 +622,217 @@ class FinalizeStep(WizardStep):
             ui.warning(f"Vault-Passwort manuell speichern: {ctx.vault_password}")
 
 
+# ── Pitch mode steps (Cloudflare Pages) ──────────────────────────────
+
+
+CF_TOKEN_URL = "https://dash.cloudflare.com/profile/api-tokens"
+CF_SIGNUP_URL = "https://dash.cloudflare.com/sign-up"
+
+
+def _validate_cf_token(token: str) -> tuple[bool, str | None]:
+    """Verify a Cloudflare API token. Returns (ok, account_id_if_unique)."""
+    try:
+        r = httpx.get(
+            "https://api.cloudflare.com/client/v4/user/tokens/verify",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+        )
+        if not r.json().get("success"):
+            return False, None
+        r2 = httpx.get(
+            "https://api.cloudflare.com/client/v4/accounts",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+        )
+        accounts = r2.json().get("result", []) if r2.json().get("success") else []
+        account_id = accounts[0]["id"] if len(accounts) == 1 else None
+        return True, account_id
+    except (httpx.HTTPError, ValueError, KeyError):
+        return False, None
+
+
+class CloudflareStep(WizardStep):
+    number = 2
+    name = "Cloudflare"
+
+    def check(self, ctx: BootstrapContext) -> bool:
+        return bool(ctx.cloudflare_api_token and ctx.cloudflare_account_id)
+
+    def run(self, ctx: BootstrapContext) -> None:
+        ui.info(
+            "Du brauchst einen Cloudflare-Account.\n"
+            f"  Noch keiner? → {CF_SIGNUP_URL} ('Continue with GitHub' geht)."
+        )
+        if not ui.confirm("Cloudflare-Account vorhanden?", default=True):
+            raise click.ClickException(
+                f"Bitte erst Account anlegen: {CF_SIGNUP_URL}"
+            )
+
+        ui.info(
+            "Erstelle einen API-Token:\n"
+            f"  1. Öffne {CF_TOKEN_URL}\n"
+            "  2. 'Create Token' → 'Create Custom Token'\n"
+            "  3. Permissions:\n"
+            "       Account → Cloudflare Pages → Edit\n"
+            "       Account → Account Settings → Read\n"
+            "       User    → User Details → Read\n"
+            "  4. 'Continue to summary' → 'Create Token' → kopieren\n"
+        )
+        while True:
+            token = ui.text_input("Cloudflare API Token", hide_input=True)
+            ui.action_start("Token validieren...")
+            ok, auto_account_id = _validate_cf_token(token)
+            if ok:
+                ui.action_done("Token validiert")
+                ctx.cloudflare_api_token = token
+                break
+            ui.action_fail("Token ungültig")
+            ui.error("Bitte erneut versuchen.")
+
+        if auto_account_id:
+            ctx.cloudflare_account_id = auto_account_id
+            ui.info(f"Account-ID automatisch ermittelt: {auto_account_id}")
+        else:
+            ui.info(
+                "Mehrere Accounts gefunden — finde deine Account-ID rechts "
+                "in der Sidebar auf https://dash.cloudflare.com"
+            )
+            ctx.cloudflare_account_id = ui.text_input("Cloudflare Account-ID")
+
+
+class PitchProjectStep(WizardStep):
+    number = 3
+    name = "Projekt erstellen"
+
+    def check(self, ctx: BootstrapContext) -> bool:
+        if not ctx.project_dir.exists():
+            return False
+        if _has_placeholders(ctx.project_dir):
+            return False
+        ui.skip_indicator(f"Projekt {ctx.project_name} bereits konfiguriert")
+        return True
+
+    def run(self, ctx: BootstrapContext) -> None:
+        if not ctx.project_dir.exists():
+            ui.action_start("Pitch-Template klonen...")
+            _run_command(
+                [
+                    "git", "clone", "--depth", "1",
+                    f"https://github.com/{TEMPLATE_OWNER}/{PITCH_TEMPLATE_REPO}.git",
+                    str(ctx.project_dir),
+                ],
+                cwd=ctx.output_dir,
+            )
+            shutil.rmtree(ctx.project_dir / ".git")
+            _run_command(["git", "init", "-b", "main"], cwd=ctx.project_dir)
+            ui.action_done("Template geklont")
+
+        ui.action_start("Placeholders ersetzen...")
+        _replace_placeholders(
+            ctx.project_dir,
+            {
+                "§§deploy_your_startup.project_name§§": ctx.project_name,
+                "§§deploy_your_startup.base_domain§§": ctx.base_domain,
+                "§§deploy_your_startup.github_username§§": ctx.github_username,
+            },
+        )
+        ui.action_done("Projekt konfiguriert")
+
+
+class PitchFinalizeStep(WizardStep):
+    number = 4
+    name = "Abschluss"
+
+    def check(self, ctx: BootstrapContext) -> bool:
+        if not ctx.project_dir.exists():
+            return False
+        if _is_pushed(ctx.project_dir) and _repo_exists(ctx.full_repo):
+            ui.skip_indicator("Code bereits gepusht")
+            return True
+        return False
+
+    def run(self, ctx: BootstrapContext) -> None:
+        ui.action_start("Code committen...")
+        _run_command(["git", "add", "-A"], cwd=ctx.project_dir)
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=ctx.project_dir,
+            capture_output=True,
+            text=True,
+        )
+        if status.stdout.strip():
+            _run_command(
+                ["git", "commit", "-m", "bootstrap: configure project"],
+                cwd=ctx.project_dir,
+            )
+            ui.action_done("Committed")
+        else:
+            ui.action_done("Nichts zu committen")
+
+        subprocess.run(
+            ["git", "remote", "remove", "origin"],
+            cwd=ctx.project_dir,
+            capture_output=True,
+        )
+        if not _repo_exists(ctx.full_repo):
+            ui.action_start("GitHub-Repository erstellen...")
+            _run_command(
+                ["gh", "repo", "create", ctx.full_repo, "--private",
+                 "--source", "."],
+                cwd=ctx.project_dir,
+            )
+            ui.action_done("Repository erstellt")
+        else:
+            _run_command(
+                ["git", "remote", "add", "origin",
+                 f"https://github.com/{ctx.full_repo}.git"],
+                cwd=ctx.project_dir,
+            )
+
+        ui.action_start("Cloudflare Secrets setzen...")
+        _run_command(
+            ["gh", "secret", "set", "CLOUDFLARE_API_TOKEN",
+             "--body", ctx.cloudflare_api_token],
+            cwd=ctx.project_dir, capture_output=True,
+        )
+        _run_command(
+            ["gh", "secret", "set", "CLOUDFLARE_ACCOUNT_ID",
+             "--body", ctx.cloudflare_account_id],
+            cwd=ctx.project_dir, capture_output=True,
+        )
+        ui.action_done("Secrets gesetzt")
+
+        ui.action_start("Push nach GitHub...")
+        _run_command(
+            ["git", "push", "-u", "origin", "main"],
+            cwd=ctx.project_dir, capture_output=True,
+        )
+        ui.action_done("Gepusht")
+
+        ui.info(
+            f"Custom Domain {ctx.base_domain} musst du noch in Cloudflare Pages "
+            "verknüpfen:\n"
+            f"  https://dash.cloudflare.com → Pages → {ctx.project_name} "
+            "→ Custom domains → Set up a custom domain"
+        )
+
+
 # ── Pipeline runner ──────────────────────────────────────────────────
 
 
-STEPS: list[type[WizardStep]] = [DomainStep, HetznerStep, ProjectStep, FinalizeStep]
-TOTAL_STEPS = len(STEPS)
+FULLSTACK_STEPS: list[type[WizardStep]] = [DomainStep, HetznerStep, ProjectStep, FinalizeStep]
+PITCH_STEPS: list[type[WizardStep]] = [DomainStep, CloudflareStep, PitchProjectStep, PitchFinalizeStep]
+
+
+def _steps_for(ctx: BootstrapContext) -> list[type[WizardStep]]:
+    return PITCH_STEPS if ctx.kind == "pitch" else FULLSTACK_STEPS
 
 
 def _check_prerequisites(ctx: BootstrapContext) -> None:
     """Fail fast if required external tools are missing."""
-    required = [
-        ("git", "Git: https://git-scm.com/downloads"),
-        ("ssh-keygen", "OpenSSH (sollte mit dem System geliefert werden)"),
-    ]
+    required = [("git", "Git: https://git-scm.com/downloads")]
+    if ctx.kind != "pitch":
+        required.append(("ssh-keygen", "OpenSSH (sollte mit dem System geliefert werden)"))
     if ctx.mode == "github":
         required.append(("gh", "GitHub CLI: https://cli.github.com (brew install gh)"))
 
@@ -655,11 +857,13 @@ def run_wizard(ctx: BootstrapContext) -> None:
     """Run the full bootstrap wizard pipeline."""
     _check_prerequisites(ctx)
 
+    steps = _steps_for(ctx)
+    total = len(steps)
     completed = 0
 
-    for step_cls in STEPS:
+    for step_cls in steps:
         step = step_cls()
-        ui.step_header(step.number, step.name, completed, TOTAL_STEPS)
+        ui.step_header(step.number, step.name, completed, total)
 
         try:
             if step.check(ctx):
@@ -678,13 +882,15 @@ def run_wizard(ctx: BootstrapContext) -> None:
             raise click.ClickException(str(exc))
 
     # All steps done — show summary
-    from cli.ansible_commands import keychain_service_name
-
     github_url = ctx.github_url if ctx.mode == "github" else None
+    keychain_service = None
+    if ctx.kind != "pitch":
+        from cli.ansible_commands import keychain_service_name
+        keychain_service = keychain_service_name(ctx.project_name)
     ui.summary_box(
         project_name=ctx.project_name,
         project_dir=str(ctx.project_dir),
         github_url=github_url,
         domain=ctx.base_domain,
-        keychain_service=keychain_service_name(ctx.project_name),
+        keychain_service=keychain_service,
     )
