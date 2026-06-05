@@ -213,6 +213,29 @@ def _repo_exists(full_repo: str) -> bool:
         return False
 
 
+def _prompt_user_public_key() -> str:
+    """Ask the user for their own SSH public key, so they can SSH into the server."""
+    candidates = [
+        Path.home() / ".ssh" / "id_ed25519.pub",
+        Path.home() / ".ssh" / "id_rsa.pub",
+    ]
+    default = next((str(p) for p in candidates if p.exists()), None)
+    while True:
+        path_str = ui.text_input(
+            "Pfad zu deinem Public SSH Key (für SSH-Zugriff auf den Server)",
+            default=default,
+        )
+        path = Path(path_str).expanduser()
+        if not path.is_file():
+            ui.error(f"Datei nicht gefunden: {path}")
+            continue
+        content = path.read_text().strip()
+        if not content.startswith(("ssh-", "ecdsa-")):
+            ui.error("Das sieht nicht nach einem OpenSSH Public Key aus.")
+            continue
+        return content
+
+
 def _has_placeholders(project_dir: Path) -> bool:
     """Check if the project still contains §§deploy_your_startup placeholders."""
     if not project_dir.exists():
@@ -281,13 +304,13 @@ class ProjectStep(WizardStep):
             ui.action_done("Template geklont")
 
         # 3b. SSH Keys
-        ui.action_start("SSH Keys generieren...")
+        user_public_key = _prompt_user_public_key()
+        ui.action_start("CI SSH Key generieren...")
         with tempfile.TemporaryDirectory(prefix="bootstrap-ssh-") as ssh_tmp:
             ci_private_key, ci_public_key = _generate_ssh_keypair(
                 ctx.project_name, Path(ssh_tmp)
             )
-        user_public_key = ci_public_key
-        ui.action_done("SSH Keys generiert")
+        ui.action_done("CI SSH Key generiert")
 
         # 3c. Placeholders
         ui.action_start("Projekt konfigurieren...")
