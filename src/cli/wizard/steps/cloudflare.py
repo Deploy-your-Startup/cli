@@ -1,0 +1,105 @@
+"""Step 2 (pitch): obtain & validate a Cloudflare API token + account ID."""
+
+from __future__ import annotations
+
+import httpx
+
+from cli import wizard_output as ui
+
+from ..base import WizardStep, open_browser
+from ..context import BootstrapContext
+
+CF_TOKEN_URL = "https://dash.cloudflare.com/profile/api-tokens"
+CF_SIGNUP_URL = "https://dash.cloudflare.com/sign-up"
+
+
+def guide_cloudflare_signup() -> None:
+    """Guide the user through Cloudflare sign-up in the browser."""
+    ui.info(
+        "Ich führe dich jetzt durch den Cloudflare Sign-up im Browser.\n"
+        "  Empfohlen: 'Continue with GitHub' verwenden."
+    )
+    open_browser(CF_SIGNUP_URL, "Cloudflare Sign-up")
+    ui.info(
+        "Bitte im Browser abschließen:\n"
+        "  1. Sign up / Login abschließen\n"
+        "  2. Mail bestätigen, falls Cloudflare danach fragt\n"
+        "  3. Im Dashboard landen"
+    )
+    ui.text_input(
+        "Enter drücken, sobald dein Cloudflare-Account bereit ist",
+        default="",
+        show_default=False,
+    )
+
+
+def guide_cloudflare_token_creation() -> None:
+    """Guide the user through Cloudflare token creation in the browser."""
+    ui.info("Als nächstes erstellen wir den API-Token interaktiv im Browser.")
+    open_browser(CF_TOKEN_URL, "Cloudflare API-Token-Seite")
+    ui.info(
+        "Bitte im Browser ausführen:\n"
+        "  1. 'Create Token' → 'Create Custom Token'\n"
+        "  2. Permissions setzen:\n"
+        "       Account → Cloudflare Pages → Edit\n"
+        "       Account → Account Settings → Read\n"
+        "       User    → User Details → Read\n"
+        "  3. 'Continue to summary' → 'Create Token'\n"
+        "  4. Den Token kopieren und hier einfügen"
+    )
+
+
+def validate_cf_token(token: str) -> tuple[bool, str | None]:
+    """Verify a Cloudflare API token. Returns (ok, account_id_if_unique)."""
+    try:
+        r = httpx.get(
+            "https://api.cloudflare.com/client/v4/user/tokens/verify",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+        )
+        if not r.json().get("success"):
+            return False, None
+        r2 = httpx.get(
+            "https://api.cloudflare.com/client/v4/accounts",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+        )
+        accounts = r2.json().get("result", []) if r2.json().get("success") else []
+        account_id = accounts[0]["id"] if len(accounts) == 1 else None
+        return True, account_id
+    except (httpx.HTTPError, ValueError, KeyError):
+        return False, None
+
+
+class CloudflareStep(WizardStep):
+    number = 2
+    name = "Cloudflare"
+
+    def check(self, ctx: BootstrapContext) -> bool:
+        return bool(ctx.cloudflare_api_token and ctx.cloudflare_account_id)
+
+    def run(self, ctx: BootstrapContext) -> None:
+        if not ui.confirm("Cloudflare-Account schon vorhanden?", default=True):
+            guide_cloudflare_signup()
+
+        guide_cloudflare_token_creation()
+        while True:
+            token = ui.text_input("Cloudflare API Token", hide_input=True)
+            ui.action_start("Token validieren...")
+            ok, auto_account_id = validate_cf_token(token)
+            if ok:
+                ui.action_done("Token validiert")
+                ctx.cloudflare_api_token = token
+                break
+            ui.action_fail("Token ungültig")
+            ui.error("Bitte erneut versuchen.")
+
+        if auto_account_id:
+            ctx.cloudflare_account_id = auto_account_id
+            ui.info(f"Account-ID automatisch ermittelt: {auto_account_id}")
+        else:
+            ui.info(
+                "Mehrere Accounts gefunden — finde deine Account-ID rechts "
+                "in der Sidebar auf https://dash.cloudflare.com"
+            )
+            ctx.cloudflare_account_id = ui.text_input("Cloudflare Account-ID")
