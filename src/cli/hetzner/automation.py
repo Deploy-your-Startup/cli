@@ -189,21 +189,21 @@ class HetznerAutomation:
         except Exception:
             ui.warning("Please confirm the dialog in the browser.")
 
-        # Wait for redirect into the new project
+        # Hetzner does NOT redirect into the new project — it stays on the
+        # projects list and just adds the card. (Waiting for a project URL here
+        # used to time out for ~10s before falling through.) Wait for the card
+        # to appear, then open it. This also covers the "name already taken"
+        # case: the existing card is already there, so we just navigate into it.
         try:
-            await self.page.wait_for_url("**/projects/**", timeout=10000)
+            await self.page.locator(
+                f'[data-projectname="{project_name}"]'
+            ).first.wait_for(state="visible", timeout=10000)
         except Exception:
             pass
 
         if self._in_project(self.page.url):
             return True
 
-        # Not inside a project — might be "name taken" error, navigate to existing
-        ui.info(f'Navigating to existing project "{project_name}"...')
-        try:
-            await self.page.keyboard.press("Escape")
-        except Exception:
-            pass
         await self._navigate_into_project(project_name)
         return self._in_project(self.page.url)
 
@@ -253,31 +253,31 @@ class HetznerAutomation:
         """Create an API token in the current project. Returns the token string."""
         ui.info(f'Creating API token "{token_name}"...')
 
-        # Navigate to the API tokens page. The direct URL is fast and verified
-        # against the live console: /projects/<id>/security/tokens (NOT
-        # ".../security/api-tokens", which 404s). Fall back to clicking through
-        # the UI (Sicherheit → API-Tokens) if the URL ever fails to resolve.
+        # Navigate to the API tokens page by clicking the real links
+        # (Sicherheit → API-Tokens). They carry the correct href, so this never
+        # 404s. Direct URL is only a fallback (verified path: /security/tokens,
+        # NOT /security/api-tokens which 404s).
         navigated = False
-        current_url = self.page.url
-        if "/projects/" in current_url:
-            segment = current_url.split("/projects/")[1].split("/")[0]
-            if segment.isdigit():
-                base = current_url.split("/projects")[0]
-                tokens_url = f"{base}/projects/{segment}/security/tokens"
-                try:
-                    await self.page.goto(tokens_url, wait_until="domcontentloaded")
-                    navigated = True
-                except Exception:
-                    pass
+        try:
+            security_link = self.page.locator(config.SELECTORS_SECURITY_LINK).first
+            await security_link.click(timeout=5000)
+            tokens_link = self.page.locator(config.SELECTORS_API_TOKENS_LINK).first
+            await tokens_link.click(timeout=5000)
+            navigated = True
+        except Exception:
+            pass
 
         if not navigated:
-            try:
-                security_link = self.page.locator(config.SELECTORS_SECURITY_LINK).first
-                await security_link.click(timeout=5000)
-                tokens_link = self.page.locator(config.SELECTORS_API_TOKENS_LINK).first
-                await tokens_link.click(timeout=5000)
-            except Exception:
-                ui.warning("Could not navigate to the API tokens page.")
+            current_url = self.page.url
+            if "/projects/" in current_url:
+                segment = current_url.split("/projects/")[1].split("/")[0]
+                if segment.isdigit():
+                    base = current_url.split("/projects")[0]
+                    tokens_url = f"{base}/projects/{segment}/security/tokens"
+                    try:
+                        await self.page.goto(tokens_url, wait_until="domcontentloaded")
+                    except Exception:
+                        ui.warning("Could not navigate to the API tokens page.")
 
         # Click "Add API Token"
         try:
