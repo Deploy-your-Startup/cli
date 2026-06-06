@@ -75,6 +75,52 @@ def ensure_zone(token: str, account_id: str, domain: str) -> ZoneInfo:
     raise RuntimeError(f"Cloudflare-Zone konnte nicht angelegt werden: {cdata}")
 
 
+def ensure_cname_record(
+    token: str, zone_id: str, name: str, target: str, proxied: bool = True
+) -> bool:
+    """Create a (proxied) CNAME ``name`` → ``target`` if it does not exist yet.
+
+    Attaching a domain to Pages via the API does NOT create the DNS record
+    (the dashboard does that for in-account zones). Pages stays "Requires DNS
+    setup" until this record exists. Returns True if a record was created,
+    False if an equivalent one was already present. Idempotent.
+    """
+    headers = _headers(token)
+    want = target.rstrip(".")
+
+    resp = httpx.get(
+        f"{API_BASE}/zones/{zone_id}/dns_records",
+        headers=headers,
+        params={"name": name, "type": "CNAME"},
+        timeout=TIMEOUT,
+    )
+    data = resp.json()
+    if resp.status_code == 200 and data.get("success"):
+        for record in data.get("result", []):
+            if str(record.get("content", "")).rstrip(".") == want:
+                return False
+
+    create = httpx.post(
+        f"{API_BASE}/zones/{zone_id}/dns_records",
+        headers=headers,
+        json={
+            "type": "CNAME",
+            "name": name,
+            "content": target,
+            "proxied": proxied,
+            "ttl": 1,  # 1 = automatic
+        },
+        timeout=TIMEOUT,
+    )
+    cdata = create.json()
+    if create.status_code in {200, 201} and cdata.get("success"):
+        return True
+
+    raise RuntimeError(
+        f"CNAME-Record konnte nicht angelegt werden ({name} → {target}): {cdata}"
+    )
+
+
 def add_pages_custom_domain(
     token: str, account_id: str, project: str, domain: str
 ) -> bool:

@@ -78,8 +78,37 @@ def pages_project_exists(ctx: BootstrapContext) -> bool:
         return False
 
 
+def _pages_target(ctx: BootstrapContext) -> str:
+    """Return the project's pages.dev hostname (CNAME target for custom domains)."""
+    fallback = f"{ctx.project_name}.pages.dev"
+    if not ctx.cloudflare_api_token or not ctx.cloudflare_account_id:
+        return fallback
+    url = (
+        f"https://api.cloudflare.com/client/v4/accounts/"
+        f"{ctx.cloudflare_account_id}/pages/projects/{ctx.project_name}"
+    )
+    try:
+        resp = httpx.get(
+            url,
+            headers={"Authorization": f"Bearer {ctx.cloudflare_api_token}"},
+            timeout=20,
+        )
+        if resp.status_code == 200 and resp.json().get("success"):
+            subdomain = resp.json()["result"].get("subdomain")
+            if subdomain:
+                return subdomain
+    except (httpx.HTTPError, KeyError, ValueError):
+        pass
+    return fallback
+
+
 def custom_domain_linked(ctx: BootstrapContext) -> bool:
-    """Return True when the apex domain is attached to the Pages project."""
+    """Return True only when the apex domain is attached AND active.
+
+    Attaching leaves the domain "pending"/"initializing" until the CNAME exists,
+    so we require an active status — otherwise a re-run would skip the step that
+    creates the DNS record.
+    """
     if not ctx.cloudflare_api_token or not ctx.cloudflare_account_id:
         return False
     base_url = (
@@ -93,8 +122,10 @@ def custom_domain_linked(ctx: BootstrapContext) -> bool:
             headers={"Authorization": f"Bearer {ctx.cloudflare_api_token}"},
             timeout=20,
         )
-        return resp.status_code == 200 and resp.json().get("success", False)
-    except httpx.HTTPError:
+        if resp.status_code != 200 or not resp.json().get("success", False):
+            return False
+        return resp.json().get("result", {}).get("status") == "active"
+    except (httpx.HTTPError, ValueError):
         return False
 
 
@@ -177,14 +208,21 @@ class PitchFinalizeStep(WizardStep):
         self._link_custom_domain(ctx)
 
     def _link_custom_domain(self, ctx: BootstrapContext) -> None:
-        """Attach apex + www to Pages via API (auto-DNS when zone is on CF)."""
+        """Attach apex + www to Pages AND create the CNAME records.
+
+        Attaching via the Pages API does not create the DNS record (only the
+        dashboard does that). Without the CNAME the domain stays "Requires DNS
+        setup", so we create the proxied CNAME → <project>.pages.dev ourselves.
+        """
         from cli.cloudflare_zones import (
             add_pages_custom_domain,
             clear_conflicting_records,
+            ensure_cname_record,
         )
 
         apex = ctx.base_domain
         www = f"www.{apex}"
+        target = _pages_target(ctx)
 
         ui.action_start(f"Custom Domain {apex} mit Pages verknüpfen...")
         try:
@@ -204,10 +242,17 @@ class PitchFinalizeStep(WizardStep):
                     ctx.project_name,
                     host,
                 )
+                if ctx.cloudflare_zone_id:
+                    ensure_cname_record(
+                        ctx.cloudflare_api_token,
+                        ctx.cloudflare_zone_id,
+                        host,
+                        target,
+                    )
             ui.action_done(f"Custom Domains verknüpft ({apex}, {www})")
             ui.info(
-                "Cloudflare richtet DNS-Records und TLS-Zertifikate automatisch ein. "
-                "Sobald die Nameserver propagiert sind, ist die Seite erreichbar."
+                f"CNAME → {target} gesetzt; Cloudflare aktiviert DNS + TLS "
+                "automatisch (kann nach NS-Propagation ein paar Minuten dauern)."
             )
         except (RuntimeError, httpx.HTTPError) as exc:
             ui.action_fail("Custom Domain konnte nicht automatisch verknüpft werden")
