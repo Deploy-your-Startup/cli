@@ -1254,6 +1254,29 @@ def hetzner_domain(headless, domain):
         raise SystemExit(1)
 
 
+@hetzner.command("ns")
+@click.option(
+    "--headless",
+    is_flag=True,
+    default=False,
+    help="Run browser in headless mode (not recommended)",
+)
+@click.argument("domain")
+@click.argument("nameservers", nargs=-1, required=True)
+def hetzner_ns(headless, domain, nameservers):
+    """Switch an existing KonsoleH domain to custom nameservers.
+
+    Example: startup hetzner ns example.com dana.ns.cloudflare.com rob.ns.cloudflare.com
+    """
+    from cli.hetzner import set_domain_nameservers
+
+    ok = set_domain_nameservers(
+        domain=domain, nameservers=list(nameservers), headless=headless
+    )
+    if not ok:
+        raise SystemExit(1)
+
+
 @hetzner.command("token")
 @click.option(
     "--headless",

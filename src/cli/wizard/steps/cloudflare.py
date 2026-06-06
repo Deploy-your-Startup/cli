@@ -6,6 +6,7 @@ import click
 import httpx
 
 from cli.cloudflare import create_api_token
+from cli.cloudflare_zones import ensure_zone
 from cli import wizard_output as ui
 
 from ..base import WizardStep, open_browser
@@ -45,6 +46,8 @@ def guide_cloudflare_token_creation() -> None:
         "  2. Permissions setzen:\n"
         "       Account → Cloudflare Pages → Edit\n"
         "       Account → Account Settings → Read\n"
+        "       Account → Zone → Edit\n"
+        "       Zone    → DNS → Edit\n"
         "       User    → User Details → Read\n"
         "  3. 'Continue to summary' → 'Create Token'\n"
         "  4. Den Token kopieren und hier einfügen"
@@ -78,7 +81,11 @@ class CloudflareStep(WizardStep):
     name = "Cloudflare"
 
     def check(self, ctx: BootstrapContext) -> bool:
-        return bool(ctx.cloudflare_api_token and ctx.cloudflare_account_id)
+        return bool(
+            ctx.cloudflare_api_token
+            and ctx.cloudflare_account_id
+            and ctx.cloudflare_nameservers
+        )
 
     def run(self, ctx: BootstrapContext) -> None:
         has_account = ui.confirm("Cloudflare-Account schon vorhanden?", default=True)
@@ -128,3 +135,27 @@ class CloudflareStep(WizardStep):
                 "in der Sidebar auf https://dash.cloudflare.com"
             )
             ctx.cloudflare_account_id = ui.text_input("Cloudflare Account-ID")
+
+        ui.action_start(f"Cloudflare-Zone für {ctx.base_domain} sicherstellen...")
+        try:
+            zone = ensure_zone(
+                ctx.cloudflare_api_token,
+                ctx.cloudflare_account_id,
+                ctx.base_domain,
+            )
+        except (RuntimeError, httpx.HTTPError) as exc:
+            raise click.ClickException(
+                f"Cloudflare-Zone konnte nicht angelegt werden: {exc}\n"
+                "Hat der Token die Permissions 'Zone → Zone → Edit' und "
+                "'Zone → DNS → Edit'?"
+            )
+        ctx.cloudflare_zone_id = zone.zone_id
+        ctx.cloudflare_nameservers = zone.nameservers
+        if zone.created:
+            ui.action_done("Cloudflare-Zone erstellt")
+        else:
+            ui.action_done("Cloudflare-Zone bereits vorhanden")
+        ui.info(
+            "Cloudflare-Nameserver für diese Domain:\n"
+            + "\n".join(f"  • {ns}" for ns in zone.nameservers)
+        )

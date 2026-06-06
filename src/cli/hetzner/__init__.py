@@ -75,6 +75,7 @@ def get_or_create_token(
 def register_domain(
     domain: str,
     headless: bool = False,
+    nameservers: list[str] | None = None,
 ) -> bool:
     """
     Run the Robot browser flow to register a domain.
@@ -84,12 +85,42 @@ def register_domain(
     Args:
         domain: The domain to register (e.g. "example.com").
         headless: Run browser in headless mode (not recommended).
+        nameservers: Override the default Hetzner nameservers (e.g. the
+            Cloudflare-assigned NS) to delegate DNS at registration time.
 
     Returns:
         True if the registration was initiated, False otherwise.
     """
     _require_playwright()
-    return asyncio.run(_async_register_domain(domain=domain, headless=headless))
+    return asyncio.run(
+        _async_register_domain(
+            domain=domain, headless=headless, nameservers=nameservers
+        )
+    )
+
+
+def set_domain_nameservers(
+    domain: str,
+    nameservers: list[str],
+    headless: bool = False,
+) -> bool:
+    """
+    Switch an already-registered KonsoleH domain to custom nameservers.
+
+    Args:
+        domain: The domain to update (e.g. "example.com").
+        nameservers: The nameservers to delegate to (e.g. Cloudflare's).
+        headless: Run browser in headless mode (not recommended).
+
+    Returns:
+        True if the change was submitted, False otherwise.
+    """
+    _require_playwright()
+    return asyncio.run(
+        _async_set_domain_nameservers(
+            domain=domain, nameservers=nameservers, headless=headless
+        )
+    )
 
 
 # ── Async implementations ────────────────────────────────────────────
@@ -163,6 +194,7 @@ async def _async_register_domain(
     *,
     domain: str,
     headless: bool,
+    nameservers: list[str] | None = None,
 ) -> bool:
     from .robot import HetznerKonsoleHAutomation
     from . import _output as ui
@@ -180,10 +212,33 @@ async def _async_register_domain(
 
         # Step 2: Register domain
         ui.step(2, "Register Domain")
-        ok = await bot.register_domain(domain)
+        ok = await bot.register_domain(domain, nameservers=nameservers)
         if ok:
             ui.success(f'Domain "{domain}" registration initiated!')
         else:
             ui.error("Domain registration failed.")
 
         return ok
+
+
+async def _async_set_domain_nameservers(
+    *,
+    domain: str,
+    nameservers: list[str],
+    headless: bool,
+) -> bool:
+    from .robot import HetznerKonsoleHAutomation
+    from . import _output as ui
+
+    async with HetznerKonsoleHAutomation(headless=headless) as bot:
+        ui.step(1, "KonsoleH Login")
+        ok = await bot.login()
+        if not ok:
+            ui.error("KonsoleH login could not be completed.")
+            if not ui.confirm("Try to continue anyway?"):
+                return False
+        else:
+            ui.success("KonsoleH login successful!")
+
+        ui.step(2, "Change Nameservers")
+        return await bot.set_nameservers(domain, nameservers)

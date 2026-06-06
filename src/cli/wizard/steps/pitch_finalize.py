@@ -151,9 +151,30 @@ class PitchFinalizeStep(WizardStep):
         )
         ui.action_done("Gepusht")
 
-        ui.info(
-            f"Custom Domain {ctx.base_domain} musst du noch in Cloudflare Pages "
-            "verknüpfen:\n"
-            f"  https://dash.cloudflare.com → Pages → {ctx.project_name} "
-            "→ Custom domains → Set up a custom domain"
-        )
+        self._link_custom_domain(ctx)
+
+    def _link_custom_domain(self, ctx: BootstrapContext) -> None:
+        """Attach the domain to Pages via API (auto-DNS when zone is on CF)."""
+        from cli.cloudflare_zones import add_pages_custom_domain
+
+        ui.action_start(f"Custom Domain {ctx.base_domain} mit Pages verknüpfen...")
+        try:
+            add_pages_custom_domain(
+                ctx.cloudflare_api_token,
+                ctx.cloudflare_account_id,
+                ctx.project_name,
+                ctx.base_domain,
+            )
+            ui.action_done("Custom Domain verknüpft")
+            ui.info(
+                "Cloudflare richtet DNS-Record und TLS-Zertifikat automatisch ein. "
+                "Sobald die Nameserver propagiert sind, ist die Seite erreichbar."
+            )
+        except (RuntimeError, httpx.HTTPError) as exc:
+            ui.action_fail("Custom Domain konnte nicht automatisch verknüpft werden")
+            ui.warning(str(exc))
+            ui.info(
+                f"Bitte manuell verknüpfen:\n"
+                f"  https://dash.cloudflare.com → Pages → {ctx.project_name} "
+                "→ Custom domains → Set up a custom domain"
+            )

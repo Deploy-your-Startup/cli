@@ -1,4 +1,10 @@
-"""Step 1: ensure the user owns the base domain (or guides them to buy it)."""
+"""Step 1: ensure the user owns the base domain (or guides them to buy it).
+
+Fullstack: owning the domain is enough (DNS handled via the Hetzner DNS ansible
+role). Pitch: DNS must be delegated to Cloudflare, so even an owned domain needs
+its nameservers switched to the Cloudflare-assigned ones (collected in the
+CloudflareStep, which runs first in the pitch flow).
+"""
 
 from __future__ import annotations
 
@@ -15,7 +21,10 @@ class DomainStep(WizardStep):
     name = "Domain"
 
     def check(self, ctx: BootstrapContext) -> bool:
-        # Domain check is always interactive — we ask the user
+        # Pitch always runs: run() decides buy vs. nameserver-switch.
+        if ctx.kind == "pitch":
+            return False
+        # Fullstack: ask; skip the buy flow if the user already owns it.
         choice = ui.numbered_choice(
             f'Besitzt du "{ctx.base_domain}" bereits?',
             [
@@ -26,13 +35,84 @@ class DomainStep(WizardStep):
         return choice == 1
 
     def run(self, ctx: BootstrapContext) -> None:
+        if ctx.kind == "pitch":
+            self._run_pitch(ctx)
+        else:
+            self._buy(ctx)
+
+    # ── Pitch: delegate DNS to Cloudflare ────────────────────────────
+
+    def _run_pitch(self, ctx: BootstrapContext) -> None:
+        nameservers = ctx.cloudflare_nameservers
+        if not nameservers:
+            raise click.ClickException(
+                "Cloudflare-Nameserver fehlen — der Cloudflare-Schritt muss "
+                "zuerst laufen."
+            )
+
+        choice = ui.numbered_choice(
+            f'Besitzt du "{ctx.base_domain}" bereits?',
+            [
+                "Ja, bei Hetzner registriert",
+                "Ja, bei einem anderen Registrar",
+                "Nein, jetzt bei Hetzner kaufen",
+            ],
+        )
+
+        if choice == 3:
+            self._buy(ctx, nameservers=nameservers)
+        elif choice == 1:
+            self._switch_hetzner_nameservers(ctx, nameservers)
+        else:
+            self._manual_nameservers(ctx, nameservers)
+
+    def _switch_hetzner_nameservers(
+        self, ctx: BootstrapContext, nameservers: list[str]
+    ) -> None:
+        ui.info(
+            "Ich öffne KonsoleH, um die Nameserver der Domain auf Cloudflare "
+            "umzustellen. Bitte im Browser einloggen und die Änderung speichern."
+        )
+        from cli.hetzner import set_domain_nameservers
+
+        ok = set_domain_nameservers(
+            domain=ctx.base_domain, nameservers=nameservers
+        )
+        if ok:
+            ui.action_done("Nameserver auf Cloudflare umgestellt")
+        else:
+            ui.action_fail("Nameserver-Umstellung fehlgeschlagen")
+            if not ui.confirm("Trotzdem weitermachen?", default=False):
+                raise click.ClickException("Abgebrochen.")
+
+    def _manual_nameservers(
+        self, ctx: BootstrapContext, nameservers: list[str]
+    ) -> None:
+        ns_lines = "\n".join(f"  • {ns}" for ns in nameservers)
+        ui.info(
+            "Bitte setze bei deinem Registrar die Nameserver der Domain auf:\n"
+            f"{ns_lines}\n"
+            "Danach übernimmt Cloudflare DNS für die Domain."
+        )
+        ui.text_input(
+            "Enter drücken, sobald die Nameserver gesetzt sind",
+            default="",
+            show_default=False,
+        )
+        ui.action_done("Nameserver-Hinweis bestätigt")
+
+    # ── Buy a fresh domain at Hetzner ────────────────────────────────
+
+    def _buy(
+        self, ctx: BootstrapContext, nameservers: list[str] | None = None
+    ) -> None:
         ui.info(
             "Ich öffne den Browser für die Registrierung. "
             "Du musst dich bei Hetzner einloggen und den Kauf bestätigen."
         )
         from cli.hetzner import register_domain
 
-        ok = register_domain(domain=ctx.base_domain)
+        ok = register_domain(domain=ctx.base_domain, nameservers=nameservers)
         if ok:
             ui.action_done("Domain registriert")
         else:

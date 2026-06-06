@@ -14,6 +14,9 @@ KONSOLEH_BASE_URL = "https://konsoleh.hetzner.com"
 KONSOLEH_ORDER_URL = f"{KONSOLEH_BASE_URL}/order.php"
 KONSOLEH_DOMAINS_URL = f"{KONSOLEH_BASE_URL}/domain.php"
 KONSOLEH_HANDLES_URL = f"{KONSOLEH_BASE_URL}/contact.php"
+# DNS management (per selected domain). Edit = overview, changedns = NS form.
+KONSOLEH_DNS_EDIT_URL = f"{KONSOLEH_BASE_URL}/dns.php?dnsaction2=edit"
+KONSOLEH_DNS_CHANGE_URL = f"{KONSOLEH_BASE_URL}/dns.php?dnsaction2=changedns"
 
 # ── Hetzner Default Nameservers ──────────────────────────────────────
 HETZNER_NAMESERVERS = [
