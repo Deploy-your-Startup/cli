@@ -143,3 +143,29 @@ def test_clear_conflicting_records_noop_when_empty():
         n = cz.clear_conflicting_records("tok", "zone1", ["example.com"])
     assert n == 0
     mock_del.assert_not_called()
+
+
+# ── ensure_cname_record ──────────────────────────────────────────────
+
+
+def test_ensure_cname_record_creates_when_missing():
+    empty = _resp(200, {"success": True, "result": []})
+    created = _resp(201, {"success": True, "result": {"id": "rec1"}})
+    with patch("cli.cloudflare_zones.httpx.get", return_value=empty), \
+         patch("cli.cloudflare_zones.httpx.post", return_value=created) as mock_post:
+        assert cz.ensure_cname_record("tok", "z1", "example.com", "proj.pages.dev") is True
+    body = mock_post.call_args.kwargs["json"]
+    assert body["type"] == "CNAME"
+    assert body["content"] == "proj.pages.dev"
+    assert body["proxied"] is True
+
+
+def test_ensure_cname_record_idempotent_when_present():
+    existing = _resp(
+        200,
+        {"success": True, "result": [{"id": "r", "type": "CNAME", "content": "proj.pages.dev."}]},
+    )
+    with patch("cli.cloudflare_zones.httpx.get", return_value=existing), \
+         patch("cli.cloudflare_zones.httpx.post") as mock_post:
+        assert cz.ensure_cname_record("tok", "z1", "example.com", "proj.pages.dev") is False
+    mock_post.assert_not_called()
