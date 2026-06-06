@@ -109,11 +109,19 @@ SELECTORS_TOKEN_READWRITE = (
     'input[value="readwrite"]'
 )
 
+# Container for the open token dialog. All submit/field lookups are scoped
+# to this so we never accidentally hit the page-level button that opened it.
+SELECTORS_MODAL = (
+    '.hc-modal, [role="dialog"], [aria-modal="true"], .modal'
+)
+
+# Accept button *inside* the modal footer. Kept relative — it is applied
+# against the modal locator, not the whole page (see automation._submit_token_modal).
 SELECTORS_TOKEN_SUBMIT = (
-    '.hc-modal__footer [data-test="testAcceptButton"] button, '
-    '.hc-modal__footer button:has-text("API-Token hinzufügen"), '
-    '.hc-modal__footer button:has-text("Add API token"), '
-    '[data-test="testAcceptButton"] button'
+    '[data-test="testAcceptButton"] button, '
+    '[data-test="testAcceptButton"], '
+    'button:has-text("API-Token hinzufügen"), '
+    'button:has-text("Add API token")'
 )
 
 SELECTORS_TOKEN_VALUE = [
