@@ -109,16 +109,12 @@ SELECTORS_TOKEN_READWRITE = (
     'input[value="readwrite"]'
 )
 
-# Container for the open token dialog. All submit/field lookups are scoped
-# to this so we never accidentally hit the page-level button that opened it.
-SELECTORS_MODAL = (
-    'hc-dialog, .hc-modal, [role="dialog"], [aria-modal="true"], .modal'
-)
-
-# Accept button *inside* the dialog footer. Kept relative — it is applied
-# against the modal locator, not the whole page (see automation._submit_token_modal).
-# Hetzner's confirm dialog marks the footer buttons with data-test attributes;
-# the accept button is the reliable one to target.
+# Token dialog accept button. The dialog's <hc-dialog> wrapper is a zero-size
+# (display:inline, 0x0) element, so it is useless as a scope/visibility anchor —
+# we target the dialog's fields directly by their unique data-test attributes
+# instead. The accept button's data-test is distinct from the page-level add
+# button ("tokens-add-btn"), so no scoping is needed to avoid clicking the wrong
+# one.
 SELECTORS_TOKEN_SUBMIT = (
     '[data-test="confirm-dialog-accept"] button, '
     '[data-test="confirm-dialog-accept"], '
