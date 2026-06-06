@@ -253,29 +253,32 @@ class HetznerAutomation:
         """Create an API token in the current project. Returns the token string."""
         ui.info(f'Creating API token "{token_name}"...')
 
-        # Navigate to API tokens via sidebar (avoids URL guessing)
+        # Navigate to the API tokens page. We go straight to the URL — it is
+        # deterministic and instant. "API-Tokens" is a top tab (not a sidebar
+        # link), so the old sidebar-click approach only ever burned its full
+        # timeout before falling back here anyway.
         navigated = False
-        try:
-            security_link = self.page.locator(config.SELECTORS_SECURITY_LINK).first
-            await security_link.click(timeout=5000)
-            tokens_link = self.page.locator(config.SELECTORS_API_TOKENS_LINK).first
-            await tokens_link.click(timeout=5000)
-            navigated = True
-        except Exception:
-            pass
+        current_url = self.page.url
+        if "/projects/" in current_url:
+            segment = current_url.split("/projects/")[1].split("/")[0]
+            if segment.isdigit():
+                base = current_url.split("/projects")[0]
+                tokens_url = f"{base}/projects/{segment}/security/api-tokens"
+                try:
+                    await self.page.goto(tokens_url, wait_until="domcontentloaded")
+                    navigated = True
+                except Exception:
+                    pass
 
         if not navigated:
-            # Fallback: try direct URL from current project
-            current_url = self.page.url
-            if "/projects/" in current_url:
-                segment = current_url.split("/projects/")[1].split("/")[0]
-                if segment.isdigit():
-                    base = current_url.split("/projects")[0]
-                    tokens_url = f"{base}/projects/{segment}/security/api-tokens"
-                    try:
-                        await self.page.goto(tokens_url, wait_until="domcontentloaded")
-                    except Exception:
-                        ui.warning("Could not navigate to the API tokens page.")
+            # Fallback: click through the UI (short timeouts so a miss fails fast).
+            try:
+                security_link = self.page.locator(config.SELECTORS_SECURITY_LINK).first
+                await security_link.click(timeout=2000)
+                tokens_link = self.page.locator(config.SELECTORS_API_TOKENS_LINK).first
+                await tokens_link.click(timeout=2000)
+            except Exception:
+                ui.warning("Could not navigate to the API tokens page.")
 
         # Click "Add API Token"
         try:
@@ -319,12 +322,13 @@ class HetznerAutomation:
                 "please click 'API-Token hinzufügen' in the browser."
             )
 
-        # Reveal token (click "Klicken um anzuzeigen")
+        # Reveal token (click "Klicken um anzuzeigen"). Short timeout: if it is
+        # not there the token is likely already shown, no need to wait 10s.
         try:
             reveal = self.page.locator(
                 '.click-to-show, :text("Klicken um anzuzeigen"), :text("Click to show")'
             ).first
-            await reveal.click(timeout=10000)
+            await reveal.click(timeout=3000)
         except Exception:
             pass
 
@@ -383,11 +387,13 @@ class HetznerAutomation:
         for selector in config.SELECTORS_TOKEN_VALUE:
             try:
                 elements = self.page.locator(selector)
-                count = await elements.count()
+                # Cap the scan: generic selectors like code/pre can match dozens
+                # of elements, and each miss would otherwise wait out its timeout.
+                count = min(await elements.count(), 20)
                 for i in range(count):
                     el = elements.nth(i)
                     try:
-                        text = await el.inner_text(timeout=2000)
+                        text = await el.inner_text(timeout=500)
                         text = text.strip()
                         if self._looks_like_token(text):
                             return text
