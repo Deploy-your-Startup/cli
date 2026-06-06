@@ -154,20 +154,36 @@ class PitchFinalizeStep(WizardStep):
         self._link_custom_domain(ctx)
 
     def _link_custom_domain(self, ctx: BootstrapContext) -> None:
-        """Attach the domain to Pages via API (auto-DNS when zone is on CF)."""
-        from cli.cloudflare_zones import add_pages_custom_domain
+        """Attach apex + www to Pages via API (auto-DNS when zone is on CF)."""
+        from cli.cloudflare_zones import (
+            add_pages_custom_domain,
+            clear_conflicting_records,
+        )
 
-        ui.action_start(f"Custom Domain {ctx.base_domain} mit Pages verknüpfen...")
+        apex = ctx.base_domain
+        www = f"www.{apex}"
+
+        ui.action_start(f"Custom Domain {apex} mit Pages verknüpfen...")
         try:
-            add_pages_custom_domain(
-                ctx.cloudflare_api_token,
-                ctx.cloudflare_account_id,
-                ctx.project_name,
-                ctx.base_domain,
-            )
-            ui.action_done("Custom Domain verknüpft")
+            # Cloudflare auto-imports existing records on zone creation; remove
+            # any apex/www A/AAAA/CNAME so the Pages domain can own those hosts.
+            if ctx.cloudflare_zone_id:
+                removed = clear_conflicting_records(
+                    ctx.cloudflare_api_token, ctx.cloudflare_zone_id, [apex, www]
+                )
+                if removed:
+                    ui.info(f"{removed} kollidierende DNS-Records entfernt")
+
+            for host in (apex, www):
+                add_pages_custom_domain(
+                    ctx.cloudflare_api_token,
+                    ctx.cloudflare_account_id,
+                    ctx.project_name,
+                    host,
+                )
+            ui.action_done(f"Custom Domains verknüpft ({apex}, {www})")
             ui.info(
-                "Cloudflare richtet DNS-Record und TLS-Zertifikat automatisch ein. "
+                "Cloudflare richtet DNS-Records und TLS-Zertifikate automatisch ein. "
                 "Sobald die Nameserver propagiert sind, ist die Seite erreichbar."
             )
         except (RuntimeError, httpx.HTTPError) as exc:
@@ -175,6 +191,6 @@ class PitchFinalizeStep(WizardStep):
             ui.warning(str(exc))
             ui.info(
                 f"Bitte manuell verknüpfen:\n"
-                f"  https://dash.cloudflare.com → Pages → {ctx.project_name} "
+                f"  https://dash.cloudflare.com → Workers & Pages → {ctx.project_name} "
                 "→ Custom domains → Set up a custom domain"
             )

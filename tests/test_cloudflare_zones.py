@@ -108,3 +108,38 @@ def test_add_pages_custom_domain_raises_when_truly_failed():
          patch("cli.cloudflare_zones.httpx.get", return_value=not_found):
         with pytest.raises(RuntimeError):
             cz.add_pages_custom_domain("tok", "acc", "proj", "example.com")
+
+
+# ── clear_conflicting_records ────────────────────────────────────────
+
+
+def test_clear_conflicting_records_deletes_only_conflicting_types():
+    listing = _resp(
+        200,
+        {
+            "success": True,
+            "result": [
+                {"id": "rec_a", "type": "A"},
+                {"id": "rec_txt", "type": "TXT"},  # must be kept
+                {"id": "rec_cname", "type": "CNAME"},
+            ],
+        },
+    )
+    empty = _resp(200, {"success": True, "result": []})
+    deleted_ok = _resp(200, {"success": True})
+    with patch("cli.cloudflare_zones.httpx.get", side_effect=[listing, empty]), \
+         patch("cli.cloudflare_zones.httpx.delete", return_value=deleted_ok) as mock_del:
+        n = cz.clear_conflicting_records("tok", "zone1", ["example.com", "www.example.com"])
+
+    assert n == 2  # A + CNAME deleted, TXT kept
+    deleted_ids = [c.args[0].rsplit("/", 1)[-1] for c in mock_del.call_args_list]
+    assert set(deleted_ids) == {"rec_a", "rec_cname"}
+
+
+def test_clear_conflicting_records_noop_when_empty():
+    empty = _resp(200, {"success": True, "result": []})
+    with patch("cli.cloudflare_zones.httpx.get", return_value=empty), \
+         patch("cli.cloudflare_zones.httpx.delete") as mock_del:
+        n = cz.clear_conflicting_records("tok", "zone1", ["example.com"])
+    assert n == 0
+    mock_del.assert_not_called()
