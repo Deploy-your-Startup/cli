@@ -7,8 +7,6 @@ what happens and complete manual steps (login, 2FA, captcha).
 
 from __future__ import annotations
 
-import asyncio
-
 from . import config
 from . import _output as ui
 
@@ -259,9 +257,9 @@ class HetznerAutomation:
         navigated = False
         try:
             security_link = self.page.locator(config.SELECTORS_SECURITY_LINK).first
-            await security_link.click(timeout=10000)
+            await security_link.click(timeout=5000)
             tokens_link = self.page.locator(config.SELECTORS_API_TOKENS_LINK).first
-            await tokens_link.click(timeout=10000)
+            await tokens_link.click(timeout=5000)
             navigated = True
         except Exception:
             pass
@@ -288,27 +286,38 @@ class HetznerAutomation:
                 "Could not find 'Add API Token' button — please click it manually."
             )
 
-        # Fill description (wait for modal)
-        desc_input = self.page.locator(config.SELECTORS_TOKEN_DESCRIPTION_INPUT).first
+        # Everything below operates on the open modal, never the page behind it.
+        # The page-level "API-Token hinzufügen" button shares its label with the
+        # modal's submit button, so scoping here is what keeps us from clicking
+        # the wrong (now-covered) button and stalling.
+        modal = self.page.locator(config.SELECTORS_MODAL).first
         try:
+            await modal.wait_for(state="visible", timeout=10000)
+        except Exception:
+            ui.warning("Token dialog did not open — falling back to the whole page.")
+            modal = self.page.locator("body")
+
+        # Fill description
+        try:
+            desc_input = modal.locator(config.SELECTORS_TOKEN_DESCRIPTION_INPUT).first
             await desc_input.wait_for(state="visible", timeout=10000)
             await desc_input.fill(token_name)
         except Exception:
             ui.warning("Could not fill token name — please enter manually.")
 
-        # Select "Read & Write"
+        # Select "Read & Write" (best effort — it is the default selection)
         try:
-            rw_option = self.page.locator(config.SELECTORS_TOKEN_READWRITE).first
-            await rw_option.click(timeout=5000)
+            rw_option = modal.locator(config.SELECTORS_TOKEN_READWRITE).first
+            await rw_option.click(timeout=3000)
         except Exception:
-            ui.warning("Could not select 'Read & Write' — please select manually.")
+            pass
 
-        # Submit the modal
-        try:
-            submit_btn = self.page.locator(config.SELECTORS_TOKEN_SUBMIT).first
-            await submit_btn.click(timeout=5000)
-        except Exception:
-            ui.warning("Please confirm the dialog in the browser.")
+        # Submit the modal and confirm it actually advanced to the token view.
+        if not await self._submit_token_modal(modal):
+            ui.warning(
+                "Could not confirm the token dialog automatically — "
+                "please click 'API-Token hinzufügen' in the browser."
+            )
 
         # Reveal token (click "Klicken um anzuzeigen")
         try:
@@ -327,6 +336,47 @@ class HetznerAutomation:
             token = ui.ask("Paste API token here", password=True)
 
         return token if token else None
+
+    async def _submit_token_modal(self, modal) -> bool:
+        """Click the modal's accept button and verify the token view appeared.
+
+        Returns True once the modal advances (reveal/copy element shows up or the
+        modal closes). Retries the click once, since a single missed click was the
+        original cause of the wizard stalling at the filled-but-unsubmitted dialog.
+        """
+        reveal_selector = (
+            '.click-to-show, .click-to-copy__content, .click-to-copy__box, '
+            'code, input[readonly], :text("Klicken um anzuzeigen"), '
+            ':text("Click to show")'
+        )
+
+        for attempt in range(2):
+            try:
+                submit_btn = modal.locator(config.SELECTORS_TOKEN_SUBMIT).first
+                await submit_btn.wait_for(state="visible", timeout=5000)
+                await submit_btn.click(timeout=5000)
+            except Exception:
+                if attempt == 0:
+                    continue
+                return False
+
+            # Confirm we left the form: the token reveal/copy element shows up,
+            # or the description input disappears (modal advanced/closed).
+            try:
+                await self.page.locator(reveal_selector).first.wait_for(
+                    state="visible", timeout=8000
+                )
+                return True
+            except Exception:
+                pass
+            try:
+                desc = modal.locator(config.SELECTORS_TOKEN_DESCRIPTION_INPUT).first
+                if not await desc.is_visible(timeout=1000):
+                    return True
+            except Exception:
+                return True
+
+        return False
 
     async def _extract_token(self) -> str | None:
         """Try to extract the API token value from the page."""
