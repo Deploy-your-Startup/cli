@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 # ── Hetzner Cloud Console URLs ────────────────────────────────────────
-HETZNER_BASE_URL = "https://console.hetzner.cloud"
+HETZNER_BASE_URL = "https://console.hetzner.com"
 HETZNER_REGISTER_URL = "https://accounts.hetzner.com/signUp"
 HETZNER_LOGIN_URL = "https://accounts.hetzner.com/login"
 HETZNER_PROJECTS_URL = f"{HETZNER_BASE_URL}/projects"

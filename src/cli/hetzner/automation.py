@@ -253,31 +253,31 @@ class HetznerAutomation:
         """Create an API token in the current project. Returns the token string."""
         ui.info(f'Creating API token "{token_name}"...')
 
-        # Navigate to API tokens via the UI (Security → API Tokens). This is the
-        # known-good path; the console is an Angular SPA and direct URLs are not
-        # guaranteed to resolve, so we click through rather than guess a URL.
+        # Navigate to the API tokens page. The direct URL is fast and verified
+        # against the live console: /projects/<id>/security/tokens (NOT
+        # ".../security/api-tokens", which 404s). Fall back to clicking through
+        # the UI (Sicherheit → API-Tokens) if the URL ever fails to resolve.
         navigated = False
-        try:
-            security_link = self.page.locator(config.SELECTORS_SECURITY_LINK).first
-            await security_link.click(timeout=5000)
-            tokens_link = self.page.locator(config.SELECTORS_API_TOKENS_LINK).first
-            await tokens_link.click(timeout=5000)
-            navigated = True
-        except Exception:
-            pass
+        current_url = self.page.url
+        if "/projects/" in current_url:
+            segment = current_url.split("/projects/")[1].split("/")[0]
+            if segment.isdigit():
+                base = current_url.split("/projects")[0]
+                tokens_url = f"{base}/projects/{segment}/security/tokens"
+                try:
+                    await self.page.goto(tokens_url, wait_until="domcontentloaded")
+                    navigated = True
+                except Exception:
+                    pass
 
         if not navigated:
-            # Fallback: try the direct URL from the current project.
-            current_url = self.page.url
-            if "/projects/" in current_url:
-                segment = current_url.split("/projects/")[1].split("/")[0]
-                if segment.isdigit():
-                    base = current_url.split("/projects")[0]
-                    tokens_url = f"{base}/projects/{segment}/security/api-tokens"
-                    try:
-                        await self.page.goto(tokens_url, wait_until="domcontentloaded")
-                    except Exception:
-                        ui.warning("Could not navigate to the API tokens page.")
+            try:
+                security_link = self.page.locator(config.SELECTORS_SECURITY_LINK).first
+                await security_link.click(timeout=5000)
+                tokens_link = self.page.locator(config.SELECTORS_API_TOKENS_LINK).first
+                await tokens_link.click(timeout=5000)
+            except Exception:
+                ui.warning("Could not navigate to the API tokens page.")
 
         # Click "Add API Token"
         try:
