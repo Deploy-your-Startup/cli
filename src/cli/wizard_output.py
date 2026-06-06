@@ -218,15 +218,18 @@ def summary_box(
         )
         click.echo(click.style(_pad("(Push auf main → Cloudflare Pages)."), fg="green"))
         click.echo(click.style(_empty(), fg="green"))
-        click.echo(click.style(_pad("Nächster manueller Schritt:"), fg="green"))
-        click.echo(click.style(_empty(), fg="green"))
         click.echo(
             click.style(
-                _pad(f"  Cloudflare Pages → {project_name} → Custom domains"),
+                _pad(f"Custom Domain {domain} ist automatisch verknüpft"),
                 fg="green",
             )
         )
-        click.echo(click.style(_pad(f"  Domain verknüpfen: {domain}"), fg="green"))
+        click.echo(
+            click.style(
+                _pad("(Cloudflare: DNS + SSL nach NS-Propagation aktiv)."),
+                fg="green",
+            )
+        )
     else:
         click.echo(
             click.style(
