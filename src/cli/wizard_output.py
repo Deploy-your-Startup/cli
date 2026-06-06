@@ -176,6 +176,7 @@ def summary_box(
     project_dir: str,
     github_url: str | None,
     domain: str,
+    kind: str = "fullstack",
     keychain_service: str | None = None,
 ) -> None:
     """Display the framed final summary with next steps."""
@@ -208,23 +209,44 @@ def summary_box(
     click.echo(click.style(_empty(), fg="green"))
     click.echo(click.style(mid, fg="green"))
     click.echo(click.style(_empty(), fg="green"))
-    click.echo(
-        click.style(
-            _pad("Build & Deploy laufen automatisch via GitHub Actions"), fg="green"
+    if kind == "pitch":
+        click.echo(
+            click.style(
+                _pad("Build & Deploy laufen automatisch via GitHub Actions"),
+                fg="green",
+            )
         )
-    )
-    click.echo(click.style(_pad("(Push auf main → backend & deployment)."), fg="green"))
-    click.echo(click.style(_empty(), fg="green"))
-    click.echo(
-        click.style(_pad("Einmalig die Infrastruktur provisionieren:"), fg="green")
-    )
-    click.echo(click.style(_empty(), fg="green"))
-    click.echo(click.style(_pad(f"  cd {project_name}/deployment"), fg="green"))
-    click.echo(click.style(_pad("  startup ansible setup"), fg="green"))
-    click.echo(
-        click.style(_pad("  startup ansible infrastructure   # ~5-10 min"), fg="green")
-    )
-    click.echo(click.style(_pad("  startup ansible kubeconfig"), fg="green"))
+        click.echo(click.style(_pad("(Push auf main → Cloudflare Pages)."), fg="green"))
+        click.echo(click.style(_empty(), fg="green"))
+        click.echo(click.style(_pad("Nächster manueller Schritt:"), fg="green"))
+        click.echo(click.style(_empty(), fg="green"))
+        click.echo(
+            click.style(
+                _pad(f"  Cloudflare Pages → {project_name} → Custom domains"),
+                fg="green",
+            )
+        )
+        click.echo(click.style(_pad(f"  Domain verknüpfen: {domain}"), fg="green"))
+    else:
+        click.echo(
+            click.style(
+                _pad("Build & Deploy laufen automatisch via GitHub Actions"), fg="green"
+            )
+        )
+        click.echo(
+            click.style(_pad("(Push auf main → backend & deployment)."), fg="green")
+        )
+        click.echo(click.style(_empty(), fg="green"))
+        click.echo(
+            click.style(_pad("Einmalig die Infrastruktur provisionieren:"), fg="green")
+        )
+        click.echo(click.style(_empty(), fg="green"))
+        click.echo(click.style(_pad(f"  cd {project_name}/deployment"), fg="green"))
+        click.echo(click.style(_pad("  startup ansible setup"), fg="green"))
+        click.echo(
+            click.style(_pad("  startup ansible infrastructure   # ~5-10 min"), fg="green")
+        )
+        click.echo(click.style(_pad("  startup ansible kubeconfig"), fg="green"))
     click.echo(click.style(_empty(), fg="green"))
     click.echo(click.style(bot, fg="green"))
     click.echo()

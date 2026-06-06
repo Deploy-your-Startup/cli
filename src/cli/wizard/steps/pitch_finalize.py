@@ -4,11 +4,78 @@ from __future__ import annotations
 
 import subprocess
 
+import httpx
+
 from cli import wizard_output as ui
 from cli.sync_commands import _run_command
 
 from ..base import WizardStep, is_pushed, repo_exists
 from ..context import BootstrapContext
+
+
+def ensure_pages_project(ctx: BootstrapContext) -> None:
+    """Create the Cloudflare Pages project if it does not exist yet."""
+    headers = {
+        "Authorization": f"Bearer {ctx.cloudflare_api_token}",
+        "Content-Type": "application/json",
+    }
+    base_url = (
+        f"https://api.cloudflare.com/client/v4/accounts/"
+        f"{ctx.cloudflare_account_id}/pages/projects"
+    )
+
+    get_resp = httpx.get(
+        f"{base_url}/{ctx.project_name}",
+        headers=headers,
+        timeout=20,
+    )
+    if get_resp.status_code == 200 and get_resp.json().get("success"):
+        ui.action_done("Cloudflare Pages Projekt bereits vorhanden")
+        return
+
+    if get_resp.status_code not in {404, 400}:
+        raise RuntimeError(
+            f"Cloudflare Pages Projekt konnte nicht geprüft werden: {get_resp.text}"
+        )
+
+    payload = {
+        "name": ctx.project_name,
+        "production_branch": "main",
+    }
+    create_resp = httpx.post(
+        base_url,
+        headers=headers,
+        json=payload,
+        timeout=20,
+    )
+    data = create_resp.json()
+    if create_resp.status_code in {200, 201} and data.get("success"):
+        ui.action_done("Cloudflare Pages Projekt erstellt")
+        return
+
+    raise RuntimeError(
+        f"Cloudflare Pages Projekt konnte nicht erstellt werden: {data}"
+    )
+
+
+def pages_project_exists(ctx: BootstrapContext) -> bool:
+    """Return True when the Cloudflare Pages project already exists."""
+    if not ctx.cloudflare_api_token or not ctx.cloudflare_account_id:
+        return False
+
+    headers = {
+        "Authorization": f"Bearer {ctx.cloudflare_api_token}",
+        "Content-Type": "application/json",
+    }
+    base_url = (
+        f"https://api.cloudflare.com/client/v4/accounts/"
+        f"{ctx.cloudflare_account_id}/pages/projects/{ctx.project_name}"
+    )
+    try:
+        resp = httpx.get(base_url, headers=headers, timeout=20)
+        return resp.status_code == 200 and resp.json().get("success")
+    except httpx.HTTPError:
+        return False
 
 
 class PitchFinalizeStep(WizardStep):
@@ -18,7 +85,11 @@ class PitchFinalizeStep(WizardStep):
     def check(self, ctx: BootstrapContext) -> bool:
         if not ctx.project_dir.exists():
             return False
-        if is_pushed(ctx.project_dir) and repo_exists(ctx.full_repo):
+        if (
+            is_pushed(ctx.project_dir)
+            and repo_exists(ctx.full_repo)
+            and pages_project_exists(ctx)
+        ):
             ui.skip_indicator("Code bereits gepusht")
             return True
         return False
@@ -69,6 +140,9 @@ class PitchFinalizeStep(WizardStep):
             cwd=ctx.project_dir, capture_output=True,
         )
         ui.action_done("Secrets gesetzt")
+
+        ui.action_start("Cloudflare Pages Projekt sicherstellen...")
+        ensure_pages_project(ctx)
 
         ui.action_start("Push nach GitHub...")
         _run_command(

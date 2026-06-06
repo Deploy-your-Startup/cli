@@ -88,5 +88,6 @@ def run_wizard(ctx: BootstrapContext) -> None:
         project_dir=str(ctx.project_dir),
         github_url=github_url,
         domain=ctx.base_domain,
+        kind=ctx.kind,
         keychain_service=keychain_service,
     )
