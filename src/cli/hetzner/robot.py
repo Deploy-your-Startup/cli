@@ -130,7 +130,9 @@ class HetznerKonsoleHAutomation:
 
     # ── Domain Registration ──────────────────────────────────────────
 
-    async def register_domain(self, domain: str) -> bool:
+    async def register_domain(
+        self, domain: str, nameservers: list[str] | None = None
+    ) -> bool:
         """
         Register a domain via KonsoleH order page.
 
@@ -138,8 +140,11 @@ class HetznerKonsoleHAutomation:
         tries to pre-fill the domain name, and guides the user
         through the remaining steps.
 
-        Falls back to manual instructions if automation fails.
+        ``nameservers`` overrides the default Hetzner nameservers — pass the
+        Cloudflare-assigned NS here to delegate DNS to Cloudflare directly at
+        registration time. Falls back to manual instructions if automation fails.
         """
+        nameservers = nameservers or config.HETZNER_NAMESERVERS
         ui.info(f'Registering domain "{domain}"...')
 
         if not await self._open_domain_registration_form():
@@ -152,7 +157,7 @@ class HetznerKonsoleHAutomation:
         domain_name, tld = _split_domain(domain)
 
         try:
-            await self._fill_domain_step_three(domain_name, tld)
+            await self._fill_domain_step_three(domain_name, tld, nameservers)
 
             ui.success(f"Domain name entered: {domain}")
         except Exception:
@@ -163,7 +168,7 @@ class HetznerKonsoleHAutomation:
             "     1. Verify the domain name is correct\n"
             "     2. Select/create contact handles if needed\n"
             "     3. Verify nameservers:\n"
-            f"        {', '.join(config.HETZNER_NAMESERVERS)}\n"
+            f"        {', '.join(nameservers)}\n"
             "     4. Complete the order"
         )
 
@@ -173,6 +178,128 @@ class HetznerKonsoleHAutomation:
         ui.success(
             f"Domain order for '{domain}' initiated.\n"
             "     Note: Domain will be reachable within 12-24 hours."
+        )
+        return True
+
+    # ── Nameserver change (existing domain) ──────────────────────────
+
+    async def set_nameservers(self, domain: str, nameservers: list[str]) -> bool:
+        """Switch an already-registered KonsoleH domain to custom nameservers.
+
+        Hetzner has no registrar API for NS delegation, so this drives KonsoleH's
+        DNS management UI (verified flow):
+          1. Select the domain from the product overview (sets session context)
+          2. Open the "Nameserver ändern" form (dns.php?dnsaction2=changedns)
+          3. Fill the ``newdns[]`` fields and submit "Speichern"
+        Falls back to a manual confirmation prompt if the form is not found.
+        """
+        ui.info(f'Switching nameservers for "{domain}" to:')
+        for ns in nameservers:
+            ui.info(f"     • {ns}")
+
+        await self._select_domain(domain)
+
+        if not await self._open_change_nameserver_form():
+            ui.warning(
+                "Could not open the nameserver-change form automatically.\n"
+                "     Please open: Einstellungen → DNS-Verwaltung → "
+                "'Nameserver ändern' manually."
+            )
+            return await self._manual_nameserver_fallback(domain, nameservers)
+
+        if not await self._fill_and_submit_nameservers(nameservers):
+            return await self._manual_nameserver_fallback(domain, nameservers)
+
+        ui.success(
+            f"Nameserver change for '{domain}' submitted.\n"
+            "     Note: DNS delegation can take up to 24 hours to propagate."
+        )
+        return True
+
+    async def _select_domain(self, domain: str) -> None:
+        """Click the domain on the product overview to set the session context."""
+        try:
+            await self.page.goto(
+                f"{config.KONSOLEH_BASE_URL}/", wait_until="networkidle"
+            )
+            link = self.page.locator(f'a:has-text("{domain}")').first
+            if await link.count() > 0:
+                await link.click(timeout=10000)
+                await self.page.wait_for_load_state("networkidle")
+        except Exception:
+            pass
+
+    async def _open_change_nameserver_form(self) -> bool:
+        """Open dns.php?dnsaction2=changedns and confirm the form is present."""
+        # Direct navigation works once a domain is selected in the session.
+        try:
+            await self.page.goto(
+                config.KONSOLEH_DNS_CHANGE_URL, wait_until="networkidle"
+            )
+            if await self.page.locator('input[name="newdns[]"]').count() > 0:
+                return True
+        except Exception:
+            pass
+
+        # Fallback: go via DNS-Verwaltung and click the "Nameserver ändern" button.
+        try:
+            await self.page.goto(
+                config.KONSOLEH_DNS_EDIT_URL, wait_until="networkidle"
+            )
+            btn = self.page.locator(
+                'a:has-text("Nameserver ändern"), button:has-text("Nameserver ändern")'
+            ).first
+            if await btn.count() > 0:
+                await btn.click(timeout=5000)
+                await self.page.wait_for_load_state("networkidle")
+            return await self.page.locator('input[name="newdns[]"]').count() > 0
+        except Exception:
+            return False
+
+    async def _fill_and_submit_nameservers(self, nameservers: list[str]) -> bool:
+        """Fill the newdns[] fields and click Speichern. Returns success."""
+        try:
+            fields = self.page.locator('input[name="newdns[]"]')
+            count = await fields.count()
+            if count == 0:
+                return False
+
+            for index in range(count):
+                value = nameservers[index] if index < len(nameservers) else ""
+                field = fields.nth(index)
+                await field.click(timeout=5000)
+                await field.fill("")
+                if value:
+                    await field.type(value, delay=30)
+
+            await self.page.locator(
+                'button:has-text("Speichern"), '
+                'input[type="submit"][value*="Speichern" i]'
+            ).first.click(timeout=5000)
+            try:
+                await self.page.wait_for_load_state("networkidle")
+            except Exception:
+                pass
+            return True
+        except Exception:
+            return False
+
+    async def _manual_nameserver_fallback(
+        self, domain: str, nameservers: list[str]
+    ) -> bool:
+        """Ask the user to finish the change by hand, then confirm with Enter."""
+        ui.info(
+            "Please finish the nameserver change in the browser:\n"
+            "     1. Einstellungen → DNS-Verwaltung → 'Nameserver ändern'\n"
+            "     2. Enter exactly these nameservers:\n"
+            f"        {', '.join(nameservers)}\n"
+            "     3. Save (Speichern)"
+        )
+        ui.info("Press Enter in the terminal once the change is saved.")
+        ui.ask("Press Enter to continue", default="")
+        ui.success(
+            f"Nameserver change for '{domain}' confirmed.\n"
+            "     Note: DNS delegation can take up to 24 hours to propagate."
         )
         return True
 
@@ -244,8 +371,11 @@ class HetznerKonsoleHAutomation:
 
         return False
 
-    async def _fill_domain_step_three(self, domain_name: str, tld: str) -> None:
+    async def _fill_domain_step_three(
+        self, domain_name: str, tld: str, nameservers: list[str] | None = None
+    ) -> None:
         """Fill KonsoleH's actual step-3 domain form and continue."""
+        nameservers = nameservers or config.HETZNER_NAMESERVERS
         await self.page.wait_for_selector("#domain_lookup_form", timeout=8000)
         transfer_no = self.page.locator("#transfer_no").first
         await transfer_no.click(timeout=5000)
@@ -265,15 +395,17 @@ class HetznerKonsoleHAutomation:
         await nameserver_toggle.click(timeout=5000)
         await self.page.wait_for_timeout(200)
 
-        for selector, value in (
-            ("#nameserver1", config.HETZNER_NAMESERVERS[0]),
-            ("#nameserver2", config.HETZNER_NAMESERVERS[1]),
-            ("#nameserver3", config.HETZNER_NAMESERVERS[2]),
+        # Three NS fields exist; fill the provided ones (Cloudflare gives 2),
+        # clear any leftover field so no stale Hetzner NS remains.
+        for index, selector in enumerate(
+            ("#nameserver1", "#nameserver2", "#nameserver3")
         ):
+            value = nameservers[index] if index < len(nameservers) else ""
             field = self.page.locator(selector).first
             await field.click(timeout=5000)
             await field.fill("")
-            await field.type(value, delay=30)
+            if value:
+                await field.type(value, delay=30)
             await field.dispatch_event("input")
             await field.dispatch_event("change")
 

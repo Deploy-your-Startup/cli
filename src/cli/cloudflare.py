@@ -20,6 +20,8 @@ LOGIN_WAIT_TIMEOUT = 300_000
 DEFAULT_PERMISSIONS = [
     ("Account", "Cloudflare Pages", "Edit"),
     ("Account", "Account Settings", "Read"),
+    ("Account", "Zone", "Edit"),  # grants account.zone.create (anlegen neuer Zonen)
+    ("Zone", "DNS", "Edit"),  # DNS-Records in den (neuen) Zonen verwalten
     ("User", "User Details", "Read"),
 ]
 

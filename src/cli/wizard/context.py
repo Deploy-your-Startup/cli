@@ -26,6 +26,8 @@ class BootstrapContext:
     vault_password: str | None = None
     cloudflare_account_id: str | None = None
     cloudflare_api_token: str | None = None
+    cloudflare_zone_id: str | None = None
+    cloudflare_nameservers: list[str] | None = None
 
     @property
     def project_dir(self) -> Path:

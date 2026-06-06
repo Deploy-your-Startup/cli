@@ -23,7 +23,7 @@ FULLSTACK_STEPS: list[type[WizardStep]] = [
     DomainStep, HetznerStep, ProjectStep, FinalizeStep,
 ]
 PITCH_STEPS: list[type[WizardStep]] = [
-    DomainStep, CloudflareStep, PitchProjectStep, PitchFinalizeStep,
+    CloudflareStep, DomainStep, PitchProjectStep, PitchFinalizeStep,
 ]
 
 
@@ -60,9 +60,9 @@ def run_wizard(ctx: BootstrapContext) -> None:
     total = len(steps)
     completed = 0
 
-    for step_cls in steps:
+    for idx, step_cls in enumerate(steps, 1):
         step = step_cls()
-        ui.step_header(step.number, step.name, completed, total)
+        ui.step_header(idx, step.name, completed, total)
 
         try:
             if step.check(ctx):
@@ -70,11 +70,11 @@ def run_wizard(ctx: BootstrapContext) -> None:
                 continue
             step.run(ctx)
             completed += 1
-            ui.success(f"Step {step.number} abgeschlossen")
+            ui.success(f"Step {idx} abgeschlossen")
         except click.ClickException:
             raise
         except Exception as exc:
-            ui.error(f"Fehler in Step {step.number}: {exc}")
+            ui.error(f"Fehler in Step {idx}: {exc}")
             raise click.ClickException(str(exc))
 
     # All steps done — show summary
