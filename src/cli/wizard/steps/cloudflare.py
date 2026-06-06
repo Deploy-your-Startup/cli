@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import click
 import httpx
 
+from cli.cloudflare import create_api_token
 from cli import wizard_output as ui
 
 from ..base import WizardStep, open_browser
@@ -79,12 +81,31 @@ class CloudflareStep(WizardStep):
         return bool(ctx.cloudflare_api_token and ctx.cloudflare_account_id)
 
     def run(self, ctx: BootstrapContext) -> None:
-        if not ui.confirm("Cloudflare-Account schon vorhanden?", default=True):
-            guide_cloudflare_signup()
+        has_account = ui.confirm("Cloudflare-Account schon vorhanden?", default=True)
+        choice = ui.numbered_choice(
+            "Wie soll der Cloudflare API Token bereitgestellt werden?",
+            [
+                "Im Browser erstellen (empfohlen)",
+                "Ich habe schon einen Token (einfügen)",
+            ],
+        )
 
-        guide_cloudflare_token_creation()
         while True:
-            token = ui.text_input("Cloudflare API Token", hide_input=True)
+            if choice == 1:
+                token = create_api_token(
+                    token_name=f"{ctx.project_name}-deploy",
+                    register=not has_account,
+                )
+                if not token:
+                    raise click.ClickException(
+                        "Cloudflare API-Token konnte nicht erstellt werden."
+                    )
+            else:
+                if not has_account:
+                    guide_cloudflare_signup()
+                guide_cloudflare_token_creation()
+                token = ui.text_input("Cloudflare API Token", hide_input=True)
+
             ui.action_start("Token validieren...")
             ok, auto_account_id = validate_cf_token(token)
             if ok:
@@ -92,6 +113,10 @@ class CloudflareStep(WizardStep):
                 ctx.cloudflare_api_token = token
                 break
             ui.action_fail("Token ungültig")
+            if choice == 1:
+                raise click.ClickException(
+                    "Der browser-erstellte Cloudflare Token ist ungültig."
+                )
             ui.error("Bitte erneut versuchen.")
 
         if auto_account_id:
