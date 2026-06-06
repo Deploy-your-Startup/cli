@@ -126,3 +126,40 @@ def _domain_attached(
         return resp.status_code == 200 and resp.json().get("success", False)
     except httpx.HTTPError:
         return False
+
+
+# Record types that would block a Pages custom domain from owning a hostname.
+_CONFLICTING_TYPES = {"A", "AAAA", "CNAME"}
+
+
+def clear_conflicting_records(token: str, zone_id: str, names: list[str]) -> int:
+    """Delete A/AAAA/CNAME records for ``names`` so Pages can own those hosts.
+
+    When a zone is created on Cloudflare, existing records are auto-imported.
+    For a pitch site those apex/www records (pointing at the old host) must be
+    removed before the Pages custom domain can take over. Returns the number of
+    deleted records. Idempotent: deletes nothing when the records are gone.
+    """
+    headers = _headers(token)
+    deleted = 0
+    for name in names:
+        resp = httpx.get(
+            f"{API_BASE}/zones/{zone_id}/dns_records",
+            headers=headers,
+            params={"name": name},
+            timeout=TIMEOUT,
+        )
+        data = resp.json()
+        if resp.status_code != 200 or not data.get("success"):
+            continue
+        for record in data.get("result", []):
+            if record.get("type") not in _CONFLICTING_TYPES:
+                continue
+            del_resp = httpx.delete(
+                f"{API_BASE}/zones/{zone_id}/dns_records/{record['id']}",
+                headers=headers,
+                timeout=TIMEOUT,
+            )
+            if del_resp.status_code == 200:
+                deleted += 1
+    return deleted
