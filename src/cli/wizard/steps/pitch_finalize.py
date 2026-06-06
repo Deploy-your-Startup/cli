@@ -78,6 +78,26 @@ def pages_project_exists(ctx: BootstrapContext) -> bool:
         return False
 
 
+def custom_domain_linked(ctx: BootstrapContext) -> bool:
+    """Return True when the apex domain is attached to the Pages project."""
+    if not ctx.cloudflare_api_token or not ctx.cloudflare_account_id:
+        return False
+    base_url = (
+        f"https://api.cloudflare.com/client/v4/accounts/"
+        f"{ctx.cloudflare_account_id}/pages/projects/{ctx.project_name}"
+        f"/domains/{ctx.base_domain}"
+    )
+    try:
+        resp = httpx.get(
+            base_url,
+            headers={"Authorization": f"Bearer {ctx.cloudflare_api_token}"},
+            timeout=20,
+        )
+        return resp.status_code == 200 and resp.json().get("success", False)
+    except httpx.HTTPError:
+        return False
+
+
 class PitchFinalizeStep(WizardStep):
     number = 4
     name = "Abschluss"
@@ -85,12 +105,15 @@ class PitchFinalizeStep(WizardStep):
     def check(self, ctx: BootstrapContext) -> bool:
         if not ctx.project_dir.exists():
             return False
+        # Only skip when the domain is ALSO linked — otherwise a re-run after an
+        # earlier push would never reach the custom-domain step in run().
         if (
             is_pushed(ctx.project_dir)
             and repo_exists(ctx.full_repo)
             and pages_project_exists(ctx)
+            and custom_domain_linked(ctx)
         ):
-            ui.skip_indicator("Code bereits gepusht")
+            ui.skip_indicator("Code gepusht & Custom Domain verknüpft")
             return True
         return False
 
