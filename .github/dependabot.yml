@@ -1,0 +1,14 @@
+version: 2
+updates:
+  # Python dependencies (ansible, hcloud, playwright, click, httpx, …) live here
+  # in the CLI — this is the single source of truth for their pinned versions,
+  # so this is where we let Dependabot propose bumps.
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      python-deps:
+        patterns:
+          - "*"
