@@ -1,0 +1,42 @@
+name: Publish to PyPI
+
+# Tag a release with `vX.Y.Z` and push the tag — setuptools-scm derives the
+# version from the tag, the package is built and published to PyPI via Trusted
+# Publishing (OIDC, no API token). One-time setup: configure a Trusted Publisher
+# on pypi.org for project `deploy-your-startup-cli` pointing at this repo, the
+# workflow file `publish.yml`, and the environment `pypi`.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history + tags so setuptools-scm sees the tag
+      - uses: astral-sh/setup-uv@v5
+      - name: Build sdist + wheel
+        run: uv build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write # OIDC token for PyPI Trusted Publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
