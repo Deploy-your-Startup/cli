@@ -38,8 +38,9 @@ def _check_playwright() -> bool:
 def _require_playwright() -> None:
     if not _check_playwright():
         raise click.ClickException(
-            "Browser automation requires Playwright. Install with:\n"
-            "  pip install 'deploy-your-startup-cli[browser]'\n"
+            "Browser automation requires Playwright. It ships with a normal\n"
+            "CLI install but is pruned inside project deployments. Install it with:\n"
+            "  uv pip install playwright   (or reinstall deploy-your-startup-cli)\n"
             "  playwright install chromium"
         )
 
