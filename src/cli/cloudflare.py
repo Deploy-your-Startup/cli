@@ -286,21 +286,16 @@ class CloudflareAutomation:
             token = await self.page.evaluate(
                 """
                 () => {
-                  const heading = Array.from(document.querySelectorAll('h4'))
-                    .find((el) => /API token was successfully created/i.test(el.textContent || ''));
-                  if (!heading) return '';
-
-                  const container = heading.parentElement;
-                  if (!container) return '';
-
-                  const direct = container.querySelector('.select-all');
-                  const value = (direct?.textContent || '').trim();
-                  if (value) return value;
-
-                  const curlCode = Array.from(container.querySelectorAll('code'))
+                  // The freshly created token is rendered in a `.select-all` box.
+                  for (const el of document.querySelectorAll('.select-all')) {
+                    const v = (el.textContent || '').trim();
+                    if (/^[A-Za-z0-9_-]{30,120}$/.test(v)) return v;
+                  }
+                  // Fallback: parse the verify-curl snippet shown next to it.
+                  const curlCode = Array.from(document.querySelectorAll('code,pre'))
                     .map((el) => el.textContent || '')
                     .join('\n');
-                  const match = curlCode.match(/Bearer\\s+([A-Za-z0-9]{30,120})/);
+                  const match = curlCode.match(/Bearer\\s+([A-Za-z0-9_-]{30,120})/);
                   return match ? match[1] : '';
                 }
                 """
@@ -389,4 +384,6 @@ class CloudflareAutomation:
     @staticmethod
     def _looks_like_token(value: str) -> bool:
         value = value.strip()
-        return bool(re.fullmatch(r"[A-Za-z0-9]{30,120}", value))
+        # Cloudflare tokens are alphanumeric and now carry a "cfut_" prefix
+        # (underscore), so underscores/dashes must be allowed.
+        return bool(re.fullmatch(r"[A-Za-z0-9_-]{30,120}", value))
