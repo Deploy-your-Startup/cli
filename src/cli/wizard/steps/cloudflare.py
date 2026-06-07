@@ -151,6 +151,17 @@ class CloudflareStep(WizardStep):
             )
         ctx.cloudflare_zone_id = zone.zone_id
         ctx.cloudflare_nameservers = zone.nameservers
+        ctx.cloudflare_zone_is_subdomain = bool(zone.name) and zone.name != ctx.base_domain
+
+        if ctx.cloudflare_zone_is_subdomain:
+            ui.action_done(f"Bestehende Root-Zone {zone.name} wird verwendet")
+            ui.info(
+                f"{ctx.base_domain} ist eine Subdomain von {zone.name} — keine "
+                "Nameserver-Umstellung nötig, die Subdomain wird als DNS-Record "
+                "in der bestehenden Zone angelegt."
+            )
+            return
+
         if zone.created:
             ui.action_done("Cloudflare-Zone erstellt")
         else:

@@ -28,6 +28,9 @@ class BootstrapContext:
     cloudflare_api_token: str | None = None
     cloudflare_zone_id: str | None = None
     cloudflare_nameservers: list[str] | None = None
+    # True when base_domain is a subdomain served by an existing parent zone —
+    # no registrar/nameserver change is needed, only DNS records in that zone.
+    cloudflare_zone_is_subdomain: bool = False
 
     @property
     def project_dir(self) -> Path:

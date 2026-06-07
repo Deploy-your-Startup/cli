@@ -43,6 +43,16 @@ class DomainStep(WizardStep):
     # ── Pitch: delegate DNS to Cloudflare ────────────────────────────
 
     def _run_pitch(self, ctx: BootstrapContext) -> None:
+        if ctx.cloudflare_zone_is_subdomain:
+            ui.info(
+                f'"{ctx.base_domain}" ist eine Subdomain einer bereits auf '
+                "Cloudflare delegierten Zone — keine Domain-Registrierung oder "
+                "Nameserver-Umstellung nötig. DNS-Records werden im nächsten "
+                "Schritt in der bestehenden Zone angelegt."
+            )
+            ui.action_done("Subdomain — keine Nameserver-Umstellung nötig")
+            return
+
         nameservers = ctx.cloudflare_nameservers
         if not nameservers:
             raise click.ClickException(
