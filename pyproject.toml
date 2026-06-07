@@ -13,10 +13,15 @@ authors = [
     {name = "Deploy Your Startup", email = "contact@deployyourstartup.com"}
 ]
 dependencies = [
-    "ansible>=11.4.0",
+    "ansible==13.7.0",
     "click>=8.1.0",
-    "hcloud>=2.0.0",
+    "hcloud==2.20.0",
     "httpx>=0.28.1",
+    # Browser automation for `startup bootstrap` / `startup hetzner` (Cloudflare +
+    # Hetzner console). Kept as a core dep so a direct CLI install has the FULL
+    # feature set. Project deployments don't run the browser flows, so they prune
+    # it via `[tool.uv] override-dependencies` (see a deployment pyproject) —
+    # playwright bundles a ~130 MB node driver we don't want in CI pipelines.
     "playwright>=1.40.0",
     "pygithub>=2.6.1",
     "python-dateutil>=2.8.0",

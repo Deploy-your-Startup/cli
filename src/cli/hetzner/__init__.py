@@ -5,7 +5,8 @@ Provides browser-based workflows for:
 - Cloud Console: Account registration, project creation, API token generation
 - Robot: Domain registration with contact handles and nameserver setup
 
-Requires the optional [browser] dependency group (playwright).
+Requires Playwright, which ships with a normal CLI install but is pruned inside
+project deployments (they never run the browser flows).
 """
 
 from __future__ import annotations
@@ -29,8 +30,9 @@ def _require_playwright():
     """Raise a clear error if playwright is not installed."""
     if not _check_playwright():
         raise click.ClickException(
-            "Browser automation requires Playwright. Install with:\n"
-            "  pip install 'deploy-your-startup-cli[browser]'\n"
+            "Browser automation requires Playwright. It ships with a normal\n"
+            "CLI install but is pruned inside project deployments. Install it with:\n"
+            "  uv pip install playwright   (or reinstall deploy-your-startup-cli)\n"
             "  playwright install chromium"
         )
 
