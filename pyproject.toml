@@ -1,20 +1,22 @@
 [build-system]
-requires = ["setuptools>=42", "wheel"]
+requires = ["setuptools>=77", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "deploy-your-startup-cli"
-version = "0.4.0"
+dynamic = ["version"]
 description = "CLI tool for Deploy Your Startup operations"
 readme = "README.md"
-requires-python = ">=3.11"
-license = {text = "MIT"}
+requires-python = ">=3.12"
+license = "MIT"
 authors = [
     {name = "Deploy Your Startup", email = "contact@deployyourstartup.com"}
 ]
 dependencies = [
     "ansible==13.7.0",
     "click>=8.1.0",
+    # Runtime requirement of the hetzner.hcloud Ansible collection (the deploy
+    # playbooks import it); not imported by the CLI code directly.
     "hcloud==2.20.0",
     "httpx>=0.28.1",
     # Browser automation for `startup bootstrap` / `startup hetzner` (Cloudflare +
@@ -23,8 +25,6 @@ dependencies = [
     # it via `[tool.uv] override-dependencies` (see a deployment pyproject) —
     # playwright bundles a ~130 MB node driver we don't want in CI pipelines.
     "playwright>=1.40.0",
-    "pygithub>=2.6.1",
-    "python-dateutil>=2.8.0",
     "pyyaml>=6.0.2",
 ]
 
@@ -51,6 +51,10 @@ package-dir = {"" = "src"}
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["cli*"]
+
+# Version is derived from the latest git tag (e.g. v0.5.0 -> 0.5.0) at build
+# time. Tag a release with `vX.Y.Z` and the publish workflow ships that version.
+[tool.setuptools_scm]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
