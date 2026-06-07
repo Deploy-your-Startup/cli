@@ -20,6 +20,7 @@ class ZoneInfo:
     """Result of ensuring a Cloudflare zone exists."""
 
     zone_id: str
+    name: str  # the zone's apex domain (may differ from the requested subdomain)
     nameservers: list[str]
     status: str  # "active", "pending", ...
     created: bool  # True if we just created it, False if it already existed
@@ -35,6 +36,7 @@ def _headers(token: str) -> dict[str, str]:
 def _zone_from_result(zone: dict, *, created: bool) -> ZoneInfo:
     return ZoneInfo(
         zone_id=zone["id"],
+        name=zone.get("name", ""),
         nameservers=zone.get("name_servers", []),
         status=zone.get("status", "unknown"),
         created=created,
