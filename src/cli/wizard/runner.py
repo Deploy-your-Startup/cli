@@ -8,6 +8,7 @@ import subprocess
 import click
 
 from cli import wizard_output as ui
+from cli.bootstrap import find_startup_factory_root
 
 from .base import WizardStep
 from .context import BootstrapContext
@@ -38,6 +39,8 @@ def check_prerequisites(ctx: BootstrapContext) -> None:
         required.append(("ssh-keygen", "OpenSSH (sollte mit dem System geliefert werden)"))
     if ctx.mode == "github":
         required.append(("gh", "GitHub CLI: https://cli.github.com (brew install gh)"))
+    if find_startup_factory_root(ctx.output_dir) is not None:
+        required.append(("npx", "Node.js/npm: https://nodejs.org/en/download"))
 
     missing = [(name, hint) for name, hint in required if shutil.which(name) is None]
     if missing:
