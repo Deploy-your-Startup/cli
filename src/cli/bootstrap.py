@@ -14,6 +14,7 @@ from pathlib import Path
 import click
 
 from cli.sync_commands import (
+    _github_owner,
     _replace_placeholders,
     _run_command,
 )
@@ -22,68 +23,6 @@ TEMPLATE_OWNER = "Deploy-your-Startup"
 TEMPLATE_REPO = "django-backend-template"
 TEMPLATE_VAULT_PASSWORD = "ranhah-ceqZu9-fihfez"
 PITCH_TEMPLATE_REPO = "pitch-template"
-
-
-def _startup_factory_root_from(path: Path) -> Path | None:
-    """Return the startup-factory root when the path is inside that repo."""
-    candidate = path if path.is_dir() else path.parent
-    for current in (candidate, *candidate.parents):
-        if (current / "projects.yaml").exists() and (current / "projects").exists():
-            return current
-    return None
-
-
-def find_startup_factory_root(*paths: Path) -> Path | None:
-    """Find the startup-factory repo root from a set of likely locations."""
-    search_paths = [Path.cwd(), *paths]
-    for path in search_paths:
-        root = _startup_factory_root_from(path.resolve())
-        if root is not None:
-            return root
-    return None
-
-
-def register_project_in_startup_factory(
-    *,
-    project_name: str,
-    github_username: str,
-    output_dir: Path,
-) -> str | None:
-    """Add the new startup to startup-factory/projects.yaml when bootstrapping there."""
-    startup_factory_root = find_startup_factory_root(output_dir)
-    if startup_factory_root is None:
-        return None
-
-    expected_output_dir = startup_factory_root / "projects" / "startups"
-    if output_dir.resolve() != expected_output_dir.resolve():
-        return None
-
-    projects_yaml = startup_factory_root / "projects.yaml"
-    lines = projects_yaml.read_text(encoding="utf-8").splitlines()
-
-    in_projects = False
-    for line in lines:
-        stripped = line.strip()
-        if stripped == "projects:":
-            in_projects = True
-            continue
-        if stripped == "tooling:":
-            break
-        if in_projects and stripped == f"- name: {project_name}":
-            return "exists"
-
-    tooling_index = next((idx for idx, line in enumerate(lines) if line.strip() == "tooling:"), None)
-    if tooling_index is None:
-        raise click.ClickException("projects.yaml hat keinen tooling:-Abschnitt.")
-
-    new_entry = [
-        f"  - name: {project_name}",
-        f"    repo: git@github.com:{github_username}/{project_name}.git",
-        "",
-    ]
-    updated_lines = lines[:tooling_index] + new_entry + lines[tooling_index:]
-    projects_yaml.write_text("\n".join(updated_lines) + "\n", encoding="utf-8")
-    return "added"
 
 
 def _prompt_or_env(
@@ -389,15 +328,6 @@ def bootstrap_project(
                 cwd=project_dir,
                 capture_output=True,
             )
-            registration_state = register_project_in_startup_factory(
-                project_name=project_name,
-                github_username=github_username,
-                output_dir=output_dir,
-            )
-            if registration_state == "added":
-                click.echo("  Registered startup in startup-factory/projects.yaml ...")
-            elif registration_state == "exists":
-                click.echo("  Startup already present in startup-factory/projects.yaml ...")
 
         # Step 7: Summary
         click.echo("\n--- Step 7/7: Done! ---")
@@ -420,8 +350,8 @@ def bootstrap_project(
     click.echo("")
     click.echo("Next steps:")
     click.echo(f"  cd {project_dir}/deployment")
-    click.echo("  ./make.sh setup_ansible")
+    click.echo(f"  ./make.sh setup_ansible")
     click.echo(
-        "  ./make.sh infrastructure --environment production --vault_password <pw>"
+        f"  ./make.sh infrastructure --environment production --vault_password <pw>"
     )
-    click.echo("  ./make.sh deploy --environment production --vault_password <pw>")
+    click.echo(f"  ./make.sh deploy --environment production --vault_password <pw>")
