@@ -7,7 +7,6 @@ import subprocess
 import time
 
 from cli import wizard_output as ui
-from cli.bootstrap import register_project_in_startup_factory
 from cli.sync_commands import _run_command
 
 from ..base import WizardStep, is_pushed, repo_exists
@@ -114,19 +113,6 @@ class FinalizeStep(WizardStep):
             cwd=ctx.project_dir, capture_output=True,
         )
         ui.action_done("Gepusht")
-
-        ui.action_start("startup-factory Registry aktualisieren...")
-        registration_state = register_project_in_startup_factory(
-            project_name=ctx.project_name,
-            github_username=ctx.github_username,
-            output_dir=ctx.output_dir,
-        )
-        if registration_state == "added":
-            ui.action_done("projects.yaml ergänzt")
-        elif registration_state == "exists":
-            ui.action_done("projects.yaml bereits aktuell")
-        else:
-            ui.action_done("Nicht im startup-factory Hub, übersprungen")
 
         # 4f. Trigger infrastructure workflow (retry — GitHub needs time to index)
         ui.action_start("Infrastructure-Workflow starten...")
