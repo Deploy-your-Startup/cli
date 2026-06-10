@@ -22,18 +22,13 @@ TEMPLATE_OWNER = "Deploy-your-Startup"
 TEMPLATE_REPO = "django-backend-template"
 TEMPLATE_VAULT_PASSWORD = "ranhah-ceqZu9-fihfez"
 PITCH_TEMPLATE_REPO = "pitch-template"
-SPAWN_STARTUP_SKILL = "spawn-startup"
-SKILL_TARGET_AGENTS = ("claude-code", "codex", "opencode")
 
 
 def _startup_factory_root_from(path: Path) -> Path | None:
     """Return the startup-factory root when the path is inside that repo."""
     candidate = path if path.is_dir() else path.parent
     for current in (candidate, *candidate.parents):
-        if (
-            (current / "projects.yaml").exists()
-            and (current / "skills" / SPAWN_STARTUP_SKILL / "SKILL.md").exists()
-        ):
+        if (current / "projects.yaml").exists() and (current / "projects").exists():
             return current
     return None
 
@@ -46,35 +41,6 @@ def find_startup_factory_root(*paths: Path) -> Path | None:
         if root is not None:
             return root
     return None
-
-
-def install_spawn_startup_skill(project_dir: Path, *, output_dir: Path) -> bool:
-    """Install the repo-specific spawn-startup skill into the new project."""
-    startup_factory_root = find_startup_factory_root(output_dir, project_dir)
-    if startup_factory_root is None:
-        return False
-
-    if shutil.which("npx") is None:
-        raise click.ClickException(
-            "npx fehlt. Bitte Node.js/npm installieren, damit der spawn-startup Skill "
-            "ins neue Projekt eingebunden werden kann."
-        )
-
-    command = [
-        "npx",
-        "skills",
-        "add",
-        str(startup_factory_root),
-        "--skill",
-        SPAWN_STARTUP_SKILL,
-        "--copy",
-        "-y",
-    ]
-    for agent in SKILL_TARGET_AGENTS:
-        command.extend(["-a", agent])
-
-    _run_command(command, cwd=project_dir)
-    return True
 
 
 def register_project_in_startup_factory(
@@ -369,9 +335,6 @@ def bootstrap_project(
     try:
         # Step 6: Commit and push (GitHub mode) or just commit (local mode)
         click.echo("\n--- Step 6/7: Committing changes ---")
-        if mode == "github":
-            click.echo("  Installing spawn-startup skill for Claude/Codex/OpenCode ...")
-            install_spawn_startup_skill(project_dir, output_dir=output_dir)
         _run_command(["git", "add", "-A"], cwd=project_dir)
         _run_command(
             ["git", "commit", "-m", "bootstrap: configure project"],
