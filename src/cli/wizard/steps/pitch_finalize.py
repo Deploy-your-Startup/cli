@@ -7,7 +7,7 @@ import subprocess
 import httpx
 
 from cli import wizard_output as ui
-from cli.bootstrap import install_spawn_startup_skill, register_project_in_startup_factory
+from cli.bootstrap import register_project_in_startup_factory
 from cli.sync_commands import _run_command
 
 from ..base import WizardStep, is_pushed, repo_exists
@@ -150,12 +150,6 @@ class PitchFinalizeStep(WizardStep):
         return False
 
     def run(self, ctx: BootstrapContext) -> None:
-        ui.action_start("spawn-startup Skill installieren...")
-        if install_spawn_startup_skill(ctx.project_dir, output_dir=ctx.output_dir):
-            ui.action_done("Skill für Claude/Codex/OpenCode installiert")
-        else:
-            ui.action_done("Kein startup-factory-Kontext erkannt, übersprungen")
-
         ui.action_start("Code committen...")
         _run_command(["git", "add", "-A"], cwd=ctx.project_dir)
         status = subprocess.run(
