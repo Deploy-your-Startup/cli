@@ -214,7 +214,7 @@ uv run startup ansible restore --working-directory deployment --environment prod
 uv run startup ansible restore --working-directory deployment --environment production --vault-password PASSWORD --db-file ~/Backups/about-phil/...sql.gz --no-restore-media --yes
 ```
 
-When no `--vault-password` is passed, `startup` derives the macOS Keychain service name from the project directory, for example `VAULT_PASSWORD_ABOUT_PHIL` or `VAULT_PASSWORD_GAMING_BUCH_CLUB`. You can still force the same behavior explicitly with `--vault-password-from-keychain`.
+When no `--vault-password` is passed, `startup` reads the password from the configured vault password backend (default: the macOS Keychain). The Keychain backend derives the service name from the project directory, for example `VAULT_PASSWORD_ABOUT_PHIL` or `VAULT_PASSWORD_GAMING_BUCH_CLUB`. Backends are pluggable — see `src/cli/vault_backends.py`; today only `keychain` ships.
 
 Project repositories can wrap this with local commands such as:
 

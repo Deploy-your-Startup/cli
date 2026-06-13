@@ -680,11 +680,6 @@ def ansible_setup(working_directory, shared_dir, version, refresh, repo_url):
     "vault_password",
     help="Vault password",
 )
-@click.option(
-    "--vault-password-from-keychain",
-    is_flag=True,
-    help="Force reading the vault password from the macOS Keychain using the current project name",
-)
 @click.option("--environment", required=True, help="Target environment")
 @click.option(
     "--service", default="all", show_default=True, help="Service tag to deploy"
@@ -714,7 +709,6 @@ def ansible_setup(working_directory, shared_dir, version, refresh, repo_url):
 )
 def ansible_deploy(
     vault_password,
-    vault_password_from_keychain,
     environment,
     service,
     working_directory,
@@ -728,7 +722,6 @@ def ansible_deploy(
 
     resolved_vault_password = resolve_vault_password(
         vault_password=vault_password,
-        vault_password_from_keychain=vault_password_from_keychain,
         working_directory=working_directory,
     )
 
@@ -750,11 +743,6 @@ def ansible_deploy(
     "--vault_password",
     "vault_password",
     help="Vault password",
-)
-@click.option(
-    "--vault-password-from-keychain",
-    is_flag=True,
-    help="Force reading the vault password from the macOS Keychain using the current project name",
 )
 @click.option("--environment", required=True, help="Target environment")
 @click.option(
@@ -782,7 +770,6 @@ def ansible_deploy(
 )
 def ansible_infrastructure(
     vault_password,
-    vault_password_from_keychain,
     environment,
     working_directory,
     shared_dir,
@@ -795,7 +782,6 @@ def ansible_infrastructure(
 
     resolved_vault_password = resolve_vault_password(
         vault_password=vault_password,
-        vault_password_from_keychain=vault_password_from_keychain,
         working_directory=working_directory,
     )
 
@@ -816,11 +802,6 @@ def ansible_infrastructure(
     "--vault_password",
     "vault_password",
     help="Vault password",
-)
-@click.option(
-    "--vault-password-from-keychain",
-    is_flag=True,
-    help="Force reading the vault password from the macOS Keychain using the current project name",
 )
 @click.option("--environment", required=True, help="Target environment")
 @click.option(
@@ -862,7 +843,6 @@ def ansible_infrastructure(
 )
 def ansible_kubeconfig(
     vault_password,
-    vault_password_from_keychain,
     environment,
     working_directory,
     inventory,
@@ -882,7 +862,6 @@ def ansible_kubeconfig(
 
     resolved_vault_password = resolve_vault_password(
         vault_password=vault_password,
-        vault_password_from_keychain=vault_password_from_keychain,
         working_directory=working_directory,
     )
 
@@ -910,11 +889,6 @@ def ansible_kubeconfig(
     "--vault_password",
     "vault_password",
     help="Vault password",
-)
-@click.option(
-    "--vault-password-from-keychain",
-    is_flag=True,
-    help="Force reading the vault password from the macOS Keychain using the current project name",
 )
 @click.option("--environment", required=True, help="Target environment")
 @click.option(
@@ -946,7 +920,6 @@ def ansible_kubeconfig(
 )
 def ansible_backup(
     vault_password,
-    vault_password_from_keychain,
     environment,
     working_directory,
     backup_dir,
@@ -961,7 +934,6 @@ def ansible_backup(
 
     resolved_vault_password = resolve_vault_password(
         vault_password=vault_password,
-        vault_password_from_keychain=vault_password_from_keychain,
         working_directory=working_directory,
     )
 
@@ -984,11 +956,6 @@ def ansible_backup(
     "--vault_password",
     "vault_password",
     help="Vault password",
-)
-@click.option(
-    "--vault-password-from-keychain",
-    is_flag=True,
-    help="Force reading the vault password from the macOS Keychain using the current project name",
 )
 @click.option("--environment", required=True, help="Target environment")
 @click.option(
@@ -1033,7 +1000,6 @@ def ansible_backup(
 )
 def ansible_update_vms(
     vault_password,
-    vault_password_from_keychain,
     environment,
     working_directory,
     playbook,
@@ -1049,7 +1015,6 @@ def ansible_update_vms(
 
     resolved_vault_password = resolve_vault_password(
         vault_password=vault_password,
-        vault_password_from_keychain=vault_password_from_keychain,
         working_directory=working_directory,
     )
 
@@ -1073,11 +1038,6 @@ def ansible_update_vms(
     "--vault_password",
     "vault_password",
     help="Vault password",
-)
-@click.option(
-    "--vault-password-from-keychain",
-    is_flag=True,
-    help="Read the vault password from the macOS Keychain using the current project name",
 )
 @click.option("--environment", required=True, help="Target environment")
 @click.option(
@@ -1138,7 +1098,6 @@ def ansible_update_vms(
 )
 def ansible_restore(
     vault_password,
-    vault_password_from_keychain,
     environment,
     working_directory,
     backup_dir,
@@ -1158,7 +1117,6 @@ def ansible_restore(
 
     resolved_vault_password = resolve_vault_password(
         vault_password=vault_password,
-        vault_password_from_keychain=vault_password_from_keychain,
         working_directory=working_directory,
     )
 
