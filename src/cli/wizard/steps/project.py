@@ -20,6 +20,12 @@ from cli.sync_commands import _replace_placeholders, _run_command
 
 from ..base import WizardStep, has_placeholders, prompt_user_public_key, repo_exists
 from ..context import BootstrapContext
+from ..vault_guard import (
+    read_keychain_password,
+    store_keychain_password,
+    vault_is_decryptable,
+    verify_rotation,
+)
 
 
 class ProjectStep(WizardStep):
@@ -41,6 +47,18 @@ class ProjectStep(WizardStep):
         if has_placeholders(ctx.project_dir):
             ui.info(
                 "Repository existiert, hat aber noch Placeholder — konfiguriere neu..."
+            )
+            return False
+
+        # "Configured" is not enough — the vault must actually be sealed with the
+        # password we have in the Keychain. A previous run that rotated the vault
+        # but died before persisting (or vice versa) leaves a healthy-looking dir
+        # with an undecryptable vault; re-run the step instead of skipping it.
+        keychain_password = read_keychain_password(ctx.project_name)
+        if not vault_is_decryptable(ctx.deployment_dir, keychain_password):
+            ui.info(
+                "Vault lässt sich nicht mit dem Keychain-Passwort entschlüsseln "
+                "— konfiguriere Secrets neu..."
             )
             return False
 
@@ -141,16 +159,29 @@ class ProjectStep(WizardStep):
         )
         if not rotated:
             raise click.ClickException("Fehler beim Rotieren des Vault-Passworts.")
+
+        # Verify the end state before trusting it: the vault must decrypt with the
+        # new password and must NOT decrypt with the public template constant.
+        # Without this, a partial rotation silently leaves the vault sealed with
+        # a well-known password while a different one lands in Keychain/CI.
+        verify_rotation(ctx.deployment_dir, ctx.vault_password, TEMPLATE_VAULT_PASSWORD)
         ui.action_done("Vault-Passwort rotiert")
 
-        # 3f. Remove .bak files left behind by vault encryption
+        # 3f. Persist the vault password immediately — it only lived in memory so
+        # far, and every later step (token cleanup, repo creation, push) can fail
+        # and orphan the freshly rotated vault. Keychain first, fail loud.
+        ui.action_start("Vault-Passwort in Keychain speichern...")
+        store_keychain_password(ctx.project_name, ctx.vault_password)
+        ui.action_done("Vault-Passwort in Keychain gespeichert")
+
+        # 3g. Remove .bak files left behind by vault encryption
         for bak in ctx.project_dir.rglob("*.bak"):
             try:
                 bak.unlink()
             except OSError:
                 pass
 
-        # 3g. Token cleanup — immediately after vault encryption
+        # 3h. Token cleanup — immediately after vault encryption
         ui.action_start("Hetzner Token aufräumen...")
         from cli.hetzner.credentials import delete_token
 

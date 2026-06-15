@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import subprocess
 import time
 
@@ -11,24 +10,7 @@ from cli.sync_commands import _run_command
 
 from ..base import WizardStep, is_pushed, repo_exists
 from ..context import BootstrapContext
-
-
-def store_vault_password_in_keychain(project_name: str, vault_password: str) -> None:
-    """Store the vault password in macOS Keychain."""
-    from cli.ansible_commands import keychain_service_name
-
-    service_name = keychain_service_name(project_name)
-    user = os.environ.get("USER", "")
-    subprocess.run(
-        [
-            "security", "add-generic-password",
-            "-a", user, "-s", service_name,
-            "-w", vault_password,
-            "-U",  # update if exists
-        ],
-        check=True,
-        capture_output=True,
-    )
+from ..vault_guard import store_keychain_password
 
 
 class FinalizeStep(WizardStep):
@@ -140,10 +122,11 @@ class FinalizeStep(WizardStep):
                 + (f" ({last_err})" if last_err else "")
             )
 
-        # 4g. Store vault password in Keychain
+        # 4g. Re-assert vault password in Keychain (already stored in step 3f;
+        # this is an idempotent safety net in case it was changed since).
         ui.action_start("Vault-Passwort in Keychain speichern...")
         try:
-            store_vault_password_in_keychain(ctx.project_name, ctx.vault_password)
+            store_keychain_password(ctx.project_name, ctx.vault_password)
             ui.action_done("Vault-Passwort in Keychain gespeichert")
         except subprocess.CalledProcessError:
             ui.action_fail("Keychain-Speicherung fehlgeschlagen")
