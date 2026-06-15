@@ -141,11 +141,13 @@ def test_failed_deployment():
         assert result is False
 
 
-def test_deploy_github_repo_with_token():
+def test_deploy_github_repo_with_token(monkeypatch):
     """Test the deploy_github_repo function when a token is received"""
 
     # GIVEN
     # A mock GitHub OAuth flow and successful deployment
+    monkeypatch.setenv("GITHUB_CLIENT_ID", "test-client-id")
+    monkeypatch.setenv("GITHUB_CLIENT_SECRET", "test-client-secret")
 
     # WHEN
     # We run the deploy_github_repo function with mocks
@@ -193,11 +195,13 @@ def test_deploy_github_repo_with_token():
                 assert result == 0
 
 
-def test_deploy_github_repo_no_token():
+def test_deploy_github_repo_no_token(monkeypatch):
     """Test the deploy_github_repo function when no token is received"""
 
     # GIVEN
     # A mock GitHub OAuth flow that doesn't provide a token
+    monkeypatch.setenv("GITHUB_CLIENT_ID", "test-client-id")
+    monkeypatch.setenv("GITHUB_CLIENT_SECRET", "test-client-secret")
 
     # WHEN
     # We run the deploy_github_repo function with mocks

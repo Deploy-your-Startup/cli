@@ -18,6 +18,9 @@ def test_run_update_vms_executes_playbook(monkeypatch, tmp_path):
     monkeypatch.setattr(ansible_commands, "get_hcloud_token", lambda *args: "token")
     monkeypatch.setattr(ansible_commands, "_find_uv", lambda: "uv")
     monkeypatch.setattr(ansible_commands, "_ansible_env", lambda *args: {"BASE": "1"})
+    # Resolve to the bare binary name so the assertion is independent of whether
+    # ansible-playbook happens to sit next to the test interpreter (venv install).
+    monkeypatch.setattr(ansible_commands, "ansible_bin", lambda name: name)
 
     def fake_run(command, *, cwd, env=None, input_text=None, capture_output=False):
         recorded["command"] = command
