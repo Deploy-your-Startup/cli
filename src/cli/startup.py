@@ -62,7 +62,7 @@ def bootstrap(verbose):
     choice = ui.numbered_choice(
         "Welcher Bootstrap-Modus?",
         [
-            "Full-Stack — Django + k3s + Hetzner (für Apps mit Backend)",
+            "Full-Stack — Django + k3s (Hetzner oder eigener VPS)",
             "Pitch     — Astro Landing → Cloudflare Pages (für Coming-Soon/Marketing)",
         ],
     )

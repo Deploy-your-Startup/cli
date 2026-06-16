@@ -28,6 +28,25 @@ from ..vault_guard import (
 )
 
 
+BYOS_DISABLED_WORKFLOWS = [
+    "build-and-deploy-backend.yml",
+    "deploy-infrastructure.yml",
+    "deploy.yml",
+]
+
+
+def disable_byos_ci_workflows(project_dir: Path) -> list[str]:
+    """Remove Hetzner-oriented deploy workflows from BYOS projects."""
+    workflows_dir = project_dir / ".github" / "workflows"
+    removed: list[str] = []
+    for workflow_name in BYOS_DISABLED_WORKFLOWS:
+        workflow_path = workflows_dir / workflow_name
+        if workflow_path.exists():
+            workflow_path.unlink()
+            removed.append(workflow_name)
+    return removed
+
+
 class ProjectStep(WizardStep):
     number = 3
     name = "Projekt erstellen"
@@ -62,6 +81,7 @@ class ProjectStep(WizardStep):
             )
             return False
 
+        ctx.vault_password = keychain_password
         ui.skip_indicator(f"Projekt {ctx.project_name} bereits konfiguriert")
         return True
 
@@ -191,6 +211,15 @@ class ProjectStep(WizardStep):
             ui.action_start("BYOS-Inventory schreiben...")
             inv_path = write_byos_inventory(ctx.deployment_dir, ctx)
             ui.action_done(f"Inventory geschrieben: {inv_path.name}")
+
+            ui.action_start("BYOS-CI-Workflows deaktivieren...")
+            removed_workflows = disable_byos_ci_workflows(ctx.project_dir)
+            if removed_workflows:
+                ui.action_done(
+                    "Workflows deaktiviert: " + ", ".join(removed_workflows)
+                )
+            else:
+                ui.action_done("Keine BYOS-CI-Workflows zu deaktivieren")
 
             authorized_keys = (
                 "/root/.ssh/authorized_keys"

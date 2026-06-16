@@ -1,7 +1,7 @@
 """Bootstrap wizard package — guided pipeline for new startups.
 
 Two flows live here:
-  * fullstack: Domain → Hetzner → Project → Finalize  (Django + k3s + Hetzner)
+  * fullstack: Provider → Project → Finalize  (Django + k3s)
   * pitch:     Domain → Cloudflare → Project → Finalize  (Astro → Cloudflare Pages)
 
 Each step is its own module under ``wizard.steps.*``; the runner picks the
