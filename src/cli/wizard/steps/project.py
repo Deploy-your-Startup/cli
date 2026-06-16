@@ -70,6 +70,7 @@ def write_byos_ci_workflows(project_dir: Path, github_username: str) -> list[str
 
             jobs:
               deploy:
+                if: github.event_name != 'push' || github.event.before != '0000000000000000000000000000000000000000'
                 runs-on: ubuntu-latest
                 permissions:
                   contents: read
@@ -184,6 +185,7 @@ def write_byos_ci_workflows(project_dir: Path, github_username: str) -> list[str
 
             jobs:
               build-and-deploy:
+                if: github.event_name != 'push' || github.event.before != '0000000000000000000000000000000000000000'
                 runs-on: ubuntu-latest
                 permissions:
                   contents: read
