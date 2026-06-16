@@ -91,6 +91,16 @@ def run_wizard(ctx: BootstrapContext) -> None:
     if ctx.kind != "pitch":
         from cli.ansible_commands import keychain_service_name
         keychain_service = keychain_service_name(ctx.project_name)
+    byos_deploy_key_command = None
+    if ctx.kind == "fullstack" and ctx.provider == "byos":
+        from .steps.project import (
+            BYOS_DEPLOY_PUBLIC_KEY_FILE,
+            byos_deploy_key_install_command,
+        )
+
+        byos_deploy_key_command = byos_deploy_key_install_command(
+            ctx, ctx.deployment_dir / BYOS_DEPLOY_PUBLIC_KEY_FILE
+        )
     ui.summary_box(
         project_name=ctx.project_name,
         project_dir=str(ctx.project_dir),
@@ -98,4 +108,6 @@ def run_wizard(ctx: BootstrapContext) -> None:
         domain=ctx.base_domain,
         kind=ctx.kind,
         keychain_service=keychain_service,
+        provider=ctx.provider,
+        byos_deploy_key_command=byos_deploy_key_command,
     )
