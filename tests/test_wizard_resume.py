@@ -51,6 +51,9 @@ def test_write_byos_ci_workflows_replaces_deploy_workflows(tmp_path):
         assert "old/deploy-template" not in workflow
         assert "startup ansible" in workflow or "docker/build-push-action" in workflow
         assert "philipp-lein/deploy-your-startup" in workflow
+    assert "github.event.before != '0000000000000000000000000000000000000000'" in (
+        workflows_dir / "deploy.yml"
+    ).read_text()
     assert keep.exists()
 
 
