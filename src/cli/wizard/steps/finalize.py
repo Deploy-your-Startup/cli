@@ -107,10 +107,18 @@ class FinalizeStep(WizardStep):
         # user runs the install/deploy locally against their VPS, so we just print
         # the next steps instead of kicking off the Hetzner infrastructure workflow.
         if ctx.provider == "byos":
+            from .project import (
+                BYOS_DEPLOY_PUBLIC_KEY_FILE,
+                byos_deploy_key_install_command,
+            )
+
+            deploy_key_path = ctx.deployment_dir / BYOS_DEPLOY_PUBLIC_KEY_FILE
             ui.action_done("BYOS — kein Cloud-Provisioning nötig")
             ui.info(
-                "Nächste Schritte (lokal, sobald der Deploy-Key auf dem Server "
-                "liegt und der DNS A-Record gesetzt ist):\n"
+                "Nächste Schritte:\n"
+                "  # Deploy-Key einmalig auf den VPS kopieren\n"
+                f"  {byos_deploy_key_install_command(ctx, deploy_key_path)}\n"
+                "  # Danach lokal deployen\n"
                 f"  cd {ctx.deployment_dir}\n"
                 "  ./make.sh setup\n"
                 "  ./make.sh infrastructure --environment production\n"
