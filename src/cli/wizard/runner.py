@@ -98,8 +98,9 @@ def run_wizard(ctx: BootstrapContext) -> None:
             byos_deploy_key_install_command,
         )
 
+        deploy_key_path = ctx.deployment_dir / BYOS_DEPLOY_PUBLIC_KEY_FILE
         byos_deploy_key_command = byos_deploy_key_install_command(
-            ctx, ctx.deployment_dir / BYOS_DEPLOY_PUBLIC_KEY_FILE
+            ctx, deploy_key_path.read_text().strip()
         )
     ui.summary_box(
         project_name=ctx.project_name,

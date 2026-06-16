@@ -113,11 +113,12 @@ class FinalizeStep(WizardStep):
             )
 
             deploy_key_path = ctx.deployment_dir / BYOS_DEPLOY_PUBLIC_KEY_FILE
+            deploy_public_key = deploy_key_path.read_text().strip()
             ui.action_done("BYOS — kein Cloud-Provisioning nötig")
             ui.info(
                 "Nächste Schritte:\n"
                 "  # Deploy-Key einmalig auf den VPS kopieren\n"
-                f"  {byos_deploy_key_install_command(ctx, deploy_key_path)}\n"
+                f"  {byos_deploy_key_install_command(ctx, deploy_public_key)}\n"
                 "  # Danach lokal deployen\n"
                 f"  cd {ctx.deployment_dir}\n"
                 "  ./make.sh setup\n"

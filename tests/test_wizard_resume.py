@@ -86,9 +86,10 @@ def test_byos_deploy_key_install_command(tmp_path):
     )
 
     command = project_step.byos_deploy_key_install_command(
-        ctx, tmp_path / "deployment" / BYOS_DEPLOY_PUBLIC_KEY_FILE
+        ctx, "ssh-ed25519 AAAA test@example"
     )
 
+    assert command.startswith("printf '%s\\n' ")
+    assert "ssh-ed25519 AAAA test@example" in command
     assert "ssh root@203.0.113.10" in command
     assert "authorized_keys" in command
-    assert "deployment/byos_deploy_key.pub" in command
