@@ -1,6 +1,6 @@
 from cli.wizard.context import BootstrapContext
 from cli.wizard.steps import project as project_step
-from cli.wizard.steps.project import BYOS_DISABLED_WORKFLOWS
+from cli.wizard.steps.project import BYOS_CI_WORKFLOWS
 from cli.wizard.steps.project import BYOS_DEPLOY_PUBLIC_KEY_IGNORE
 from cli.wizard.steps.project import BYOS_DEPLOY_PUBLIC_KEY_FILE
 from cli.wizard.steps.project import ProjectStep
@@ -35,19 +35,21 @@ def test_project_step_skip_restores_vault_password(monkeypatch, tmp_path):
     assert ctx.vault_password == "stored-secret"
 
 
-def test_disable_byos_ci_workflows_removes_deploy_workflows(tmp_path):
+def test_write_byos_ci_workflows_replaces_deploy_workflows(tmp_path):
     workflows_dir = tmp_path / ".github" / "workflows"
     workflows_dir.mkdir(parents=True)
-    for workflow_name in BYOS_DISABLED_WORKFLOWS:
-        (workflows_dir / workflow_name).write_text("name: deploy\n")
+    for workflow_name in BYOS_CI_WORKFLOWS:
+        (workflows_dir / workflow_name).write_text("uses: old/deploy-template\n")
     keep = workflows_dir / "dependabot.yml"
     keep.write_text("name: keep\n")
 
-    removed = project_step.disable_byos_ci_workflows(tmp_path)
+    written = project_step.write_byos_ci_workflows(tmp_path)
 
-    assert removed == BYOS_DISABLED_WORKFLOWS
-    for workflow_name in BYOS_DISABLED_WORKFLOWS:
-        assert not (workflows_dir / workflow_name).exists()
+    assert written == BYOS_CI_WORKFLOWS
+    for workflow_name in BYOS_CI_WORKFLOWS:
+        workflow = (workflows_dir / workflow_name).read_text()
+        assert "old/deploy-template" not in workflow
+        assert "startup ansible" in workflow or "docker/build-push-action" in workflow
     assert keep.exists()
 
 
