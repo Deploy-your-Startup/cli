@@ -7,6 +7,8 @@ tracking, numbered choices, skip indicators, and summary boxes.
 
 from __future__ import annotations
 
+import textwrap
+
 import click
 
 
@@ -178,6 +180,8 @@ def summary_box(
     domain: str,
     kind: str = "fullstack",
     keychain_service: str | None = None,
+    provider: str = "hetzner",
+    byos_deploy_key_command: str | None = None,
 ) -> None:
     """Display the framed final summary with next steps."""
     W = 64  # total width including borders
@@ -185,6 +189,19 @@ def summary_box(
     def _pad(text: str) -> str:
         inner = W - 6
         return f"  ║  {text:<{inner}} ║"
+
+    def _emit(text: str = "") -> None:
+        click.echo(click.style(_pad(text), fg="green"))
+
+    def _emit_wrapped(text: str) -> None:
+        inner = W - 6
+        for line in textwrap.wrap(
+            text,
+            width=inner,
+            break_long_words=True,
+            break_on_hyphens=False,
+        ) or [""]:
+            _emit(line)
 
     def _empty() -> str:
         return _pad("")
@@ -231,25 +248,28 @@ def summary_box(
             )
         )
     else:
-        click.echo(
-            click.style(
-                _pad("Build & Deploy laufen automatisch via GitHub Actions"), fg="green"
-            )
-        )
-        click.echo(
-            click.style(_pad("(Push auf main → backend & deployment)."), fg="green")
-        )
-        click.echo(click.style(_empty(), fg="green"))
-        click.echo(
-            click.style(_pad("Einmalig die Infrastruktur provisionieren:"), fg="green")
-        )
-        click.echo(click.style(_empty(), fg="green"))
-        click.echo(click.style(_pad(f"  cd {project_name}/deployment"), fg="green"))
-        click.echo(click.style(_pad("  startup ansible setup"), fg="green"))
-        click.echo(
-            click.style(_pad("  startup ansible infrastructure   # ~5-10 min"), fg="green")
-        )
-        click.echo(click.style(_pad("  startup ansible kubeconfig"), fg="green"))
+        if provider == "byos":
+            _emit("BYOS: Deploy läuft lokal gegen deinen VPS.")
+            _emit()
+            _emit("1) Deploy-Key einmalig auf den VPS kopieren:")
+            if byos_deploy_key_command:
+                _emit_wrapped(f"  {byos_deploy_key_command}")
+            _emit()
+            _emit("2) Danach lokal deployen:")
+            _emit(f"  cd {project_dir}/deployment")
+            _emit("  ./make.sh setup")
+            _emit("  ./make.sh infrastructure --environment production")
+            _emit("  ./make.sh deploy --environment production")
+        else:
+            _emit("Build & Deploy laufen automatisch via GitHub Actions")
+            _emit("(Push auf main → backend & deployment).")
+            _emit()
+            _emit("Einmalig die Infrastruktur provisionieren:")
+            _emit()
+            _emit(f"  cd {project_name}/deployment")
+            _emit("  startup ansible setup")
+            _emit("  startup ansible infrastructure   # ~5-10 min")
+            _emit("  startup ansible kubeconfig")
     click.echo(click.style(_empty(), fg="green"))
     click.echo(click.style(bot, fg="green"))
     click.echo()
