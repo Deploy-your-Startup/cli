@@ -27,6 +27,7 @@ DEFAULT_SHARED_DIR = ".shared-roles"
 DEFAULT_VERSION = "main"
 SPARSE_PATHS = [
     "roles",
+    "tofu",
     "ansible.cfg",
     "requirements.yml",
     "backup-playbook.yml",
@@ -254,6 +255,10 @@ def _copy_local_repo(source_dir: Path, target_dir: Path) -> Path:
     target_dir.mkdir(parents=True, exist_ok=True)
     shutil.copytree(source_dir / "roles", target_dir / "roles")
 
+    tofu_source = source_dir / "tofu"
+    if tofu_source.exists():
+        shutil.copytree(tofu_source, target_dir / "tofu")
+
     ansible_cfg = source_dir / "ansible.cfg"
     if ansible_cfg.exists():
         shutil.copy2(ansible_cfg, target_dir / "ansible.cfg")
@@ -286,7 +291,7 @@ def _copy_local_repo(source_dir: Path, target_dir: Path) -> Path:
 
 
 def _configure_sparse_checkout(target_dir: Path, cwd: Path) -> None:
-    sparse_entries = ["roles/*", *[f"/{path}" for path in ROOT_SHARED_FILES]]
+    sparse_entries = ["roles/*", "tofu/*", *[f"/{path}" for path in ROOT_SHARED_FILES]]
 
     _run_command(
         ["git", "-C", str(target_dir), "config", "core.sparseCheckout", "true"],
@@ -748,6 +753,22 @@ def run_infrastructure(
         repo_url=repo_url,
         refresh=refresh,
     )
+
+    # Provisioning is handled by OpenTofu (replaces the provision-infrastructure
+    # play / hetzner-* roles). Imported lazily to avoid an import cycle.
+    from .tofu_commands import run_tofu_provision
+
+    run_tofu_provision(
+        vault_password,
+        environment,
+        working_directory=working_directory,
+        shared_dir=shared_dir,
+    )
+
+    # Configuration stays in Ansible: k3s, Helm, cert-manager, CCM, CSI run
+    # against the nodes OpenTofu just created (discovered live via
+    # inventory.hcloud.yml). The limit drops `provision-infrastructure` so the
+    # old provisioning play targets no hosts even on not-yet-migrated projects.
     hcloud_token = get_hcloud_token(
         working_directory, vault_password, environment, shared_dir
     )
@@ -766,7 +787,7 @@ def run_infrastructure(
             "--tags",
             "infrastructure",
             "-l",
-            f"{environment},provision-infrastructure",
+            environment,
         ],
         cwd=working_dir,
         env=env,
