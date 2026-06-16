@@ -5,6 +5,8 @@ from __future__ import annotations
 import subprocess
 import time
 
+import click
+
 from cli import wizard_output as ui
 from cli.sync_commands import _run_command
 
@@ -81,6 +83,11 @@ class FinalizeStep(WizardStep):
         ui.action_done("GitHub Actions konfiguriert")
 
         # 4d. Vault password as GitHub secret
+        if not ctx.vault_password:
+            raise click.ClickException(
+                "Vault-Passwort fehlt im Bootstrap-Kontext. Bitte Step 3 erneut "
+                "ausführen oder das Passwort in der Keychain prüfen."
+            )
         ui.action_start("Vault-Passwort als GitHub Secret...")
         _run_command(
             ["gh", "secret", "set", "VAULT_PASSWORD", "--body", ctx.vault_password],
