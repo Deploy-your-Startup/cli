@@ -109,7 +109,6 @@ class ProjectStep(WizardStep):
             "§§deploy_your_startup.github_username§§": ctx.github_username,
             "§§deploy_your_startup.docker_registry_host§§": f"{ctx.docker_registry_host}/{ctx.github_username}",
             "§§deploy_your_startup.postgres_version§§": ctx.postgres_version,
-            "§§deploy_your_startup.provider§§": ctx.provider,
             "§§deploy_your_startup.ci_key§§": ci_public_key,
             "§§deploy_your_startup.user_key§§": user_public_key,
         }
