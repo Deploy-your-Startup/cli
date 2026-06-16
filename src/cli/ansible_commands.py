@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -684,6 +685,110 @@ def _resolve_restore_file(
     return resolved
 
 
+BYOS_INVENTORY = "inventory.byos.yml"
+
+
+def _is_byos(working_dir: Path) -> bool:
+    """A project is bring-your-own-server when it ships a static byos inventory."""
+    return (working_dir / BYOS_INVENTORY).exists()
+
+
+def get_byos_ssh_key(
+    working_directory: str,
+    vault_password: str,
+    shared_dir: str = DEFAULT_SHARED_DIR,
+) -> str:
+    """Decrypt the deploy SSH private key (ci_ssh_key) from the vault."""
+    working_dir = _resolve_working_dir(working_directory)
+    env = _ansible_env(working_dir, shared_dir)
+    result = _run_command(
+        [
+            _find_uv(),
+            "run",
+            "--project",
+            str(working_dir),
+            ansible_bin("ansible-vault"),
+            "view",
+            "ci_ssh_key",
+            "--vault-password-file",
+            "/bin/cat",
+        ],
+        cwd=working_dir,
+        env=env,
+        input_text=vault_password,
+        capture_output=True,
+    )
+    if not result.stdout.strip():
+        raise click.ClickException("Could not read ci_ssh_key from Ansible Vault.")
+    return result.stdout
+
+
+@contextlib.contextmanager
+def byos_private_key_file(
+    working_directory: str,
+    vault_password: str,
+    shared_dir: str = DEFAULT_SHARED_DIR,
+):
+    """Decrypt the deploy key into a 0600 temp file; clean it up on exit."""
+    ssh_key = get_byos_ssh_key(working_directory, vault_password, shared_dir)
+    fd, key_path = tempfile.mkstemp(prefix="byos-deploy-key-")
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w") as fh:
+            fh.write(ssh_key if ssh_key.endswith("\n") else ssh_key + "\n")
+        yield key_path
+    finally:
+        try:
+            os.unlink(key_path)
+        except OSError:
+            pass
+
+
+def _run_byos_playbook(
+    working_directory: str,
+    vault_password: str,
+    shared_dir: str,
+    *,
+    playbook: str = "playbook.yml",
+    tags: list[str] | None = None,
+    skip_tags: list[str] | None = None,
+    limit: list[str] | None = None,
+    extra_vars: str | None = None,
+) -> None:
+    """Run a playbook against the byos static inventory over SSH.
+
+    No HCLOUD_TOKEN and no dynamic inventory: the deploy key is decrypted from the
+    vault into a private temp file passed via ``--private-key``.
+    """
+    working_dir = _resolve_working_dir(working_directory)
+    env = _ansible_env(working_dir, shared_dir)
+
+    with byos_private_key_file(working_directory, vault_password, shared_dir) as key_path:
+        command = [
+            _find_uv(),
+            "run",
+            "--project",
+            str(working_dir),
+            ansible_bin("ansible-playbook"),
+            playbook,
+            "-i",
+            BYOS_INVENTORY,
+            "--private-key",
+            key_path,
+            "--vault-password-file",
+            "/bin/cat",
+        ]
+        if tags:
+            command += ["--tags", ",".join(tags)]
+        if skip_tags:
+            command += ["--skip-tags", ",".join(skip_tags)]
+        if limit:
+            command += ["-l", ",".join(limit)]
+        if extra_vars:
+            command += ["--extra-vars", extra_vars]
+        _run_command(command, cwd=working_dir, env=env, input_text=vault_password)
+
+
 def run_deploy(
     vault_password: str,
     environment: str,
@@ -703,6 +808,15 @@ def run_deploy(
         repo_url=repo_url,
         refresh=refresh,
     )
+    if _is_byos(working_dir):
+        _run_byos_playbook(
+            working_directory,
+            vault_password,
+            shared_dir,
+            tags=[service or "all"],
+            skip_tags=["infrastructure"],
+        )
+        return
     hcloud_token = get_hcloud_token(
         working_directory, vault_password, environment, shared_dir
     )
@@ -748,6 +862,18 @@ def run_infrastructure(
         repo_url=repo_url,
         refresh=refresh,
     )
+    if _is_byos(working_dir):
+        # No cloud to provision — just install k3s + cluster add-ons on the VPS.
+        # The provision-infrastructure host doesn't exist in the byos inventory,
+        # so those plays are skipped automatically.
+        _run_byos_playbook(
+            working_directory,
+            vault_password,
+            shared_dir,
+            tags=["infrastructure"],
+            limit=[environment],
+        )
+        return
     hcloud_token = get_hcloud_token(
         working_directory, vault_password, environment, shared_dir
     )
@@ -823,11 +949,16 @@ def run_kubeconfig(
         repo_url=repo_url,
         refresh=refresh,
     )
-    hcloud_token = get_hcloud_token(
-        working_directory, vault_password, environment, shared_dir
-    )
+    byos = _is_byos(working_dir)
     env = _ansible_env(working_dir, shared_dir)
-    env["HCLOUD_TOKEN"] = hcloud_token
+    if byos:
+        # No Hetzner API; read the cluster's kubeconfig over SSH from the VPS.
+        inventory = BYOS_INVENTORY
+    else:
+        hcloud_token = get_hcloud_token(
+            working_directory, vault_password, environment, shared_dir
+        )
+        env["HCLOUD_TOKEN"] = hcloud_token
 
     inventory_path = working_dir / inventory
     if not inventory_path.exists():
@@ -879,10 +1010,22 @@ def run_kubeconfig(
     with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
         tmp_path = Path(tmp_file.name)
 
+    # On byos, scp/ssh authenticate with the deploy key decrypted from the vault.
+    ssh_key_path: str | None = None
+    ssh_key_opts: list[str] = []
+    if byos:
+        ssh_key = get_byos_ssh_key(working_directory, vault_password, shared_dir)
+        fd, ssh_key_path = tempfile.mkstemp(prefix="byos-deploy-key-")
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w") as fh:
+            fh.write(ssh_key if ssh_key.endswith("\n") else ssh_key + "\n")
+        ssh_key_opts = ["-i", ssh_key_path]
+
     try:
         _run_command(
             [
                 "scp",
+                *ssh_key_opts,
                 "-o",
                 "StrictHostKeyChecking=accept-new",
                 f"{ssh_user}@{master_ip}:/etc/rancher/k3s/k3s.yaml",
@@ -903,6 +1046,7 @@ def run_kubeconfig(
                 _run_command(
                     [
                         "ssh",
+                        *ssh_key_opts,
                         "-o",
                         "StrictHostKeyChecking=accept-new",
                         f"{ssh_user}@{master_ip}",
@@ -970,6 +1114,11 @@ def run_kubeconfig(
         return output_path
     finally:
         tmp_path.unlink(missing_ok=True)
+        if ssh_key_path:
+            try:
+                os.unlink(ssh_key_path)
+            except OSError:
+                pass
 
 
 def run_backup(
@@ -1001,6 +1150,19 @@ def run_backup(
         if backup_dir
         else Path.home() / "Backups" / project_name
     )
+    backup_extra_vars = (
+        f"project_name={project_name} backup_environment={environment} "
+        f"local_backup_root={resolved_backup_dir}"
+    )
+    if _is_byos(working_dir):
+        _run_byos_playbook(
+            working_directory,
+            vault_password,
+            shared_dir,
+            playbook=str(playbook_path),
+            extra_vars=backup_extra_vars,
+        )
+        return
     hcloud_token = get_hcloud_token(
         working_directory, vault_password, environment, shared_dir
     )
@@ -1018,7 +1180,7 @@ def run_backup(
             "--vault-password-file",
             "/bin/cat",
             "--extra-vars",
-            f"project_name={project_name} backup_environment={environment} local_backup_root={resolved_backup_dir}",
+            backup_extra_vars,
         ],
         cwd=working_dir,
         env=env,
@@ -1052,17 +1214,27 @@ def run_update_vms(
     playbook_path = _resolve_playbook_path(
         working_dir, playbook, "Update VMs", shared_dir
     )
-    hcloud_token = get_hcloud_token(
-        working_directory, vault_password, environment, shared_dir
-    )
-    env = _ansible_env(working_dir, shared_dir)
-    env["HCLOUD_TOKEN"] = hcloud_token
-
     effective_limit = f"{environment},{limit}" if limit else environment
     extra_vars = {
         "update_reboot": reboot,
         "update_environment": environment,
     }
+
+    if _is_byos(working_dir):
+        _run_byos_playbook(
+            working_directory,
+            vault_password,
+            shared_dir,
+            playbook=str(playbook_path),
+            limit=[effective_limit],
+            extra_vars=json.dumps(extra_vars),
+        )
+        return
+    hcloud_token = get_hcloud_token(
+        working_directory, vault_password, environment, shared_dir
+    )
+    env = _ansible_env(working_dir, shared_dir)
+    env["HCLOUD_TOKEN"] = hcloud_token
 
     _run_command(
         [
@@ -1147,12 +1319,6 @@ def run_restore(
             label="Media",
         )
 
-    hcloud_token = get_hcloud_token(
-        working_directory, vault_password, environment, shared_dir
-    )
-    env = _ansible_env(working_dir, shared_dir)
-    env["HCLOUD_TOKEN"] = hcloud_token
-
     extra_vars = {
         "project_name": project_name,
         "restore_environment": environment,
@@ -1161,6 +1327,21 @@ def run_restore(
         "db_backup_file": str(resolved_db_file) if resolved_db_file else "",
         "media_backup_file": str(resolved_media_file) if resolved_media_file else "",
     }
+
+    if _is_byos(working_dir):
+        _run_byos_playbook(
+            working_directory,
+            vault_password,
+            shared_dir,
+            playbook=str(playbook_path),
+            extra_vars=json.dumps(extra_vars),
+        )
+        return
+    hcloud_token = get_hcloud_token(
+        working_directory, vault_password, environment, shared_dir
+    )
+    env = _ansible_env(working_dir, shared_dir)
+    env["HCLOUD_TOKEN"] = hcloud_token
 
     _run_command(
         [

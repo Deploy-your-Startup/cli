@@ -209,6 +209,7 @@ def bootstrap_project(
         "§§deploy_your_startup.github_username§§": github_username,
         "§§deploy_your_startup.docker_registry_host§§": f"{docker_registry_host}/{github_username}",
         "§§deploy_your_startup.postgres_version§§": postgres_version,
+        "§§deploy_your_startup.provider§§": "hetzner",
         "§§deploy_your_startup.ci_key§§": ci_public_key,
         "§§deploy_your_startup.user_key§§": user_public_key,
     }

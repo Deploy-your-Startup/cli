@@ -68,6 +68,19 @@ def bootstrap(verbose):
     )
     kind = "fullstack" if choice == 1 else "pitch"
 
+    # ── Provider selection (full-stack only) ─────────────────────
+
+    provider = "hetzner"
+    if kind == "fullstack":
+        provider_choice = ui.numbered_choice(
+            "Wo soll deployed werden?",
+            [
+                "Hetzner — VMs automatisch provisionieren (Cloud-Account nötig)",
+                "Bring your own server — eigener VPS (z.B. IONOS) per SSH, günstiger",
+            ],
+        )
+        provider = "hetzner" if provider_choice == 1 else "byos"
+
     # ── Collect inputs ───────────────────────────────────────────
 
     # Project name (kebab-case validated)
@@ -120,6 +133,7 @@ def bootstrap(verbose):
         "GitHub":  f"{github_username}/{project_name}",
     }
     if kind == "fullstack":
+        summary["Provider"] = "Hetzner" if provider == "hetzner" else "Bring your own server"
         summary["Registry"] = f"ghcr.io/{github_username}"
         summary["Postgres"] = "17"
     ui.input_summary(summary)
@@ -138,6 +152,7 @@ def bootstrap(verbose):
         sentry_dsn=sentry_dsn,
         output_dir=Path(output_dir),
         kind=kind,
+        provider=provider,
     )
 
     run_wizard(ctx)

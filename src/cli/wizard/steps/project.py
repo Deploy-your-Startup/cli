@@ -109,6 +109,7 @@ class ProjectStep(WizardStep):
             "§§deploy_your_startup.github_username§§": ctx.github_username,
             "§§deploy_your_startup.docker_registry_host§§": f"{ctx.docker_registry_host}/{ctx.github_username}",
             "§§deploy_your_startup.postgres_version§§": ctx.postgres_version,
+            "§§deploy_your_startup.provider§§": ctx.provider,
             "§§deploy_your_startup.ci_key§§": ci_public_key,
             "§§deploy_your_startup.user_key§§": user_public_key,
         }
@@ -131,10 +132,12 @@ class ProjectStep(WizardStep):
         if ctx.sentry_dsn:
             field_set.append(("backend_sentry_dsn", ctx.sentry_dsn))
 
-        file_content = [
-            ("ci_ssh_key", ci_private_key),
-            ("hcloud_token_production", ctx.hetzner_token),
-        ]
+        # ci_ssh_key doubles as the deploy key for byos (the local/CI deploy reads
+        # it from the vault to SSH into the VPS). The hcloud token only exists for
+        # the Hetzner provider.
+        file_content = [("ci_ssh_key", ci_private_key)]
+        if ctx.provider == "hetzner":
+            file_content.append(("hcloud_token_production", ctx.hetzner_token))
 
         ok, _, pw_failed = update_vault_secrets(
             repo=str(ctx.deployment_dir),
@@ -181,9 +184,31 @@ class ProjectStep(WizardStep):
             except OSError:
                 pass
 
-        # 3h. Token cleanup — immediately after vault encryption
-        ui.action_start("Hetzner Token aufräumen...")
-        from cli.hetzner.credentials import delete_token
+        # 3h. Provider-specific finishing touches
+        if ctx.provider == "byos":
+            # Write the static inventory and hand the user the deploy public key.
+            from .byos import write_byos_inventory
 
-        delete_token()
-        ui.action_done("Hetzner Token aufgeräumt 🗑️")
+            ui.action_start("BYOS-Inventory schreiben...")
+            inv_path = write_byos_inventory(ctx.deployment_dir, ctx)
+            ui.action_done(f"Inventory geschrieben: {inv_path.name}")
+
+            authorized_keys = (
+                "/root/.ssh/authorized_keys"
+                if ctx.byos_ssh_user == "root"
+                else f"/home/{ctx.byos_ssh_user}/.ssh/authorized_keys"
+            )
+            ui.info(
+                "Füge diesen Deploy-Public-Key auf dem Server in "
+                f"{authorized_keys} ein, damit Ansible sich einloggen kann:\n\n"
+                f"{ci_public_key}\n"
+                f"Schnellweg:  ssh-copy-id -f -i - {ctx.byos_ssh_user}@{ctx.byos_host}  "
+                "(oder den Key manuell anhängen)."
+            )
+        else:
+            # Token cleanup — immediately after vault encryption.
+            ui.action_start("Hetzner Token aufräumen...")
+            from cli.hetzner.credentials import delete_token
+
+            delete_token()
+            ui.action_done("Hetzner Token aufgeräumt 🗑️")
