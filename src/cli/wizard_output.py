@@ -7,8 +7,6 @@ tracking, numbered choices, skip indicators, and summary boxes.
 
 from __future__ import annotations
 
-import textwrap
-
 import click
 
 
@@ -193,16 +191,6 @@ def summary_box(
     def _emit(text: str = "") -> None:
         click.echo(click.style(_pad(text), fg="green"))
 
-    def _emit_wrapped(text: str) -> None:
-        inner = W - 6
-        for line in textwrap.wrap(
-            text,
-            width=inner,
-            break_long_words=True,
-            break_on_hyphens=False,
-        ) or [""]:
-            _emit(line)
-
     def _empty() -> str:
         return _pad("")
 
@@ -251,15 +239,10 @@ def summary_box(
         if provider == "byos":
             _emit("BYOS: Deploy läuft lokal gegen deinen VPS.")
             _emit()
-            _emit("1) Deploy-Key einmalig auf den VPS kopieren:")
+            _emit("Copy-Paste-Befehle stehen direkt unter dieser Box.")
             if byos_deploy_key_command:
-                _emit_wrapped(f"  {byos_deploy_key_command}")
-            _emit()
-            _emit("2) Danach lokal deployen:")
-            _emit(f"  cd {project_dir}/deployment")
-            _emit("  ./make.sh setup")
-            _emit("  ./make.sh infrastructure --environment production")
-            _emit("  ./make.sh deploy --environment production")
+                _emit("1) Deploy-Key auf den VPS kopieren")
+            _emit("2) Danach lokal deployen")
         else:
             _emit("Build & Deploy laufen automatisch via GitHub Actions")
             _emit("(Push auf main → backend & deployment).")
@@ -273,6 +256,19 @@ def summary_box(
     click.echo(click.style(_empty(), fg="green"))
     click.echo(click.style(bot, fg="green"))
     click.echo()
+    if kind != "pitch" and provider == "byos":
+        click.echo("  Copy-Paste:")
+        click.echo()
+        if byos_deploy_key_command:
+            click.echo("  # Deploy-Key einmalig auf den VPS kopieren")
+            click.echo(f"  {byos_deploy_key_command}")
+            click.echo()
+        click.echo("  # Danach lokal deployen")
+        click.echo(f"  cd {project_dir}/deployment")
+        click.echo("  ./make.sh setup")
+        click.echo("  ./make.sh infrastructure --environment production")
+        click.echo("  ./make.sh deploy --environment production")
+        click.echo()
 
 
 # ── Simple helpers ───────────────────────────────────────────────────
