@@ -83,7 +83,17 @@ def bootstrap(verbose):
     # Full-stack-only inputs
     additional_domains = ""
     sentry_dsn = ""
+    cloud_provider = "hetzner"
     if kind == "fullstack":
+        cloud_choice = ui.numbered_choice(
+            "In welcher Cloud soll das Startup laufen?",
+            [
+                "Hetzner Cloud",
+                "OVH Public Cloud (OpenStack)",
+            ],
+        )
+        cloud_provider = "hetzner" if cloud_choice == 1 else "ovh"
+
         additional_domains = ui.text_input(
             "Weitere Domains (komma-getrennt, Enter zum Überspringen)",
             default="",
@@ -120,6 +130,7 @@ def bootstrap(verbose):
         "GitHub":  f"{github_username}/{project_name}",
     }
     if kind == "fullstack":
+        summary["Cloud"] = "Hetzner" if cloud_provider == "hetzner" else "OVH"
         summary["Registry"] = f"ghcr.io/{github_username}"
         summary["Postgres"] = "17"
     ui.input_summary(summary)
@@ -138,6 +149,7 @@ def bootstrap(verbose):
         sentry_dsn=sentry_dsn,
         output_dir=Path(output_dir),
         kind=kind,
+        cloud_provider=cloud_provider,
     )
 
     run_wizard(ctx)
