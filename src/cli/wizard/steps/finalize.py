@@ -96,7 +96,24 @@ class FinalizeStep(WizardStep):
         )
         ui.action_done("Gepusht")
 
-        # 4f. Trigger infrastructure workflow (retry — GitHub needs time to index)
+        # 4f. Provision. On byos there is nothing to provision in the cloud — the
+        # user runs the install/deploy locally against their VPS, so we just print
+        # the next steps instead of kicking off the Hetzner infrastructure workflow.
+        if ctx.provider == "byos":
+            ui.action_done("BYOS — kein Cloud-Provisioning nötig")
+            ui.info(
+                "Nächste Schritte (lokal, sobald der Deploy-Key auf dem Server "
+                "liegt und der DNS A-Record gesetzt ist):\n"
+                f"  cd {ctx.deployment_dir}\n"
+                "  ./make.sh setup\n"
+                "  ./make.sh infrastructure --environment production\n"
+                "  ./make.sh deploy --environment production\n"
+                "Das installiert k3s auf dem VPS und rollt cert-manager, Postgres "
+                "und das Backend aus."
+            )
+            return
+
+        # 4f (hetzner). Trigger infra workflow (retry — GitHub needs time to index)
         ui.action_start("Infrastructure-Workflow starten...")
         triggered = False
         last_err: str | None = None

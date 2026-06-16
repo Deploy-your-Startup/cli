@@ -19,7 +19,12 @@ class BootstrapContext:
     output_dir: Path
     mode: str = "github"
     kind: str = "fullstack"  # "fullstack" | "pitch"
+    provider: str = "hetzner"  # "hetzner" | "byos" (bring your own server)
     docker_registry_host: str = "ghcr.io"
+
+    # Bring-your-own-server inputs (provider == "byos")
+    byos_host: str | None = None  # VPS IP or hostname Ansible connects to
+    byos_ssh_user: str = "root"
 
     # Populated by steps
     hetzner_token: str | None = None

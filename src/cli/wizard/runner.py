@@ -11,6 +11,7 @@ from cli import wizard_output as ui
 
 from .base import WizardStep
 from .context import BootstrapContext
+from .steps.byos import ByosStep
 from .steps.cloudflare import CloudflareStep
 from .steps.domain import DomainStep
 from .steps.finalize import FinalizeStep
@@ -22,13 +23,20 @@ from .steps.project import ProjectStep
 FULLSTACK_STEPS: list[type[WizardStep]] = [
     DomainStep, HetznerStep, ProjectStep, FinalizeStep,
 ]
+# Bring-your-own-server: no Hetzner token and no domain-registrar step — the user
+# brings an existing VPS and points DNS at it themselves (explained in ByosStep).
+BYOS_STEPS: list[type[WizardStep]] = [
+    ByosStep, ProjectStep, FinalizeStep,
+]
 PITCH_STEPS: list[type[WizardStep]] = [
     CloudflareStep, DomainStep, PitchProjectStep, PitchFinalizeStep,
 ]
 
 
 def steps_for(ctx: BootstrapContext) -> list[type[WizardStep]]:
-    return PITCH_STEPS if ctx.kind == "pitch" else FULLSTACK_STEPS
+    if ctx.kind == "pitch":
+        return PITCH_STEPS
+    return BYOS_STEPS if ctx.provider == "byos" else FULLSTACK_STEPS
 
 
 def check_prerequisites(ctx: BootstrapContext) -> None:
