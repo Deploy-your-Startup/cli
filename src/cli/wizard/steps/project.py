@@ -33,6 +33,7 @@ BYOS_DISABLED_WORKFLOWS = [
     "deploy-infrastructure.yml",
     "deploy.yml",
 ]
+BYOS_DEPLOY_PUBLIC_KEY_FILE = "byos_deploy_key.pub"
 
 
 def disable_byos_ci_workflows(project_dir: Path) -> list[str]:
@@ -45,6 +46,13 @@ def disable_byos_ci_workflows(project_dir: Path) -> list[str]:
             workflow_path.unlink()
             removed.append(workflow_name)
     return removed
+
+
+def write_byos_deploy_public_key(deployment_dir: Path, public_key: str) -> Path:
+    """Write the public deploy key users must add to their existing VPS."""
+    key_path = deployment_dir / BYOS_DEPLOY_PUBLIC_KEY_FILE
+    key_path.write_text(public_key.strip() + "\n")
+    return key_path
 
 
 class ProjectStep(WizardStep):
@@ -211,6 +219,12 @@ class ProjectStep(WizardStep):
             ui.action_start("BYOS-Inventory schreiben...")
             inv_path = write_byos_inventory(ctx.deployment_dir, ctx)
             ui.action_done(f"Inventory geschrieben: {inv_path.name}")
+
+            ui.action_start("BYOS-Deploy-Key schreiben...")
+            deploy_key_path = write_byos_deploy_public_key(
+                ctx.deployment_dir, ci_public_key
+            )
+            ui.action_done(f"Deploy-Key geschrieben: {deploy_key_path.name}")
 
             ui.action_start("BYOS-CI-Workflows deaktivieren...")
             removed_workflows = disable_byos_ci_workflows(ctx.project_dir)
