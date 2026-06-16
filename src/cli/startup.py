@@ -1140,6 +1140,52 @@ def ansible_restore(
 
 # === HETZNER COMMANDS ===
 @cli.group()
+def tofu():
+    """OpenTofu infrastructure provisioning helpers."""
+    pass
+
+
+@tofu.command("state-setup")
+@click.option(
+    "--vault-password",
+    "--vault_password",
+    "vault_password",
+    help="Vault password",
+)
+@click.option("--environment", required=True, help="Target environment")
+@click.option(
+    "--working-directory",
+    "--working_directory",
+    "working_directory",
+    default=".",
+    show_default=True,
+)
+@click.option("--access-key", "access_key", default=None, help="S3 access key (prompted if omitted)")
+@click.option("--secret-key", "secret_key", default=None, help="S3 secret key (prompted if omitted)")
+@click.option("--bucket", default=None, help="Override the state bucket name")
+def tofu_state_setup(vault_password, environment, working_directory, access_key, secret_key, bucket):
+    """One-time: store S3 state credentials in the vault and create the bucket.
+
+    After this, `make infrastructure` uses remote state for this environment.
+    """
+    from cli.ansible_commands import resolve_vault_password
+    from cli.tofu_commands import setup_state_backend
+
+    resolved_vault_password = resolve_vault_password(
+        vault_password=vault_password,
+        working_directory=working_directory,
+    )
+    setup_state_backend(
+        resolved_vault_password,
+        environment,
+        working_directory=working_directory,
+        access_key=access_key,
+        secret_key=secret_key,
+        bucket=bucket,
+    )
+
+
+@cli.group()
 def hetzner():
     """Hetzner Cloud account, project, domain & token management via browser automation."""
     pass

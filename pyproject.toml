@@ -33,6 +33,12 @@ dev = [
     "pytest>=9.0.3",
     "ruff>=0.15.16",
 ]
+# Only needed for the one-time `startup tofu state-setup` (operator machine).
+# Deploys/CI just read the existing bucket via OpenTofu's own S3 client, so this
+# stays out of the pruned deployment dependency set.
+state = [
+    "boto3>=1.34.0",
+]
 server = [
     "fastapi>=0.136.3",
     "uvicorn>=0.49.0",

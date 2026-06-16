@@ -182,6 +182,64 @@ def _try_vault_view(
     return result.stdout.strip() or None
 
 
+def setup_state_backend(
+    vault_password: str,
+    environment: str,
+    *,
+    working_directory: str = ".",
+    access_key: str | None = None,
+    secret_key: str | None = None,
+    bucket: str | None = None,
+) -> None:
+    """One-time remote-state setup for an environment.
+
+    Stores the object-storage S3 credentials in the vault (like hcloud_token) and
+    creates the state bucket. After this, every `make infrastructure` run uses
+    remote state automatically. Hetzner has no API for S3 credentials, so they are
+    generated once in the console and pasted/passed here; OVH can mint them via API.
+    """
+    from .tofu_state import console_hint, ensure_bucket, resolve_state_config
+
+    working_dir = _resolve_working_dir(working_directory)
+    group_vars = _load_group_vars(working_dir, environment)
+    config = resolve_state_config(
+        str(group_vars.get("project_name", "")), environment, group_vars
+    )
+    if bucket:
+        config.bucket = bucket
+
+    if not access_key or not secret_key:
+        click.echo(f"Generate S3 credentials: {console_hint(config.provider)}")
+    if not access_key:
+        access_key = click.prompt("S3 access key")
+    if not secret_key:
+        secret_key = click.prompt("S3 secret key", hide_input=True)
+
+    # Persist to the vault, same mechanism as hcloud_token.
+    from .update_vault_secrets import update_secrets
+
+    success, _, pw_failed = update_secrets(
+        repo=str(working_dir),
+        vault_password=vault_password,
+        set_file_content=[
+            (f"tfstate_s3_access_key_{environment}", access_key),
+            (f"tfstate_s3_secret_key_{environment}", secret_key),
+        ],
+    )
+    if not success or pw_failed:
+        raise click.ClickException("Failed to write S3 credentials to the vault.")
+    click.echo(f"Stored S3 credentials in the vault (tfstate_s3_*_{environment}).")
+
+    created = ensure_bucket(config, access_key, secret_key)
+    click.echo(
+        f"State bucket '{config.bucket}' "
+        + ("created." if created else "already exists.")
+    )
+    click.echo(
+        f"Remote state ready on {config.provider}: {config.bucket}/{config.key}"
+    )
+
+
 def run_tofu_provision(
     vault_password: str,
     environment: str,
@@ -203,23 +261,39 @@ def run_tofu_provision(
             "Re-bootstrap the project or add a deployment/tofu/ directory."
         )
 
+    group_vars = _load_group_vars(working_dir, environment)
+
     env = _ansible_env(working_dir, shared_dir)
     env["HCLOUD_TOKEN"] = get_hcloud_token(
         working_directory, vault_password, environment, shared_dir
     )
-    env.update(
-        _state_backend_env(working_directory, vault_password, environment, shared_dir)
+    env.update(_tofu_var_env(group_vars))
+    state_creds = _state_backend_env(
+        working_directory, vault_password, environment, shared_dir
     )
-    env.update(_tofu_var_env(_load_group_vars(working_dir, environment)))
+    env.update(state_creds)
 
     tofu = _find_tofu()
-    backend_config = tofu_path / f"backend.{environment}.hcl"
     init_cmd = [tofu, "init", "-input=false"]
-    if backend_config.exists():
-        click.echo(f"OpenTofu: remote state via {backend_config.name}")
+    if state_creds:
+        # Remote state: render backend.<env>.hcl for the env's provider so state
+        # lives at the same provider as the infra (Hetzner now, OVH later).
+        from .tofu_state import resolve_state_config, write_backend_config
+
+        config = resolve_state_config(
+            str(group_vars.get("project_name", "")), environment, group_vars
+        )
+        backend_config = write_backend_config(tofu_path, environment, config)
+        click.echo(
+            f"OpenTofu: remote state on {config.provider} "
+            f"({config.bucket}/{config.key})"
+        )
         init_cmd += ["-backend-config", str(backend_config), "-reconfigure"]
     else:
-        click.echo("OpenTofu: no backend.<env>.hcl found — using local state.")
+        click.echo(
+            "OpenTofu: no state credentials in vault (tfstate_s3_*) — "
+            "using local state."
+        )
         init_cmd += ["-backend=false"]
 
     click.echo("Provisioning infrastructure with OpenTofu ...")
