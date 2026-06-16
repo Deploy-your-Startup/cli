@@ -463,7 +463,7 @@ def clone_or_update_shared_roles(
                 except subprocess.CalledProcessError:
                     pass
             return target_dir
-        except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        except (click.ClickException, subprocess.CalledProcessError, FileNotFoundError) as exc:
             last_error = exc
 
     if target_dir.exists() and not (target_dir / ".git").exists():
@@ -508,7 +508,7 @@ def clone_or_update_shared_roles(
                 cwd=working_dir,
             )
             return target_dir
-        except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        except (click.ClickException, subprocess.CalledProcessError, FileNotFoundError) as exc:
             last_error = exc
 
     raise click.ClickException(

@@ -83,8 +83,8 @@ def write_byos_ci_workflows(project_dir: Path) -> list[str]:
                       python-version: "3.14"
                       enable-cache: true
                       cache-dependency-glob: |
-                        deployment/pyproject.toml
-                        deployment/uv.lock
+                        pyproject.toml
+                        uv.lock
 
                   - name: Deploy
                     env:
@@ -129,8 +129,8 @@ def write_byos_ci_workflows(project_dir: Path) -> list[str]:
                       python-version: "3.14"
                       enable-cache: true
                       cache-dependency-glob: |
-                        deployment/pyproject.toml
-                        deployment/uv.lock
+                        pyproject.toml
+                        uv.lock
 
                   - name: Deploy infrastructure
                     env:
@@ -238,8 +238,8 @@ def write_byos_ci_workflows(project_dir: Path) -> list[str]:
                       python-version: "3.14"
                       enable-cache: true
                       cache-dependency-glob: |
-                        deployment/pyproject.toml
-                        deployment/uv.lock
+                        pyproject.toml
+                        uv.lock
 
                   - name: Deploy backend
                     env:
