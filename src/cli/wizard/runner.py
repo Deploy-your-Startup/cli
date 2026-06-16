@@ -15,10 +15,12 @@ from .steps.cloudflare import CloudflareStep
 from .steps.domain import DomainStep
 from .steps.finalize import FinalizeStep
 from .steps.hetzner import HetznerStep
+from .steps.ovh import OvhStep
 from .steps.pitch_finalize import PitchFinalizeStep
 from .steps.pitch_project import PitchProjectStep
 from .steps.project import ProjectStep
 
+# Hetzner is the default; the OVH step is substituted when cloud_provider=ovh.
 FULLSTACK_STEPS: list[type[WizardStep]] = [
     DomainStep, HetznerStep, ProjectStep, FinalizeStep,
 ]
@@ -28,7 +30,10 @@ PITCH_STEPS: list[type[WizardStep]] = [
 
 
 def steps_for(ctx: BootstrapContext) -> list[type[WizardStep]]:
-    return PITCH_STEPS if ctx.kind == "pitch" else FULLSTACK_STEPS
+    if ctx.kind == "pitch":
+        return PITCH_STEPS
+    cloud_step = OvhStep if ctx.cloud_provider == "ovh" else HetznerStep
+    return [DomainStep, cloud_step, ProjectStep, FinalizeStep]
 
 
 def check_prerequisites(ctx: BootstrapContext) -> None:

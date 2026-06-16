@@ -19,10 +19,13 @@ class BootstrapContext:
     output_dir: Path
     mode: str = "github"
     kind: str = "fullstack"  # "fullstack" | "pitch"
+    cloud_provider: str = "hetzner"  # "hetzner" | "ovh" (fullstack only)
     docker_registry_host: str = "ghcr.io"
 
     # Populated by steps
     hetzner_token: str | None = None
+    # OVH compute credential (OpenStack clouds.yaml) — the hetzner_token analogue.
+    openstack_clouds_yaml: str | None = None
     vault_password: str | None = None
     cloudflare_account_id: str | None = None
     cloudflare_api_token: str | None = None

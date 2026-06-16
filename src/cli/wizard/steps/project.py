@@ -113,6 +113,8 @@ class ProjectStep(WizardStep):
             "§§deploy_your_startup.user_key§§": user_public_key,
         }
         _replace_placeholders(ctx.project_dir, replacements)
+        if ctx.cloud_provider == "ovh":
+            _set_ovh_group_vars(ctx.deployment_dir)
         ui.action_done("Projekt konfiguriert")
 
         # 3d. Vault secrets
@@ -131,10 +133,17 @@ class ProjectStep(WizardStep):
         if ctx.sentry_dsn:
             field_set.append(("backend_sentry_dsn", ctx.sentry_dsn))
 
-        file_content = [
-            ("ci_ssh_key", ci_private_key),
-            ("hcloud_token_production", ctx.hetzner_token),
-        ]
+        file_content = [("ci_ssh_key", ci_private_key)]
+        if ctx.cloud_provider == "ovh":
+            if not ctx.openstack_clouds_yaml:
+                raise click.ClickException(
+                    "OVH ausgewählt, aber keine clouds.yaml vorhanden."
+                )
+            file_content.append(
+                ("openstack_clouds_production", ctx.openstack_clouds_yaml)
+            )
+        else:
+            file_content.append(("hcloud_token_production", ctx.hetzner_token))
 
         ok, _, pw_failed = update_vault_secrets(
             repo=str(ctx.deployment_dir),
@@ -181,9 +190,40 @@ class ProjectStep(WizardStep):
             except OSError:
                 pass
 
-        # 3h. Token cleanup — immediately after vault encryption
-        ui.action_start("Hetzner Token aufräumen...")
-        from cli.hetzner.credentials import delete_token
+        # 3h. Credential cleanup — immediately after vault encryption. The secret
+        # now lives only in the (rotated) project vault; drop the local cache.
+        if ctx.cloud_provider == "ovh":
+            ui.action_start("OVH clouds.yaml aufräumen...")
+            from cli.ovh.credentials import delete_clouds_yaml
 
-        delete_token()
-        ui.action_done("Hetzner Token aufgeräumt 🗑️")
+            delete_clouds_yaml()
+            ui.action_done("OVH clouds.yaml aufgeräumt 🗑️")
+        else:
+            ui.action_start("Hetzner Token aufräumen...")
+            from cli.hetzner.credentials import delete_token
+
+            delete_token()
+            ui.action_done("Hetzner Token aufgeräumt 🗑️")
+
+
+def _set_ovh_group_vars(deployment_dir: Path) -> None:
+    """Flip group_vars/all.yml to the OVH provider after placeholder replacement.
+
+    Sets cloud_provider: ovh and defers DNS (manage_dns: false) since OVH DNS
+    automation is not wired up yet — the domain is pointed at OVH manually.
+    """
+    import re
+
+    all_yml = deployment_dir / "group_vars" / "all.yml"
+    text = all_yml.read_text(encoding="utf-8")
+    text, n_provider = re.subn(
+        r"^cloud_provider:.*$", "cloud_provider: ovh", text, flags=re.MULTILINE
+    )
+    if not n_provider:
+        text = "cloud_provider: ovh\n" + text
+    text, n_dns = re.subn(
+        r"^manage_dns:.*$", "manage_dns: false", text, flags=re.MULTILINE
+    )
+    if not n_dns:
+        text += "\nmanage_dns: false\n"
+    all_yml.write_text(text, encoding="utf-8")
