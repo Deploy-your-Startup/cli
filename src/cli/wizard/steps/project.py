@@ -68,14 +68,17 @@ def ensure_byos_deploy_public_key_ignored(project_dir: Path) -> None:
             gitignore.write(BYOS_DEPLOY_PUBLIC_KEY_IGNORE + "\n")
 
 
-def byos_deploy_key_install_command(ctx: BootstrapContext, key_path: Path) -> str:
+def byos_deploy_key_install_command(ctx: BootstrapContext, public_key: str) -> str:
     """Return the command that installs the deploy public key on the BYOS VPS."""
     user_host = f"{ctx.byos_ssh_user}@{ctx.byos_host}"
     remote = (
         "mkdir -p ~/.ssh && chmod 700 ~/.ssh && "
         "cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
     )
-    return f"ssh {shlex.quote(user_host)} {shlex.quote(remote)} < {shlex.quote(str(key_path))}"
+    return (
+        f"printf '%s\\n' {shlex.quote(public_key.strip())} "
+        f"| ssh {shlex.quote(user_host)} {shlex.quote(remote)}"
+    )
 
 
 class ProjectStep(WizardStep):
@@ -269,7 +272,7 @@ class ProjectStep(WizardStep):
                 f"{authorized_keys} ein, damit Ansible sich einloggen kann:\n\n"
                 f"{ci_public_key}\n"
                 "Schnellweg:\n"
-                f"  {byos_deploy_key_install_command(ctx, deploy_key_path)}\n"
+                f"  {byos_deploy_key_install_command(ctx, ci_public_key)}\n"
                 f"Die lokale Hilfsdatei {deploy_key_path} ist in .gitignore "
                 "eingetragen und wird nicht committed."
             )
