@@ -1,6 +1,7 @@
 from cli.wizard.context import BootstrapContext
 from cli.wizard.steps import project as project_step
 from cli.wizard.steps.project import BYOS_DISABLED_WORKFLOWS
+from cli.wizard.steps.project import BYOS_DEPLOY_PUBLIC_KEY_IGNORE
 from cli.wizard.steps.project import BYOS_DEPLOY_PUBLIC_KEY_FILE
 from cli.wizard.steps.project import ProjectStep
 
@@ -57,3 +58,37 @@ def test_write_byos_deploy_public_key(tmp_path):
 
     assert key_path == tmp_path / BYOS_DEPLOY_PUBLIC_KEY_FILE
     assert key_path.read_text() == public_key + "\n"
+
+
+def test_ensure_byos_deploy_public_key_ignored_appends_once(tmp_path):
+    gitignore = tmp_path / ".gitignore"
+    gitignore.write_text(".idea/\n")
+
+    project_step.ensure_byos_deploy_public_key_ignored(tmp_path)
+    project_step.ensure_byos_deploy_public_key_ignored(tmp_path)
+
+    lines = gitignore.read_text().splitlines()
+    assert lines.count(BYOS_DEPLOY_PUBLIC_KEY_IGNORE) == 1
+
+
+def test_byos_deploy_key_install_command(tmp_path):
+    ctx = BootstrapContext(
+        project_name="my-test",
+        base_domain="example.com",
+        additional_domains="",
+        github_username="philipp-lein",
+        postgres_version="17",
+        sentry_dsn="",
+        output_dir=tmp_path,
+        provider="byos",
+        byos_host="203.0.113.10",
+        byos_ssh_user="root",
+    )
+
+    command = project_step.byos_deploy_key_install_command(
+        ctx, tmp_path / "deployment" / BYOS_DEPLOY_PUBLIC_KEY_FILE
+    )
+
+    assert "ssh root@203.0.113.10" in command
+    assert "authorized_keys" in command
+    assert "deployment/byos_deploy_key.pub" in command
