@@ -34,6 +34,7 @@ SPARSE_PATHS = [
     "update-vms-playbook.yml",
     "inventory.ini",
     "inventory.hcloud.yml",
+    "inventory.openstack.yml",
 ]
 
 ROOT_SHARED_FILES = [
@@ -44,6 +45,7 @@ ROOT_SHARED_FILES = [
     "update-vms-playbook.yml",
     "inventory.ini",
     "inventory.hcloud.yml",
+    "inventory.openstack.yml",
 ]
 DEFAULT_SHARED_REPO_NAME = "deploy-your-startup"
 
@@ -281,6 +283,10 @@ def _copy_local_repo(source_dir: Path, target_dir: Path) -> Path:
     inventory_hcloud = source_dir / "inventory.hcloud.yml"
     if inventory_hcloud.exists():
         shutil.copy2(inventory_hcloud, target_dir / "inventory.hcloud.yml")
+
+    inventory_openstack = source_dir / "inventory.openstack.yml"
+    if inventory_openstack.exists():
+        shutil.copy2(inventory_openstack, target_dir / "inventory.openstack.yml")
 
     return target_dir
 
@@ -630,6 +636,122 @@ def get_hcloud_token(
     return token
 
 
+SUPPORTED_CLOUD_PROVIDERS = ("hetzner", "ovh")
+_CLOUD_PROVIDER_RE = re.compile(
+    r'^\s*cloud_provider\s*:\s*["\']?(?P<value>[A-Za-z0-9_-]+)', re.MULTILINE
+)
+
+
+def _read_cloud_provider(working_dir: Path) -> str:
+    """Read cloud_provider from the project's group_vars/all.yml.
+
+    Parsed with a regex rather than a YAML loader because all.yml carries
+    !vault tags and §§...§§ template placeholders. Defaults to hetzner for
+    backwards compatibility with projects bootstrapped before the switch.
+    """
+    all_yml = working_dir / "group_vars" / "all.yml"
+    if all_yml.exists():
+        match = _CLOUD_PROVIDER_RE.search(all_yml.read_text(encoding="utf-8"))
+        if match:
+            provider = match.group("value").lower()
+            if provider not in SUPPORTED_CLOUD_PROVIDERS:
+                raise click.ClickException(
+                    f"Unsupported cloud_provider '{provider}' in group_vars/all.yml. "
+                    f"Use one of: {', '.join(SUPPORTED_CLOUD_PROVIDERS)}."
+                )
+            return provider
+    return "hetzner"
+
+
+def _write_temp_openstack_clouds(
+    working_directory: str,
+    vault_password: str,
+    environment: str,
+    shared_dir: str,
+) -> Path:
+    """Decrypt the vault-stored clouds.yaml into a private temp file.
+
+    Mirrors get_hcloud_token: the OpenStack auth (cloud: ovh) lives as a
+    vault-encrypted file `openstack_clouds_<environment>` in the deployment
+    directory. Returns the path the caller must point OS_CLIENT_CONFIG_FILE at
+    and is responsible for deleting.
+    """
+    working_dir = _resolve_working_dir(working_directory)
+    env = _ansible_env(working_dir, shared_dir)
+    result = _run_command(
+        [
+            _find_uv(),
+            "run",
+            "--project",
+            str(working_dir),
+            ansible_bin("ansible-vault"),
+            "view",
+            f"openstack_clouds_{environment}",
+            "--vault-password-file",
+            "/bin/cat",
+        ],
+        cwd=working_dir,
+        env=env,
+        input_text=vault_password,
+        capture_output=True,
+    )
+    clouds_yaml = result.stdout
+    if not clouds_yaml.strip():
+        raise click.ClickException(
+            "Could not read OpenStack clouds.yaml for environment "
+            f"'{environment}' from Ansible Vault (expected vault file "
+            f"'openstack_clouds_{environment}'). Did you bootstrap with "
+            "--cloud-provider ovh?"
+        )
+    fd, tmp_name = tempfile.mkstemp(prefix="clouds-", suffix=".yaml")
+    tmp_path = Path(tmp_name)
+    try:
+        os.write(fd, clouds_yaml.encode("utf-8"))
+    finally:
+        os.close(fd)
+    os.chmod(tmp_path, 0o600)
+    return tmp_path
+
+
+def _apply_cloud_credentials(
+    env: dict[str, str],
+    *,
+    working_directory: str,
+    vault_password: str,
+    environment: str,
+    working_dir: Path,
+    shared_dir: str,
+) -> tuple[list[str], "callable"]:
+    """Set provider credentials on `env` and return (extra ansible args, cleanup).
+
+    - hetzner: HCLOUD_TOKEN from the vault, default inventory (ansible.cfg).
+    - ovh: clouds.yaml from the vault via OS_CLIENT_CONFIG_FILE, plus explicit
+      `-i inventory.openstack.yml -i inventory.ini` to override the hcloud
+      default in ansible.cfg.
+
+    The returned cleanup removes any temp credential file; callers must invoke
+    it in a finally.
+    """
+    provider = _read_cloud_provider(working_dir)
+    if provider == "ovh":
+        clouds_path = _write_temp_openstack_clouds(
+            working_directory, vault_password, environment, shared_dir
+        )
+        env["OS_CLIENT_CONFIG_FILE"] = str(clouds_path)
+        inventory_args = [
+            "-i",
+            f"{shared_dir}/inventory.openstack.yml",
+            "-i",
+            f"{shared_dir}/inventory.ini",
+        ]
+        return inventory_args, lambda: clouds_path.unlink(missing_ok=True)
+
+    env["HCLOUD_TOKEN"] = get_hcloud_token(
+        working_directory, vault_password, environment, shared_dir
+    )
+    return [], lambda: None
+
+
 def _validated_environment(environment: str) -> None:
     if environment not in {"production", "staging"}:
         raise click.ClickException("--environment must be production or staging")
@@ -684,6 +806,14 @@ def _resolve_restore_file(
     return resolved
 
 
+def _run_with_cleanup(cleanup, command, **kwargs):
+    """Run a command via _run_command, always invoking cleanup afterwards."""
+    try:
+        return _run_command(command, **kwargs)
+    finally:
+        cleanup()
+
+
 def run_deploy(
     vault_password: str,
     environment: str,
@@ -703,30 +833,38 @@ def run_deploy(
         repo_url=repo_url,
         refresh=refresh,
     )
-    hcloud_token = get_hcloud_token(
-        working_directory, vault_password, environment, shared_dir
-    )
     env = _ansible_env(working_dir, shared_dir)
-    env["HCLOUD_TOKEN"] = hcloud_token
-    _run_command(
-        [
-            _find_uv(),
-            "run",
-            "--project",
-            str(working_dir),
-            ansible_bin("ansible-playbook"),
-            "playbook.yml",
-            "--vault-password-file",
-            "/bin/cat",
-            "--tags",
-            service or "all",
-            "--skip-tags",
-            "infrastructure",
-        ],
-        cwd=working_dir,
-        env=env,
-        input_text=vault_password,
+    inventory_args, cleanup = _apply_cloud_credentials(
+        env,
+        working_directory=working_directory,
+        vault_password=vault_password,
+        environment=environment,
+        working_dir=working_dir,
+        shared_dir=shared_dir,
     )
+    try:
+        _run_command(
+            [
+                _find_uv(),
+                "run",
+                "--project",
+                str(working_dir),
+                ansible_bin("ansible-playbook"),
+                "playbook.yml",
+                "--vault-password-file",
+                "/bin/cat",
+                "--tags",
+                service or "all",
+                "--skip-tags",
+                "infrastructure",
+                *inventory_args,
+            ],
+            cwd=working_dir,
+            env=env,
+            input_text=vault_password,
+        )
+    finally:
+        cleanup()
 
 
 def run_infrastructure(
@@ -748,12 +886,17 @@ def run_infrastructure(
         repo_url=repo_url,
         refresh=refresh,
     )
-    hcloud_token = get_hcloud_token(
-        working_directory, vault_password, environment, shared_dir
-    )
     env = _ansible_env(working_dir, shared_dir)
-    env["HCLOUD_TOKEN"] = hcloud_token
-    _run_command(
+    inventory_args, cleanup = _apply_cloud_credentials(
+        env,
+        working_directory=working_directory,
+        vault_password=vault_password,
+        environment=environment,
+        working_dir=working_dir,
+        shared_dir=shared_dir,
+    )
+    _run_with_cleanup(
+        cleanup,
         [
             _find_uv(),
             "run",
@@ -767,6 +910,7 @@ def run_infrastructure(
             "infrastructure",
             "-l",
             f"{environment},provision-infrastructure",
+            *inventory_args,
         ],
         cwd=working_dir,
         env=env,
@@ -823,30 +967,47 @@ def run_kubeconfig(
         repo_url=repo_url,
         refresh=refresh,
     )
-    hcloud_token = get_hcloud_token(
-        working_directory, vault_password, environment, shared_dir
-    )
     env = _ansible_env(working_dir, shared_dir)
-    env["HCLOUD_TOKEN"] = hcloud_token
+    provider = _read_cloud_provider(working_dir)
+    cleanup = lambda: None
+    if provider == "ovh":
+        # OVH default to the OpenStack inventory + ubuntu login unless the
+        # caller explicitly overrode them.
+        if inventory == "inventory.hcloud.yml":
+            inventory = "inventory.openstack.yml"
+        if ssh_user == "root":
+            ssh_user = "ubuntu"
+        clouds_path = _write_temp_openstack_clouds(
+            working_directory, vault_password, environment, shared_dir
+        )
+        env["OS_CLIENT_CONFIG_FILE"] = str(clouds_path)
+        cleanup = lambda: clouds_path.unlink(missing_ok=True)
+    else:
+        env["HCLOUD_TOKEN"] = get_hcloud_token(
+            working_directory, vault_password, environment, shared_dir
+        )
 
     inventory_path = working_dir / inventory
     if not inventory_path.exists():
         inventory_path = working_dir / shared_dir / inventory
-    inventory_result = _run_command(
-        [
-            _find_uv(),
-            "run",
-            "--project",
-            str(working_dir),
-            "ansible-inventory",
-            "-i",
-            str(inventory_path),
-            "--list",
-        ],
-        cwd=working_dir,
-        env=env,
-        capture_output=True,
-    )
+    try:
+        inventory_result = _run_command(
+            [
+                _find_uv(),
+                "run",
+                "--project",
+                str(working_dir),
+                "ansible-inventory",
+                "-i",
+                str(inventory_path),
+                "--list",
+            ],
+            cwd=working_dir,
+            env=env,
+            capture_output=True,
+        )
+    finally:
+        cleanup()
     inventory_data = json.loads(inventory_result.stdout)
     resolved_master_host = master_host or _extract_master_host(inventory_data)
     if not resolved_master_host:
@@ -1001,13 +1162,17 @@ def run_backup(
         if backup_dir
         else Path.home() / "Backups" / project_name
     )
-    hcloud_token = get_hcloud_token(
-        working_directory, vault_password, environment, shared_dir
-    )
     env = _ansible_env(working_dir, shared_dir)
-    env["HCLOUD_TOKEN"] = hcloud_token
-
-    _run_command(
+    inventory_args, cleanup = _apply_cloud_credentials(
+        env,
+        working_directory=working_directory,
+        vault_password=vault_password,
+        environment=environment,
+        working_dir=working_dir,
+        shared_dir=shared_dir,
+    )
+    _run_with_cleanup(
+        cleanup,
         [
             _find_uv(),
             "run",
@@ -1019,6 +1184,7 @@ def run_backup(
             "/bin/cat",
             "--extra-vars",
             f"project_name={project_name} backup_environment={environment} local_backup_root={resolved_backup_dir}",
+            *inventory_args,
         ],
         cwd=working_dir,
         env=env,
@@ -1052,11 +1218,15 @@ def run_update_vms(
     playbook_path = _resolve_playbook_path(
         working_dir, playbook, "Update VMs", shared_dir
     )
-    hcloud_token = get_hcloud_token(
-        working_directory, vault_password, environment, shared_dir
-    )
     env = _ansible_env(working_dir, shared_dir)
-    env["HCLOUD_TOKEN"] = hcloud_token
+    inventory_args, cleanup = _apply_cloud_credentials(
+        env,
+        working_directory=working_directory,
+        vault_password=vault_password,
+        environment=environment,
+        working_dir=working_dir,
+        shared_dir=shared_dir,
+    )
 
     effective_limit = f"{environment},{limit}" if limit else environment
     extra_vars = {
@@ -1064,7 +1234,8 @@ def run_update_vms(
         "update_environment": environment,
     }
 
-    _run_command(
+    _run_with_cleanup(
+        cleanup,
         [
             _find_uv(),
             "run",
@@ -1078,6 +1249,7 @@ def run_update_vms(
             effective_limit,
             "--extra-vars",
             json.dumps(extra_vars),
+            *inventory_args,
         ],
         cwd=working_dir,
         env=env,
@@ -1147,11 +1319,15 @@ def run_restore(
             label="Media",
         )
 
-    hcloud_token = get_hcloud_token(
-        working_directory, vault_password, environment, shared_dir
-    )
     env = _ansible_env(working_dir, shared_dir)
-    env["HCLOUD_TOKEN"] = hcloud_token
+    inventory_args, cleanup = _apply_cloud_credentials(
+        env,
+        working_directory=working_directory,
+        vault_password=vault_password,
+        environment=environment,
+        working_dir=working_dir,
+        shared_dir=shared_dir,
+    )
 
     extra_vars = {
         "project_name": project_name,
@@ -1162,7 +1338,8 @@ def run_restore(
         "media_backup_file": str(resolved_media_file) if resolved_media_file else "",
     }
 
-    _run_command(
+    _run_with_cleanup(
+        cleanup,
         [
             _find_uv(),
             "run",
@@ -1174,6 +1351,7 @@ def run_restore(
             "/bin/cat",
             "--extra-vars",
             json.dumps(extra_vars),
+            *inventory_args,
         ],
         cwd=working_dir,
         env=env,
