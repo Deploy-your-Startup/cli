@@ -77,3 +77,39 @@ def test_tofu_var_env_requires_core_vars():
         tofu_commands._tofu_var_env({"base_domain": "example.com"})
     with pytest.raises(Exception):
         tofu_commands._tofu_var_env({"project_name": "demo"})
+
+
+def test_parse_tofu_version():
+    assert tofu_commands._parse_tofu_version("OpenTofu v1.12.2\non darwin_arm64") == (
+        1,
+        12,
+        2,
+    )
+    assert tofu_commands._parse_tofu_version("Terraform v1.6.0") == (1, 6, 0)
+    assert tofu_commands._parse_tofu_version("no version here") is None
+
+
+def test_min_version_comparison():
+    # The required floor compares correctly as tuples.
+    assert (1, 12, 2) >= tofu_commands.MIN_TOFU_VERSION
+    assert (1, 10, 0) >= tofu_commands.MIN_TOFU_VERSION
+    assert (1, 6, 0) < tofu_commands.MIN_TOFU_VERSION
+
+
+def test_find_tofu_rejects_old_version(monkeypatch):
+    monkeypatch.setattr(tofu_commands.shutil, "which", lambda _: "/usr/bin/tofu")
+    monkeypatch.setattr(
+        tofu_commands,
+        "_run_command",
+        lambda *a, **k: type("R", (), {"stdout": "OpenTofu v1.6.0"})(),
+    )
+    with pytest.raises(Exception) as exc:
+        tofu_commands._find_tofu()
+    assert "1.10.0" in str(exc.value)
+
+
+def test_find_tofu_missing_binary(monkeypatch):
+    monkeypatch.setattr(tofu_commands.shutil, "which", lambda _: None)
+    with pytest.raises(Exception) as exc:
+        tofu_commands._find_tofu()
+    assert "not found" in str(exc.value).lower()

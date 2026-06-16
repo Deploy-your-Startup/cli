@@ -12,6 +12,7 @@ compute and DNS (unified Cloud API).
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -29,6 +30,14 @@ from .ansible_commands import (
 )
 
 DEFAULT_TOFU_DIR = "tofu"
+
+# Minimum OpenTofu version the CLI requires. 1.10 introduced native S3 state
+# locking (use_lockfile), which the remote backend relies on. Bump this here
+# (and the CI `tofu_version`) to raise the floor.
+MIN_TOFU_VERSION = (1, 10, 0)
+
+# Cross-platform install/upgrade reference (Linux/macOS/Windows) — not brew-only.
+TOFU_INSTALL_URL = "https://opentofu.org/docs/intro/install/"
 
 
 class _GroupVarsLoader(yaml.SafeLoader):
@@ -52,11 +61,37 @@ _TOFU_VAR_MAP = {
 }
 
 
+def _version_str(version: tuple[int, int, int]) -> str:
+    return ".".join(str(part) for part in version)
+
+
+def _parse_tofu_version(output: str) -> tuple[int, int, int] | None:
+    """Pull the X.Y.Z version out of `tofu version` output."""
+    match = re.search(r"v(\d+)\.(\d+)\.(\d+)", output)
+    if not match:
+        return None
+    return (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+
+
 def _find_tofu() -> str:
+    """Locate the OpenTofu binary and verify it meets the minimum version."""
     tofu = shutil.which("tofu") or shutil.which("terraform")
     if not tofu:
         raise click.ClickException(
-            "OpenTofu not found on PATH. Install it (e.g. `brew install opentofu`)."
+            f"OpenTofu (tofu) not found on PATH. Install OpenTofu "
+            f">= {_version_str(MIN_TOFU_VERSION)}: {TOFU_INSTALL_URL}"
+        )
+
+    result = _run_command([tofu, "version"], cwd=Path.cwd(), capture_output=True)
+    version = _parse_tofu_version(result.stdout)
+    if version is None:
+        raise click.ClickException(
+            f"Could not determine the OpenTofu version from `{tofu} version`."
+        )
+    if version < MIN_TOFU_VERSION:
+        raise click.ClickException(
+            f"OpenTofu >= {_version_str(MIN_TOFU_VERSION)} is required, "
+            f"but {_version_str(version)} is installed. Update it: {TOFU_INSTALL_URL}"
         )
     return tofu
 
