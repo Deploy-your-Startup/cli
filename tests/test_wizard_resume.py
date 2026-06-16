@@ -43,13 +43,14 @@ def test_write_byos_ci_workflows_replaces_deploy_workflows(tmp_path):
     keep = workflows_dir / "dependabot.yml"
     keep.write_text("name: keep\n")
 
-    written = project_step.write_byos_ci_workflows(tmp_path)
+    written = project_step.write_byos_ci_workflows(tmp_path, "philipp-lein")
 
     assert written == BYOS_CI_WORKFLOWS
     for workflow_name in BYOS_CI_WORKFLOWS:
         workflow = (workflows_dir / workflow_name).read_text()
         assert "old/deploy-template" not in workflow
         assert "startup ansible" in workflow or "docker/build-push-action" in workflow
+        assert "philipp-lein/deploy-your-startup" in workflow
     assert keep.exists()
 
 

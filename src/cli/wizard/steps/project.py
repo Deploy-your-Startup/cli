@@ -39,7 +39,7 @@ BYOS_DEPLOY_PUBLIC_KEY_FILE = "byos_deploy_key.pub"
 BYOS_DEPLOY_PUBLIC_KEY_IGNORE = f"deployment/{BYOS_DEPLOY_PUBLIC_KEY_FILE}"
 
 
-def write_byos_ci_workflows(project_dir: Path) -> list[str]:
+def write_byos_ci_workflows(project_dir: Path, github_username: str) -> list[str]:
     """Write BYOS-compatible project-local GitHub Actions workflows."""
     workflows_dir = project_dir / ".github" / "workflows"
     workflows_dir.mkdir(parents=True, exist_ok=True)
@@ -77,6 +77,11 @@ def write_byos_ci_workflows(project_dir: Path) -> list[str]:
                 steps:
                   - uses: actions/checkout@v6
 
+                  - name: Export shared Ansible roles
+                    uses: __GITHUB_USERNAME__/deploy-your-startup/.github/actions/export-shared-roles@main
+                    with:
+                      destination: deployment/.shared-roles
+
                   - uses: astral-sh/setup-uv@v7
                     with:
                       working-directory: deployment
@@ -94,7 +99,8 @@ def write_byos_ci_workflows(project_dir: Path) -> list[str]:
                       uv run --project deployment startup ansible deploy \\
                         --working-directory deployment \\
                         --environment "${{ github.event.inputs.environment || 'production' }}" \\
-                        --vault-password "$VAULT_PASSWORD"
+                        --vault-password "$VAULT_PASSWORD" \\
+                        --no-refresh
         """,
         "deploy-infrastructure.yml": """
             name: Deploy Infrastructure
@@ -123,6 +129,11 @@ def write_byos_ci_workflows(project_dir: Path) -> list[str]:
                 steps:
                   - uses: actions/checkout@v6
 
+                  - name: Export shared Ansible roles
+                    uses: __GITHUB_USERNAME__/deploy-your-startup/.github/actions/export-shared-roles@main
+                    with:
+                      destination: deployment/.shared-roles
+
                   - uses: astral-sh/setup-uv@v7
                     with:
                       working-directory: deployment
@@ -140,7 +151,8 @@ def write_byos_ci_workflows(project_dir: Path) -> list[str]:
                       uv run --project deployment startup ansible infrastructure \\
                         --working-directory deployment \\
                         --environment "${{ github.event.inputs.environment || 'production' }}" \\
-                        --vault-password "$VAULT_PASSWORD"
+                        --vault-password "$VAULT_PASSWORD" \\
+                        --no-refresh
         """,
         "build-and-deploy-backend.yml": """
             name: Build and Deploy Backend
@@ -192,6 +204,11 @@ def write_byos_ci_workflows(project_dir: Path) -> list[str]:
                       --health-retries 5
                 steps:
                   - uses: actions/checkout@v6
+
+                  - name: Export shared Ansible roles
+                    uses: __GITHUB_USERNAME__/deploy-your-startup/.github/actions/export-shared-roles@main
+                    with:
+                      destination: deployment/.shared-roles
 
                   - uses: docker/setup-buildx-action@v4
 
@@ -250,14 +267,16 @@ def write_byos_ci_workflows(project_dir: Path) -> list[str]:
                         --working-directory deployment \\
                         --environment "${{ github.event.inputs.environment || 'production' }}" \\
                         --service backend \\
-                        --vault-password "$VAULT_PASSWORD"
+                        --vault-password "$VAULT_PASSWORD" \\
+                        --no-refresh
         """,
     }
 
     written: list[str] = []
     for workflow_name in BYOS_CI_WORKFLOWS:
+        workflow = textwrap.dedent(workflows[workflow_name]).lstrip()
         (workflows_dir / workflow_name).write_text(
-            textwrap.dedent(workflows[workflow_name]).lstrip()
+            workflow.replace("__GITHUB_USERNAME__", github_username)
         )
         written.append(workflow_name)
     return written
@@ -467,7 +486,9 @@ class ProjectStep(WizardStep):
             ui.action_done(f"Deploy-Key geschrieben: {deploy_key_path.name}")
 
             ui.action_start("BYOS-CI-Workflows schreiben...")
-            written_workflows = write_byos_ci_workflows(ctx.project_dir)
+            written_workflows = write_byos_ci_workflows(
+                ctx.project_dir, ctx.github_username
+            )
             ui.action_done("Workflows geschrieben: " + ", ".join(written_workflows))
 
             authorized_keys = (
