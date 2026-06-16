@@ -5,6 +5,7 @@ from __future__ import annotations
 import shlex
 import shutil
 import tempfile
+import textwrap
 from pathlib import Path
 
 import click
@@ -29,7 +30,7 @@ from ..vault_guard import (
 )
 
 
-BYOS_DISABLED_WORKFLOWS = [
+BYOS_CI_WORKFLOWS = [
     "build-and-deploy-backend.yml",
     "deploy-infrastructure.yml",
     "deploy.yml",
@@ -38,16 +39,228 @@ BYOS_DEPLOY_PUBLIC_KEY_FILE = "byos_deploy_key.pub"
 BYOS_DEPLOY_PUBLIC_KEY_IGNORE = f"deployment/{BYOS_DEPLOY_PUBLIC_KEY_FILE}"
 
 
-def disable_byos_ci_workflows(project_dir: Path) -> list[str]:
-    """Remove Hetzner-oriented deploy workflows from BYOS projects."""
+def write_byos_ci_workflows(project_dir: Path) -> list[str]:
+    """Write BYOS-compatible project-local GitHub Actions workflows."""
     workflows_dir = project_dir / ".github" / "workflows"
-    removed: list[str] = []
-    for workflow_name in BYOS_DISABLED_WORKFLOWS:
-        workflow_path = workflows_dir / workflow_name
-        if workflow_path.exists():
-            workflow_path.unlink()
-            removed.append(workflow_name)
-    return removed
+    workflows_dir.mkdir(parents=True, exist_ok=True)
+
+    workflows = {
+        "deploy.yml": """
+            name: Deploy
+
+            on:
+              push:
+                branches:
+                  - main
+                paths:
+                  - 'deployment/**'
+              workflow_dispatch:
+                inputs:
+                  environment:
+                    description: Environment which should be deployed
+                    required: true
+                    default: production
+                    type: choice
+                    options:
+                      - production
+
+            concurrency:
+              group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.inputs.environment || 'production' }}
+              cancel-in-progress: true
+
+            jobs:
+              deploy:
+                runs-on: ubuntu-latest
+                permissions:
+                  contents: read
+                  packages: read
+                steps:
+                  - uses: actions/checkout@v6
+
+                  - uses: astral-sh/setup-uv@v7
+                    with:
+                      working-directory: deployment
+                      python-version: "3.14"
+                      enable-cache: true
+                      cache-dependency-glob: |
+                        deployment/pyproject.toml
+                        deployment/uv.lock
+
+                  - name: Deploy
+                    env:
+                      VAULT_PASSWORD: ${{ secrets.VAULT_PASSWORD }}
+                      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                    run: |
+                      uv run --project deployment startup ansible deploy \\
+                        --working-directory deployment \\
+                        --environment "${{ github.event.inputs.environment || 'production' }}" \\
+                        --vault-password "$VAULT_PASSWORD"
+        """,
+        "deploy-infrastructure.yml": """
+            name: Deploy Infrastructure
+
+            on:
+              workflow_dispatch:
+                inputs:
+                  environment:
+                    description: Environment which infrastructure should be deployed
+                    required: true
+                    default: production
+                    type: choice
+                    options:
+                      - production
+
+            concurrency:
+              group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.inputs.environment || 'production' }}
+              cancel-in-progress: true
+
+            jobs:
+              deploy-infrastructure:
+                runs-on: ubuntu-latest
+                permissions:
+                  contents: read
+                  packages: read
+                steps:
+                  - uses: actions/checkout@v6
+
+                  - uses: astral-sh/setup-uv@v7
+                    with:
+                      working-directory: deployment
+                      python-version: "3.14"
+                      enable-cache: true
+                      cache-dependency-glob: |
+                        deployment/pyproject.toml
+                        deployment/uv.lock
+
+                  - name: Deploy infrastructure
+                    env:
+                      VAULT_PASSWORD: ${{ secrets.VAULT_PASSWORD }}
+                      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                    run: |
+                      uv run --project deployment startup ansible infrastructure \\
+                        --working-directory deployment \\
+                        --environment "${{ github.event.inputs.environment || 'production' }}" \\
+                        --vault-password "$VAULT_PASSWORD"
+        """,
+        "build-and-deploy-backend.yml": """
+            name: Build and Deploy Backend
+
+            on:
+              push:
+                branches:
+                  - main
+                paths:
+                  - 'backend/**'
+              workflow_dispatch:
+                inputs:
+                  environment:
+                    description: Environment to deploy
+                    required: true
+                    default: production
+                    type: choice
+                    options:
+                      - production
+
+            concurrency:
+              group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.inputs.environment || 'production' }}
+              cancel-in-progress: true
+
+            env:
+              REGISTRY: ghcr.io
+              IMAGE_NAME: ${{ github.repository }}-backend
+              DOCKER_IMAGE_TAG: ${{ github.run_number }}
+
+            jobs:
+              build-and-deploy:
+                runs-on: ubuntu-latest
+                permissions:
+                  contents: read
+                  packages: write
+                services:
+                  postgres:
+                    image: postgres:latest
+                    env:
+                      POSTGRES_DB: test_db
+                      POSTGRES_PASSWORD: pa55w0rt
+                      POSTGRES_USER: postgres
+                    ports:
+                      - 5432:5432
+                    options: >-
+                      --health-cmd pg_isready
+                      --health-interval 10s
+                      --health-timeout 5s
+                      --health-retries 5
+                steps:
+                  - uses: actions/checkout@v6
+
+                  - uses: docker/setup-buildx-action@v4
+
+                  - uses: docker/login-action@v4
+                    with:
+                      registry: ${{ env.REGISTRY }}
+                      username: ${{ github.actor }}
+                      password: ${{ secrets.GITHUB_TOKEN }}
+
+                  - name: Build test image
+                    uses: docker/build-push-action@v7
+                    with:
+                      context: ./backend
+                      file: ./backend/Dockerfile
+                      target: test
+                      tags: test-image:${{ env.DOCKER_IMAGE_TAG }}
+                      push: false
+                      load: true
+                      cache-from: type=gha
+                      cache-to: type=gha,mode=max
+
+                  - name: Run backend tests
+                    run: |
+                      docker run --network host \\
+                        -e DATABASE_URL="postgres://postgres:pa55w0rt@localhost:5432/test_db" \\
+                        --rm test-image:${{ env.DOCKER_IMAGE_TAG }} ./make.sh test
+
+                  - name: Build and push backend image
+                    uses: docker/build-push-action@v7
+                    with:
+                      context: ./backend
+                      file: ./backend/Dockerfile
+                      push: true
+                      tags: |
+                        ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+                        ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.DOCKER_IMAGE_TAG }}
+                      cache-from: type=gha
+                      cache-to: type=gha,mode=max
+                      platforms: linux/amd64
+
+                  - uses: astral-sh/setup-uv@v7
+                    with:
+                      working-directory: deployment
+                      python-version: "3.14"
+                      enable-cache: true
+                      cache-dependency-glob: |
+                        deployment/pyproject.toml
+                        deployment/uv.lock
+
+                  - name: Deploy backend
+                    env:
+                      VAULT_PASSWORD: ${{ secrets.VAULT_PASSWORD }}
+                      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                    run: |
+                      uv run --project deployment startup ansible deploy \\
+                        --working-directory deployment \\
+                        --environment "${{ github.event.inputs.environment || 'production' }}" \\
+                        --service backend \\
+                        --vault-password "$VAULT_PASSWORD"
+        """,
+    }
+
+    written: list[str] = []
+    for workflow_name in BYOS_CI_WORKFLOWS:
+        (workflows_dir / workflow_name).write_text(
+            textwrap.dedent(workflows[workflow_name]).lstrip()
+        )
+        written.append(workflow_name)
+    return written
 
 
 def write_byos_deploy_public_key(deployment_dir: Path, public_key: str) -> Path:
@@ -253,14 +466,9 @@ class ProjectStep(WizardStep):
             ensure_byos_deploy_public_key_ignored(ctx.project_dir)
             ui.action_done(f"Deploy-Key geschrieben: {deploy_key_path.name}")
 
-            ui.action_start("BYOS-CI-Workflows deaktivieren...")
-            removed_workflows = disable_byos_ci_workflows(ctx.project_dir)
-            if removed_workflows:
-                ui.action_done(
-                    "Workflows deaktiviert: " + ", ".join(removed_workflows)
-                )
-            else:
-                ui.action_done("Keine BYOS-CI-Workflows zu deaktivieren")
+            ui.action_start("BYOS-CI-Workflows schreiben...")
+            written_workflows = write_byos_ci_workflows(ctx.project_dir)
+            ui.action_done("Workflows geschrieben: " + ", ".join(written_workflows))
 
             authorized_keys = (
                 "/root/.ssh/authorized_keys"
