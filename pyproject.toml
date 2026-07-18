@@ -31,11 +31,11 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=9.1.1",
-    "ruff>=0.15.20",
+    "ruff>=0.15.21",
 ]
 server = [
     "fastapi>=0.139.0",
-    "uvicorn>=0.50.0",
+    "uvicorn>=0.51.0",
 ]
 
 [project.urls]
