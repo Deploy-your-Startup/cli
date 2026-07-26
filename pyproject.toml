@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=83.0.0", "setuptools-scm>=10.2.0"]
+requires = ["setuptools>=83.0.0", "setuptools-scm>=10.2.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -13,11 +13,11 @@ authors = [
     {name = "Deploy Your Startup", email = "contact@deployyourstartup.com"}
 ]
 dependencies = [
-    "ansible==14.1.0",
+    "ansible==14.2.0",
     "click>=8.4.2",
     # Runtime requirement of the hetzner.hcloud Ansible collection (the deploy
     # playbooks import it); not imported by the CLI code directly.
-    "hcloud==2.22.0",
+    "hcloud==2.23.0",
     "httpx>=0.28.1",
     # Browser automation for `startup bootstrap` / `startup hetzner` (Cloudflare +
     # Hetzner console). Kept as a core dep so a direct CLI install has the FULL
@@ -31,10 +31,10 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=9.1.1",
-    "ruff>=0.15.21",
+    "ruff>=0.16.0",
 ]
 server = [
-    "fastapi>=0.139.0",
+    "fastapi>=0.140.0",
     "uvicorn>=0.51.0",
 ]
 
