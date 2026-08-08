@@ -1,3 +1,4 @@
+import contextlib
 import json
 import re
 import secrets
@@ -25,7 +26,10 @@ def verify_vault_password(vault_text, vault_password):
         # Try to decrypt - if it fails, the password is incorrect
         vault.decrypt(vault_text.encode())
         return True
-    except Exception:
+    # Ansible reports a wrong vault password as any of several exception
+    # types (AnsibleError, ValueError, binascii.Error, UnicodeDecodeError, ...),
+    # so this stays broad on purpose.
+    except Exception:  # noqa: BLE001
         return False
 
 
@@ -34,7 +38,8 @@ def is_full_vault_file(path: Path) -> bool:
     try:
         first_line = path.read_text(encoding="utf-8").splitlines()[0]
         return first_line.startswith("$ANSIBLE_VAULT")
-    except Exception:
+    except (OSError, UnicodeDecodeError, IndexError):
+        # Unreadable, binary, or empty — not a vault file either way.
         return False
 
 
@@ -93,7 +98,10 @@ def rotate_full_vault_file(
                 # (effectively just rotating the salt if same password)
                 new_vault = VaultLib([(DEFAULT_VAULT_IDENTITY, new_vault_secret)])
                 encrypted = new_vault.encrypt(content)
-            except Exception as e:
+            # Ansible reports a wrong vault password as any of several exception
+            # types (AnsibleError, ValueError, binascii.Error, UnicodeDecodeError, ...),
+            # so this stays broad on purpose.
+            except Exception as e:  # noqa: BLE001
                 print(f"Error rotating vault file {path}: {e}", file=sys.stderr)
                 return False
         else:
@@ -142,7 +150,10 @@ def rotate_full_vault_file(
                 Path(new_pass_path).unlink()
                 Path(plain_path).unlink()
                 Path(output_path).unlink()
-            except Exception as e:
+            # Ansible reports a wrong vault password as any of several exception
+            # types (AnsibleError, ValueError, binascii.Error, UnicodeDecodeError, ...),
+            # so this stays broad on purpose.
+            except Exception as e:  # noqa: BLE001
                 print(f"Error creating new vault file {path}: {e}", file=sys.stderr)
                 return False
 
@@ -302,7 +313,7 @@ def find_yaml_files(root: Path):
 def load_text(path: Path):
     try:
         return path.read_text()
-    except Exception as e:
+    except (OSError, UnicodeDecodeError) as e:
         print(f"Error reading {path}: {e}", file=sys.stderr)
         return None
 
@@ -430,10 +441,10 @@ FULL FILE OPERATIONS (for encrypted files):
 Examples:
   # Update a single field with random value
   startup secrets update --repo . --vault-password PASSWORD --field-random backend_db_password
-  
+
   # Set specific field value
   startup secrets update --repo . --vault-password PASSWORD --field-set api_key "my-secret-key"
-  
+
   # Rotate an encrypted file
   startup secrets update --repo . --vault-password PASSWORD --file-rotate secrets.yml
 
@@ -477,7 +488,10 @@ For more help: startup secrets update --help
                         vault_secret = VaultSecret(vault_password.encode())
                         vault = VaultLib([(DEFAULT_VAULT_IDENTITY, vault_secret)])
                         vault.decrypt(path.read_bytes())
-                    except Exception:
+                    # Ansible reports a wrong vault password as any of several exception
+                    # types (AnsibleError, ValueError, binascii.Error, UnicodeDecodeError, ...),
+                    # so this stays broad on purpose.
+                    except Exception:  # noqa: BLE001
                         print(
                             f"Error: Cannot decrypt vault file {rel} with provided password."
                         )
@@ -698,7 +712,9 @@ For more help: startup secrets update --help
                     if verbose:
                         print(f"No fields to update in: {rel}")
 
-            except Exception as e:
+            # Top-level boundary: any failure here is reported to the user and
+            # handled, never surfaced as a traceback.
+            except Exception as e:  # noqa: BLE001
                 print(
                     f"Error processing encrypted YAML file {rel}: {e}", file=sys.stderr
                 )
@@ -728,7 +744,10 @@ For more help: startup secrets update --help
                         vault_secret = VaultSecret(vault_password.encode())
                         vault = VaultLib([(DEFAULT_VAULT_IDENTITY, vault_secret)])
                         vault.decrypt(path.read_bytes())
-                    except Exception:
+                    # Ansible reports a wrong vault password as any of several exception
+                    # types (AnsibleError, ValueError, binascii.Error, UnicodeDecodeError, ...),
+                    # so this stays broad on purpose.
+                    except Exception:  # noqa: BLE001
                         print(
                             f"Error: Cannot decrypt vault file {rel} with provided password."
                         )
@@ -790,10 +809,11 @@ For more help: startup secrets update --help
             if updates and isinstance(updates, dict):
                 field_names.extend(updates.keys())
             elif updates and isinstance(updates, str):
-                try:
+                # Not a readable JSON object — field names stay unset.
+                with contextlib.suppress(
+                    OSError, UnicodeDecodeError, json.JSONDecodeError, AttributeError
+                ):
                     field_names.extend(json.loads(Path(updates).read_text()).keys())
-                except Exception:
-                    pass
             if vault_fields:
                 field_names.extend(vault_fields)
             if set_field:

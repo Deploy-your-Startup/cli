@@ -1,0 +1,41 @@
+name: CI
+
+# Lint + tests on every push and PR. Without this, lint errors only surfaced
+# when somebody happened to run `./make.sh format` locally — which is how 144 of
+# them accumulated unnoticed.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      # ruff comes from the `dev` extra, pinned in pyproject.toml, so CI and
+      # local runs always enforce the identical rule set.
+      - name: Check formatting
+        run: uv run --extra dev ruff format --check
+      - name: Lint
+        run: uv run --extra dev ruff check --output-format github
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Run tests
+        run: uv run --extra dev pytest -q

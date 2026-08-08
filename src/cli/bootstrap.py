@@ -58,6 +58,7 @@ def _gh_token_has_scope(scope: str) -> bool:
         ["gh", "auth", "status"],
         capture_output=True,
         text=True,
+        check=False,
     )
     # Scopes line looks like:  "- Token scopes: 'gist', 'read:org', 'repo', 'workflow'"
     for line in (result.stdout + result.stderr).splitlines():
@@ -338,7 +339,9 @@ def bootstrap_project(
 
         # Step 7: Summary
         click.echo("\n--- Step 7/7: Done! ---")
-    except Exception as exc:
+    # Top-level boundary: any failure here is reported to the user and
+    # handled, never surfaced as a traceback.
+    except Exception as exc:  # noqa: BLE001
         click.echo(f"\n  Error during finalization: {exc}")
         click.echo("  The project was created but some steps failed.")
         click.echo("  You can fix the issue and retry manually.")

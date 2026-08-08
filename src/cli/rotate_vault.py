@@ -87,7 +87,9 @@ def rotate_vault_password(
             try:
                 if is_full_vault_file(path) or contains_vault_blocks(path):
                     files_to_check.append(path)
-            except Exception as e:
+            # Top-level boundary: any failure here is reported to the user and
+            # handled, never surfaced as a traceback.
+            except Exception as e:  # noqa: BLE001
                 logger.error(f"Error reading {path}: {e}")
 
         undecryptable_files = []
@@ -135,7 +137,9 @@ def rotate_vault_password(
                             if success:
                                 logger.info(f"Updated inline vault blocks: {path}")
                         rotated_files.append(str(path.relative_to(base_path)))
-        except Exception as e:
+        # Top-level boundary: any failure here is reported to the user and
+        # handled, never surfaced as a traceback.
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Error processing {path}: {e}")
 
     return rotated_files

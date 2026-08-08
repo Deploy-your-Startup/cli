@@ -32,7 +32,10 @@ def verify_vault_password(vault_text, vault_password, strict=False):
         vault.decrypt(vault_text.encode())
         print("Successfully decrypted with password: xxxxx")
         return True
-    except Exception as e:
+    # Ansible reports a wrong vault password as any of several exception
+    # types (AnsibleError, ValueError, binascii.Error, UnicodeDecodeError, ...),
+    # so this stays broad on purpose.
+    except Exception as e:  # noqa: BLE001
         print(f"Failed to decrypt with password '{vault_password}': {e}")
         return False
 

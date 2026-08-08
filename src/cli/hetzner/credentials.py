@@ -21,7 +21,7 @@ def save_token(
         f"# Hetzner Cloud API Token\n"
         f"# Project: {project_name}\n"
         f"# Token name: {token_name}\n"
-        f"# Generated: {datetime.now().isoformat()}\n"
+        f"# Generated: {datetime.now().astimezone().isoformat()}\n"
         f"# {'=' * 40}\n"
         f"HETZNER_API_TOKEN={token}\n"
     )
@@ -43,8 +43,8 @@ def load_token() -> str | None:
     if not config.TOKEN_FILE.exists():
         return None
 
-    for line in config.TOKEN_FILE.read_text().splitlines():
-        line = line.strip()
+    for raw_line in config.TOKEN_FILE.read_text().splitlines():
+        line = raw_line.strip()
         if line.startswith("HETZNER_API_TOKEN=") and not line.startswith("#"):
             return line.split("=", 1)[1]
     return None

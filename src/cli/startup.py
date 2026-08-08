@@ -117,7 +117,8 @@ def bootstrap(verbose):
     try:
         github_username = _github_owner(None)
         ui.info(f"GitHub User: {github_username}")
-    except Exception:
+    except (click.ClickException, subprocess.SubprocessError, OSError):
+        # gh missing, logged out, or offline — fall back to asking.
         github_username = ui.text_input("GitHub username/org")
 
     # Output directory
@@ -336,44 +337,44 @@ def update_secrets(
 ):
     """
     Update vault secrets in Ansible YAML files.
-    
+
     This command supports two types of operations:
-    
+
     \b
     1. INLINE FIELD UPDATES: Update specific fields in YAML files that contain
        inline vault blocks (field: !vault | ...). Use --field-random to generate
        a new random value or --field-set to set a specific value.
-    
+
     \b
     2. FULL FILE OPERATIONS: Work with completely encrypted vault files.
        Use --file-rotate to re-encrypt with the same password (changes salt)
        or --file-content to replace the entire file content.
-    
+
     \b
     Examples:
-    
+
     \b
       # Generate random value for a field
       startup secrets update -r . -p PASSWORD --field-random backend_db_password
-      
+
     \b
       # Set specific value for a field
       startup secrets update -r . -p PASSWORD --field-set api_key "my-key"
-      
+
     \b
       # Update multiple fields at once
       startup secrets update -r . -p PASSWORD \\
         --field-random db_password \\
         --field-set api_key "my-key"
-      
+
     \b
       # Rotate an encrypted file (re-encrypt with same password)
       startup secrets update -r . -p PASSWORD --file-rotate secrets.yml
-      
+
     \b
       # Update a specific file directly
       startup secrets update -r path/to/file.yml -p PASSWORD --field-random db_pass
-      
+
     \b
       # Preview changes without applying (dry run)
       startup secrets update -r . -p PASSWORD --field-random db_pass --dry-run

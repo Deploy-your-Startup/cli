@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from urllib.parse import urlparse
 
+from ..playwright_errors import playwright_error
 from . import _output as ui
 from . import config
 
@@ -88,7 +89,7 @@ class HetznerKonsoleHAutomation:
             ):
                 ui.success("Already logged in to KonsoleH (saved session).")
                 return True
-        except Exception:
+        except playwright_error():
             pass
 
         ui.info("Opening Hetzner KonsoleH login...")
@@ -114,7 +115,7 @@ class HetznerKonsoleHAutomation:
                 await self.page.goto(target_url, wait_until="networkidle")
 
             return "konsoleh.hetzner.com" in self.page.url
-        except Exception:
+        except playwright_error():
             return False
 
     # ── Handle Check/Creation ────────────────────────────────────────
@@ -159,7 +160,7 @@ class HetznerKonsoleHAutomation:
             await self._fill_domain_step_three(domain_name, tld, nameservers)
 
             ui.success(f"Domain name entered: {domain}")
-        except Exception:
+        except playwright_error():
             ui.warning(f"Could not pre-fill domain — please enter '{domain}' manually.")
 
         ui.info(
@@ -225,7 +226,7 @@ class HetznerKonsoleHAutomation:
             if await link.count() > 0:
                 await link.click(timeout=10000)
                 await self.page.wait_for_load_state("networkidle")
-        except Exception:
+        except playwright_error():
             pass
 
     async def _open_change_nameserver_form(self) -> bool:
@@ -237,7 +238,7 @@ class HetznerKonsoleHAutomation:
             )
             if await self.page.locator('input[name="newdns[]"]').count() > 0:
                 return True
-        except Exception:
+        except playwright_error():
             pass
 
         # Fallback: go via DNS-Verwaltung and click the "Nameserver ändern" button.
@@ -250,7 +251,7 @@ class HetznerKonsoleHAutomation:
                 await btn.click(timeout=5000)
                 await self.page.wait_for_load_state("networkidle")
             return await self.page.locator('input[name="newdns[]"]').count() > 0
-        except Exception:
+        except playwright_error():
             return False
 
     async def _fill_and_submit_nameservers(self, nameservers: list[str]) -> bool:
@@ -275,10 +276,10 @@ class HetznerKonsoleHAutomation:
             ).first.click(timeout=5000)
             try:
                 await self.page.wait_for_load_state("networkidle")
-            except Exception:
+            except playwright_error():
                 pass
             return True
-        except Exception:
+        except playwright_error():
             return False
 
     async def _manual_nameserver_fallback(
@@ -309,7 +310,7 @@ class HetznerKonsoleHAutomation:
             await self.page.evaluate("selectProduct('regonly', 32, 2)")
             try:
                 await self.page.wait_for_load_state("networkidle")
-            except Exception:
+            except playwright_error():
                 pass
             try:
                 await self.page.wait_for_selector(
@@ -317,9 +318,9 @@ class HetznerKonsoleHAutomation:
                     timeout=8000,
                 )
                 return True
-            except Exception:
+            except playwright_error():
                 pass
-        except Exception:
+        except playwright_error():
             pass
 
         try:
@@ -335,7 +336,7 @@ class HetznerKonsoleHAutomation:
                 timeout=8000,
             )
             return True
-        except Exception:
+        except playwright_error():
             return False
 
     async def _ensure_order_page(self) -> bool:
@@ -348,7 +349,7 @@ class HetznerKonsoleHAutomation:
         for url in candidates:
             try:
                 await self.page.goto(url, wait_until="networkidle")
-            except Exception:
+            except playwright_error():
                 continue
 
             if await self.page.locator("form#orderform").count() > 0:
@@ -363,7 +364,7 @@ class HetznerKonsoleHAutomation:
                     await self.page.wait_for_load_state("networkidle")
                     if await self.page.locator("form#orderform").count() > 0:
                         return True
-            except Exception:
+            except playwright_error():
                 pass
 
         return False
@@ -432,7 +433,7 @@ class HetznerKonsoleHAutomation:
         await self.page.locator("#next_button").first.click(timeout=5000)
         try:
             await self.page.wait_for_load_state("networkidle")
-        except Exception:
+        except playwright_error():
             pass
 
     # ── Check Domain Availability ────────────────────────────────────

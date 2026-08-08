@@ -46,6 +46,7 @@ def test_nonexistent_file_handling():
             ],
             capture_output=True,
             text=True,
+            check=False,
         )
 
         # THEN an appropriate warning message is returned
@@ -86,7 +87,7 @@ def test_dry_run_mode():
         assert initial_backend_db_password is not None, "Failed to get initial value"
 
         # Store the content after encryption
-        with open(test_yaml, "r") as f:
+        with open(test_yaml) as f:
             initial_content = f.read()
 
         # WHEN the CLI is called with the dry-run flag
@@ -109,6 +110,7 @@ def test_dry_run_mode():
             ],
             capture_output=True,
             text=True,
+            check=False,
         )
 
         # THEN potential changes are shown but not actually applied to the files
@@ -116,7 +118,7 @@ def test_dry_run_mode():
         assert "dry-run" in result.stdout.lower() or "dry-run" in result.stderr.lower()
 
         # The original file should remain unchanged
-        with open(test_yaml, "r") as f:
+        with open(test_yaml) as f:
             current_content = f.read()
             assert current_content == initial_content
 

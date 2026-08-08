@@ -1,3 +1,5 @@
+import click
+import pytest
 from click.testing import CliRunner
 
 from cli import ansible_commands
@@ -59,15 +61,13 @@ def test_run_update_vms_executes_playbook(monkeypatch, tmp_path):
 def test_run_update_vms_requires_valid_environment(monkeypatch):
     monkeypatch.setattr(ansible_commands, "setup_ansible", lambda **kwargs: None)
 
-    try:
+    with pytest.raises(
+        click.ClickException, match="--environment must be production or staging"
+    ):
         ansible_commands.run_update_vms(
             vault_password="secret",
             environment="dev",
         )
-    except Exception as exc:
-        assert "--environment must be production or staging" in str(exc)
-    else:
-        raise AssertionError("Expected invalid environment error")
 
 
 def test_ansible_update_vms_cli_forwards_flags(monkeypatch):

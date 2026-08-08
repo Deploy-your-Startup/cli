@@ -85,7 +85,7 @@ def test_oauth_flow_and_deployment():
                         # The token should be received and deployment should be triggered
 
                         # Verify token was set correctly
-                        assert deploy.ACCESS_TOKEN == mock_token
+                        assert mock_token == deploy.ACCESS_TOKEN
 
                         # Run the deployment function with the new parameter format and check it worked
                         result = deploy.run_ansible_deploy(
@@ -156,44 +156,46 @@ def test_deploy_github_repo_with_token(monkeypatch):
         mock_thread_instance = MagicMock()
         mock_thread.return_value = mock_thread_instance
 
-        with patch("cli.deploy.start_oauth") as mock_oauth:
-            with patch("cli.deploy.run_ansible_deploy") as mock_deploy:
-                mock_deploy.return_value = True
+        with (
+            patch("cli.deploy.start_oauth") as mock_oauth,
+            patch("cli.deploy.run_ansible_deploy") as mock_deploy,
+        ):
+            mock_deploy.return_value = True
 
-                # The key issue: we need to set the ACCESS_TOKEN *after* the oauth flow would set it
-                # Set up our mocked oauth to actually set the token
-                def side_effect():
-                    deploy.ACCESS_TOKEN = "mock_token"
+            # The key issue: we need to set the ACCESS_TOKEN *after* the oauth flow would set it
+            # Set up our mocked oauth to actually set the token
+            def side_effect():
+                deploy.ACCESS_TOKEN = "mock_token"
 
-                mock_oauth.side_effect = side_effect
+            mock_oauth.side_effect = side_effect
 
-                # THEN
-                # The function should execute successfully
-                result = deploy.deploy_github_repo(
-                    "test-repo",
-                    "Test repository",
-                    True,
-                    "test-owner",
-                    "test-template",
-                    False,
-                )
+            # THEN
+            # The function should execute successfully
+            result = deploy.deploy_github_repo(
+                "test-repo",
+                "Test repository",
+                True,
+                "test-owner",
+                "test-template",
+                False,
+            )
 
-                # Verify functions were called as expected
-                mock_thread_instance.start.assert_called_once()
-                mock_thread_instance.join.assert_called_once()
-                mock_oauth.assert_called_once()
-                mock_deploy.assert_called_once_with(
-                    "mock_token",
-                    "test-repo",
-                    "Test repository",
-                    True,
-                    "test-owner",
-                    "test-template",
-                    False,
-                )
+            # Verify functions were called as expected
+            mock_thread_instance.start.assert_called_once()
+            mock_thread_instance.join.assert_called_once()
+            mock_oauth.assert_called_once()
+            mock_deploy.assert_called_once_with(
+                "mock_token",
+                "test-repo",
+                "Test repository",
+                True,
+                "test-owner",
+                "test-template",
+                False,
+            )
 
-                # Check successful exit code
-                assert result == 0
+            # Check successful exit code
+            assert result == 0
 
 
 def test_deploy_github_repo_no_token(monkeypatch):

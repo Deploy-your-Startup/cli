@@ -75,9 +75,9 @@ def test_ensure_zone_raises_on_failure():
     with (
         patch("cli.cloudflare_zones.httpx.get", return_value=empty),
         patch("cli.cloudflare_zones.httpx.post", return_value=failed),
+        pytest.raises(RuntimeError),
     ):
-        with pytest.raises(RuntimeError):
-            cz.ensure_zone("tok", "acc", "example.com")
+        cz.ensure_zone("tok", "acc", "example.com")
 
 
 # ── add_pages_custom_domain ──────────────────────────────────────────
@@ -115,9 +115,9 @@ def test_add_pages_custom_domain_raises_when_truly_failed():
     with (
         patch("cli.cloudflare_zones.httpx.post", return_value=bad),
         patch("cli.cloudflare_zones.httpx.get", return_value=not_found),
+        pytest.raises(RuntimeError),
     ):
-        with pytest.raises(RuntimeError):
-            cz.add_pages_custom_domain("tok", "acc", "proj", "example.com")
+        cz.add_pages_custom_domain("tok", "acc", "proj", "example.com")
 
 
 # ── clear_conflicting_records ────────────────────────────────────────

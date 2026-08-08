@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import re
 from pathlib import Path
 
 import click
 
 from cli import wizard_output as ui
+from cli.playwright_errors import playwright_error
 
 CF_SIGNUP_URL = "https://dash.cloudflare.com/sign-up"
 CF_TOKEN_URL = "https://dash.cloudflare.com/profile/api-tokens"
@@ -27,12 +29,7 @@ DEFAULT_PERMISSIONS = [
 
 
 def _check_playwright() -> bool:
-    try:
-        import playwright  # noqa: F401
-
-        return True
-    except ImportError:
-        return False
+    return importlib.util.find_spec("playwright") is not None
 
 
 def _require_playwright() -> None:
@@ -182,7 +179,7 @@ class CloudflareAutomation:
             await self.page.get_by_role("button", name="Create Token").click(
                 timeout=5_000
             )
-        except Exception:
+        except playwright_error():
             pass
 
         try:
@@ -190,7 +187,7 @@ class CloudflareAutomation:
                 state="visible", timeout=5_000
             )
             return
-        except Exception:
+        except playwright_error():
             await self.page.goto(
                 f"{CF_TOKEN_URL}/create", wait_until="domcontentloaded"
             )
@@ -223,7 +220,7 @@ class CloudflareAutomation:
             try:
                 if await level_input.is_enabled(timeout=250):
                     break
-            except Exception:
+            except playwright_error():
                 pass
             await asyncio.sleep(0.1)
 
@@ -255,11 +252,13 @@ class CloudflareAutomation:
             )
             if await copy_button.first.count():
                 await copy_button.first.click(timeout=3_000)
+                # evaluate() yields None if the clipboard read resolves to
+                # nothing (e.g. permission denied) — normalize before strip().
                 token = await self.page.evaluate("navigator.clipboard.readText()")
-                token = token.strip()
+                token = (token or "").strip()
                 if self._looks_like_token(token):
                     return token
-        except Exception:
+        except playwright_error():
             pass
 
         selectors = [
@@ -278,18 +277,18 @@ class CloudflareAutomation:
                     item = items.nth(i)
                     try:
                         value = await item.input_value(timeout=1_000)
-                    except Exception:
+                    except playwright_error():
                         value = ""
                     if self._looks_like_token(value):
                         return value.strip()
                     try:
                         value = await item.inner_text(timeout=1_000)
-                    except Exception:
+                    except playwright_error():
                         value = ""
                     if self._looks_like_token(value):
                         return value.strip()
 
-            except Exception:
+            except playwright_error():
                 continue
 
         return None
@@ -316,7 +315,7 @@ class CloudflareAutomation:
             )
             if self._looks_like_token(token):
                 return token.strip()
-        except Exception:
+        except playwright_error():
             pass
 
         try:
@@ -339,7 +338,7 @@ class CloudflareAutomation:
             )
             if self._looks_like_token(token):
                 return token.strip()
-        except Exception:
+        except playwright_error():
             pass
 
         return None
@@ -359,7 +358,7 @@ class CloudflareAutomation:
             ):
                 try:
                     await self.page.goto(CF_TOKEN_URL, wait_until="domcontentloaded")
-                except Exception:
+                except playwright_error():
                     pass
                 if await self._on_token_page():
                     return True
@@ -384,7 +383,7 @@ class CloudflareAutomation:
                 if await locator.is_visible(timeout=500):
                     await locator.click(timeout=2_000)
                     await asyncio.sleep(0.2)
-            except Exception:
+            except playwright_error():
                 continue
 
     async def _on_token_page(self) -> bool:
@@ -394,7 +393,7 @@ class CloudflareAutomation:
         try:
             heading = self.page.get_by_role("heading", name="User API Tokens")
             return await heading.first.is_visible(timeout=2_000)
-        except Exception:
+        except playwright_error():
             return False
 
     @staticmethod

@@ -24,10 +24,11 @@ def is_full_vault_file(file_path):
         bool: True if the file is a fully encrypted vault file, False otherwise
     """
     try:
-        with open(file_path, "r") as f:
+        with open(file_path) as f:
             first_line = f.readline().strip()
             return first_line.startswith("$ANSIBLE_VAULT")
-    except Exception:
+    except (OSError, UnicodeDecodeError):
+        # Unreadable or binary — not a vault file either way.
         return False
 
 
@@ -75,7 +76,10 @@ def rotate_full_vault_file(
         logger.info(f"Rotated vault file: {file_path}")
 
         return True
-    except Exception as e:
+    # Ansible reports a wrong vault password as any of several exception
+    # types (AnsibleError, ValueError, binascii.Error, UnicodeDecodeError, ...),
+    # so this stays broad on purpose.
+    except Exception as e:  # noqa: BLE001
         logger.error(f"Error rotating vault file {file_path}: {e}")
         return False
 
@@ -98,7 +102,7 @@ def get_vault_file_content(file_path, vault_password, strict=False):
             return None
 
         # Read the encrypted content
-        with open(file_path, "r") as f:
+        with open(file_path) as f:
             vault_text = f.read()
 
         # Verify the password can decrypt the content
@@ -108,7 +112,10 @@ def get_vault_file_content(file_path, vault_password, strict=False):
             decrypted = vault_lib.decrypt(vault_text.encode()).decode("utf-8")
             return decrypted.strip()
         return None
-    except Exception as e:
+    # Ansible reports a wrong vault password as any of several exception
+    # types (AnsibleError, ValueError, binascii.Error, UnicodeDecodeError, ...),
+    # so this stays broad on purpose.
+    except Exception as e:  # noqa: BLE001
         logger.error(f"Error getting vault file content: {e}")
         return None
 
@@ -138,7 +145,10 @@ def update_vault_file(file_path, new_content, vault_password):
 
         logger.info(f"Updated vault file: {file_path}")
         return True
-    except Exception as e:
+    # Ansible reports a wrong vault password as any of several exception
+    # types (AnsibleError, ValueError, binascii.Error, UnicodeDecodeError, ...),
+    # so this stays broad on purpose.
+    except Exception as e:  # noqa: BLE001
         logger.error(f"Error updating vault file: {e}")
         return False
 
@@ -157,7 +167,7 @@ def check_can_decrypt_with_password(path, password):
     try:
         # If it's a full vault file, check using verify_vault_password
         if is_full_vault_file(path):
-            with open(path, "r") as f:
+            with open(path) as f:
                 vault_text = f.read()
             return verify_vault_password(vault_text, password, strict=True)
 
@@ -167,7 +177,10 @@ def check_can_decrypt_with_password(path, password):
         if contains_vault_blocks(path):
             return check_vault_blocks_with_password(path, password)
         return True
-    except Exception as e:
+    # Ansible reports a wrong vault password as any of several exception
+    # types (AnsibleError, ValueError, binascii.Error, UnicodeDecodeError, ...),
+    # so this stays broad on purpose.
+    except Exception as e:  # noqa: BLE001
         logger.error(f"Error checking if file can be decrypted: {e}")
         return False
 
@@ -196,6 +209,8 @@ def safe_write(path, content):
         tmp.replace(path)
         logger.info(f"Updated: {path}")
         return True
-    except Exception as e:
+    # Top-level boundary: any failure here is reported to the user and
+    # handled, never surfaced as a traceback.
+    except Exception as e:  # noqa: BLE001
         logger.error(f"Error writing to {path}: {e}")
         return False

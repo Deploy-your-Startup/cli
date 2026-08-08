@@ -86,6 +86,7 @@ def test_update_multiple_fields_and_files_in_single_command():
             ],
             capture_output=True,
             text=True,
+            check=False,
         )
 
         # THEN all specified fields and files are updated
@@ -170,6 +171,7 @@ def test_rotate_multiple_files_in_single_command():
             ],
             capture_output=True,
             text=True,
+            check=False,
         )
 
         # THEN all files are rotated
