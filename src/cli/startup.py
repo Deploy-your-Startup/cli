@@ -162,6 +162,30 @@ def bootstrap(verbose):
     run_wizard(ctx)
 
 
+def _password_scope(repo: str) -> str:
+    """The directory whose name identifies the project to the password backend.
+
+    A vault lives at ``<project>/deployment/group_vars/...``, so --repo may point
+    anywhere from the project root down to a single file. Walk up to the
+    ``deployment`` boundary, which is what the ansible commands always pass, so
+    that ``-r group_vars/all.yml`` asks for the project's password rather than
+    for one called VAULT_PASSWORD_GROUP_VARS.
+
+    Falls back to the directory itself when there is no such ancestor, which
+    keeps repositories laid out differently working as before.
+    """
+    path = Path(repo)
+    if not path.exists():
+        return repo
+    path = path.resolve()
+    if path.is_file():
+        path = path.parent
+    for candidate in (path, *path.parents):
+        if candidate.name == "deployment":
+            return str(candidate)
+    return str(path)
+
+
 @cli.group()
 def secrets():
     """Manage vault secrets"""
@@ -362,12 +386,7 @@ def update_secrets(
     # project the path belongs to. Before this, the password had to be passed on
     # the command line, where `ps` and the shell history can see it.
     #
-    # --repo may name a single YAML file, and the project a secret belongs to is
-    # then the directory holding it - deriving it from the file would look for a
-    # keychain entry called VAULT_PASSWORD_ALL.YML.
-    repo_path = Path(repo)
-    password_scope = repo_path.parent if repo_path.is_file() else repo_path
-    vault_password = resolve_vault_password(vault_password, str(password_scope))
+    vault_password = resolve_vault_password(vault_password, _password_scope(repo))
 
     # Merge new and old parameter names for backward compatibility
     # Prefer new names if both are provided

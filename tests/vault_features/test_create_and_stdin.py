@@ -188,3 +188,35 @@ def test_vault_password_falls_back_to_the_keychain(group_vars, monkeypatch):
         get_inline_vault_value(group_vars, "existing_secret", PASSWORD)
         == "via-keychain"
     )
+
+
+def test_password_scope_walks_up_to_the_deployment_boundary(tmp_path):
+    # GIVEN the layout every project here uses
+    from cli.startup import _password_scope
+
+    deployment = tmp_path / "about-phil" / "deployment"
+    (deployment / "group_vars").mkdir(parents=True)
+    all_yml = deployment / "group_vars" / "all.yml"
+    all_yml.write_text("project_name: about-phil\n")
+
+    # THEN every way of pointing at the vault resolves to the same project,
+    # rather than to "group_vars" or to the file name
+    assert Path(_password_scope(str(all_yml))).name == "deployment"
+    assert Path(_password_scope(str(deployment / "group_vars"))).name == "deployment"
+    assert Path(_password_scope(str(deployment))).name == "deployment"
+
+
+def test_scan_skips_vendored_directories(tmp_path):
+    # GIVEN a project whose virtualenv holds far more YAML than the project does
+    from cli.update_vault_secrets import find_yaml_files
+
+    (tmp_path / "group_vars").mkdir()
+    (tmp_path / "group_vars" / "all.yml").write_text("a: 1\n")
+    for vendored in (".venv", "node_modules", ".git"):
+        (tmp_path / vendored / "deep").mkdir(parents=True)
+        (tmp_path / vendored / "deep" / "noise.yml").write_text("b: 2\n")
+
+    # THEN only the project's own file is scanned - this is what made `-r .`
+    # look like it had hung
+    found = [p.name for p in find_yaml_files(tmp_path)]
+    assert found == ["all.yml"]

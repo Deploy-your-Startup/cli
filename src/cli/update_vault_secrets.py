@@ -270,8 +270,33 @@ def generate_random_secret(length=32):
     return first + rest
 
 
+# Directories that never hold a project's own secrets but do hold enormous
+# numbers of YAML files. A `deployment/.venv` with ansible installed carries
+# over 3000 of them, which made `-r .` appear to hang.
+SCAN_EXCLUDED_DIRS = frozenset(
+    {
+        ".git",
+        ".venv",
+        "venv",
+        "node_modules",
+        ".shared-roles",
+        "__pycache__",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".tox",
+        "dry-run-output",
+    }
+)
+
+
 def find_yaml_files(root: Path):
-    return list(root.rglob("*.yml")) + list(root.rglob("*.yaml"))
+    """Every .yml/.yaml under root, skipping vendored and generated trees."""
+    return [
+        path
+        for pattern in ("*.yml", "*.yaml")
+        for path in root.rglob(pattern)
+        if not SCAN_EXCLUDED_DIRS.intersection(path.relative_to(root).parts[:-1])
+    ]
 
 
 def load_text(path: Path):
