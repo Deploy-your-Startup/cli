@@ -330,6 +330,7 @@ def update_secrets(
     verify_password=False,
     set_field=None,
     set_file_content=None,
+    create_in=None,
 ):
     """
     Core function to update vault secrets in a repository.
@@ -347,6 +348,10 @@ def update_secrets(
     - verify_password: If True, verify vault password can decrypt existing secrets before updating
     - set_field: List of (field, value) tuples to set specific field values
     - set_file_content: List of (file_path, content) tuples to set specific file contents
+    - create_in: YAML file to append fields to that have no vault block anywhere.
+      Without it such a field is reported as an error; previously it was a
+      silent no-op, so a secret could appear to have been stored when nothing
+      had been written.
 
     Returns:
     - tuple of (success, updated_files, password_verification_failed)
@@ -503,6 +508,12 @@ For more help: startup secrets update --help
                 if verbose:
                     print(f"Setting {field} to explicitly provided value")
 
+        # Which fields actually reached a file. A field whose vault block does
+        # not exist anywhere matches nothing and used to fall through here
+        # without a word, so `--field-set api_key ...` could report success
+        # having written nothing at all.
+        written_fields = set()
+
         for yml in yaml_files_to_process:
             # Skip full vault files when processing inline blocks
             if is_full_vault_file(yml):
@@ -542,6 +553,7 @@ For more help: startup secrets update --help
                 if count:
                     modified = True
                     text = new_text
+                    written_fields.add(var)
                     if verbose:
                         print(f"Replaced {var} ({count}) in {rel}")
             if modified:
@@ -557,6 +569,50 @@ For more help: startup secrets update --help
                     backup_and_write(yml, text)
                     if verbose:
                         print(f"Updated {yml}")
+
+        # Fields that matched no vault block anywhere. Either create them in the
+        # file the caller named, or say so - never pretend they were stored.
+        missing = [v for v in updates_dict if v not in written_fields]
+        if missing and not only_existing:
+            if create_in:
+                target = Path(create_in)
+                if not target.is_absolute():
+                    target = work_dir / create_in
+                if not target.exists():
+                    print(f"Error: --create-in file does not exist: {target}")
+                    return False, updated, password_verification_failed
+
+                text = load_text(target) or ""
+                if text and not text.endswith("\n"):
+                    text += "\n"
+                for var in missing:
+                    block = regen_vault_string(var, updates_dict[var], vault_file)
+                    text += "\n" + block.rstrip("\n") + "\n"
+                    written_fields.add(var)
+
+                rel = (
+                    target.relative_to(work_dir)
+                    if work_dir in target.parents
+                    else target.name
+                )
+                if dry_run:
+                    out = dry_dir / rel
+                    out.parent.mkdir(parents=True, exist_ok=True)
+                    out.write_text(text)
+                    print(f"Dry-run: would create {', '.join(missing)} in {rel}")
+                else:
+                    backup_and_write(target, text)
+                    print(f"Created {', '.join(missing)} in {rel}")
+                if rel not in updated:
+                    updated.append(rel)
+            else:
+                print(
+                    "Error: no vault block exists for: "
+                    + ", ".join(sorted(missing))
+                    + "\nNothing was written for these. Pass --create-in <file.yml> "
+                    "to add them, or --only-existing to skip them on purpose."
+                )
+                return False, updated, password_verification_failed
 
     # Process fully encrypted YAML files for field updates
     if updates or vault_fields or set_field:

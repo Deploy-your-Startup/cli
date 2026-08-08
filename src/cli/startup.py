@@ -103,6 +103,7 @@ def bootstrap(verbose):
             show_default=False,
         )
         import os
+
         sentry_dsn = os.environ.get("SENTRY_DSN", "")
         if not sentry_dsn:
             sentry_dsn = ui.text_input(
@@ -127,13 +128,15 @@ def bootstrap(verbose):
     # ── Summary + confirmation ───────────────────────────────────
 
     summary = {
-        "Modus":   "Full-Stack" if kind == "fullstack" else "Pitch (Cloudflare Pages)",
+        "Modus": "Full-Stack" if kind == "fullstack" else "Pitch (Cloudflare Pages)",
         "Projekt": project_name,
-        "Domain":  base_domain,
-        "GitHub":  f"{github_username}/{project_name}",
+        "Domain": base_domain,
+        "GitHub": f"{github_username}/{project_name}",
     }
     if kind == "fullstack":
-        summary["Provider"] = "Hetzner" if provider == "hetzner" else "Bring your own server"
+        summary["Provider"] = (
+            "Hetzner" if provider == "hetzner" else "Bring your own server"
+        )
         summary["Registry"] = f"ghcr.io/{github_username}"
         summary["Postgres"] = "17"
     ui.input_summary(summary)
@@ -168,8 +171,11 @@ def secrets():
 @click.option(
     "--vault-password",
     "-p",
-    required=True,
-    help="Vault password for encryption/decryption",
+    default=None,
+    help=(
+        "Vault password. Omit it to read the password from the configured "
+        "backend (default: macOS Keychain), the way `startup ansible` does."
+    ),
 )
 @click.option(
     "--repo",
@@ -207,6 +213,26 @@ def secrets():
     multiple=True,
     nargs=2,
     help="Set specific value for inline vault field: FIELD VALUE (can be repeated)",
+)
+@click.option(
+    "--field-stdin",
+    "-fi",
+    default=None,
+    help=(
+        "Set an inline vault field to a value read from stdin. Keeps the "
+        "secret out of the process arguments, where --field-set leaves it "
+        "readable to anyone who can run `ps`. One field per invocation."
+    ),
+)
+@click.option(
+    "--create-in",
+    default=None,
+    type=click.Path(),
+    help=(
+        "YAML file to append fields to when they have no vault block yet. "
+        "Without it, a field that does not exist is an error rather than a "
+        "silent no-op."
+    ),
 )
 @click.option(
     "--file-rotate",
@@ -273,6 +299,8 @@ def update_secrets(
     verify_password,
     field_random,
     field_set,
+    field_stdin,
+    create_in,
     file_rotate,
     file_content,
     vault_field,
@@ -326,7 +354,20 @@ def update_secrets(
       # Preview changes without applying (dry run)
       startup secrets update -r . -p PASSWORD --field-random db_pass --dry-run
     """
+    from cli.ansible_commands import resolve_vault_password
     from cli.update_vault_secrets import update_secrets as update_vault_secrets
+
+    # Same resolution `startup ansible` uses: an explicit --vault-password wins,
+    # otherwise the backend (macOS Keychain by default) is asked, keyed by the
+    # project the path belongs to. Before this, the password had to be passed on
+    # the command line, where `ps` and the shell history can see it.
+    #
+    # --repo may name a single YAML file, and the project a secret belongs to is
+    # then the directory holding it - deriving it from the file would look for a
+    # keychain entry called VAULT_PASSWORD_ALL.YML.
+    repo_path = Path(repo)
+    password_scope = repo_path.parent if repo_path.is_file() else repo_path
+    vault_password = resolve_vault_password(vault_password, str(password_scope))
 
     # Merge new and old parameter names for backward compatibility
     # Prefer new names if both are provided
@@ -337,6 +378,17 @@ def update_secrets(
     merged_field_set = list(field_set) if field_set else []
     if set_field:  # Old parameter name
         merged_field_set.extend(set_field)
+
+    # A value read from stdin never appears in the process arguments. Read it
+    # whole rather than by line so a multi-line credential survives, and strip
+    # only the trailing newline a shell or an editor adds.
+    if field_stdin:
+        value = sys.stdin.read().removesuffix("\n")
+        if not value:
+            raise click.ClickException(
+                f"--field-stdin {field_stdin} was given but stdin was empty."
+            )
+        merged_field_set.append((field_stdin, value))
 
     merged_file_rotate = list(file_rotate) if file_rotate else []
     if vault_file:  # Old parameter name
@@ -363,6 +415,7 @@ def update_secrets(
         verify_password=verify_password,
         set_field=set_field_pairs,
         set_file_content=set_file_content_pairs,
+        create_in=create_in,
     )
 
     # Return appropriate exit code based on the result
