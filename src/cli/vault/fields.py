@@ -2,16 +2,17 @@
 Utilities for handling inline encrypted fields in Ansible vault.
 """
 
+import logging
 import re
 import subprocess
 import tempfile
-import logging
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from ansible.parsing.vault import VaultLib, VaultSecret, VaultEditor
 
-from .common import verify_vault_password, create_vault_lib
+from ansible.parsing.vault import VaultEditor, VaultLib, VaultSecret
+
 from ..ansible_bin import ansible_bin
+from .common import create_vault_lib, verify_vault_password
 
 DEFAULT_VAULT_IDENTITY = "default"
 

@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import tempfile
-import os
 from pathlib import Path
 
 import click
-
 
 DEFAULT_BRANCH = "main"
 DEFAULT_TEMPLATE_OWNER = "Deploy-your-Startup"

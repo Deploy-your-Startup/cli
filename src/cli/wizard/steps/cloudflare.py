@@ -5,9 +5,9 @@ from __future__ import annotations
 import click
 import httpx
 
+from cli import wizard_output as ui
 from cli.cloudflare import create_api_token
 from cli.cloudflare_zones import ensure_zone
-from cli import wizard_output as ui
 
 from ..base import WizardStep, open_browser
 from ..context import BootstrapContext
@@ -151,7 +151,9 @@ class CloudflareStep(WizardStep):
             )
         ctx.cloudflare_zone_id = zone.zone_id
         ctx.cloudflare_nameservers = zone.nameservers
-        ctx.cloudflare_zone_is_subdomain = bool(zone.name) and zone.name != ctx.base_domain
+        ctx.cloudflare_zone_is_subdomain = (
+            bool(zone.name) and zone.name != ctx.base_domain
+        )
 
         if ctx.cloudflare_zone_is_subdomain:
             ui.action_done(f"Bestehende Root-Zone {zone.name} wird verwendet")

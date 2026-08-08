@@ -12,7 +12,13 @@ def banner():
     """Display the CLI banner."""
     click.echo()
     click.echo(click.style("  Hetzner Cloud Bootstrap", fg="cyan", bold=True))
-    click.echo(click.style("  Interactive setup for account, project, domain & API token", fg="white", dim=True))
+    click.echo(
+        click.style(
+            "  Interactive setup for account, project, domain & API token",
+            fg="white",
+            dim=True,
+        )
+    )
     click.echo()
 
 

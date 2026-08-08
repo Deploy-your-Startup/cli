@@ -2,11 +2,12 @@
 Utilities for handling fully encrypted files in Ansible vault.
 """
 
-import shutil
 import logging
+import shutil
 
-from .common import verify_vault_password, create_vault_lib
 from ansible.parsing.vault import VaultEditor, VaultSecret
+
+from .common import create_vault_lib, verify_vault_password
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -161,7 +162,7 @@ def check_can_decrypt_with_password(path, password):
             return verify_vault_password(vault_text, password, strict=True)
 
         # For files with inline blocks, we'll need to defer to fields module
-        from .fields import contains_vault_blocks, check_vault_blocks_with_password
+        from .fields import check_vault_blocks_with_password, contains_vault_blocks
 
         if contains_vault_blocks(path):
             return check_vault_blocks_with_password(path, password)

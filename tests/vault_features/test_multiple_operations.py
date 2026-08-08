@@ -2,10 +2,10 @@
 Tests for performing multiple operations in a single command.
 """
 
-import tempfile
 import shutil
-from pathlib import Path
 import subprocess
+import tempfile
+from pathlib import Path
 
 from cli.vault.fields import get_inline_vault_value
 from cli.vault.files import get_vault_file_content

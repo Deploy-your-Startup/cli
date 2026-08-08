@@ -85,9 +85,7 @@ class DomainStep(WizardStep):
         )
         from cli.hetzner import set_domain_nameservers
 
-        ok = set_domain_nameservers(
-            domain=ctx.base_domain, nameservers=nameservers
-        )
+        ok = set_domain_nameservers(domain=ctx.base_domain, nameservers=nameservers)
         if ok:
             ui.action_done("Nameserver auf Cloudflare umgestellt")
         else:
@@ -113,9 +111,7 @@ class DomainStep(WizardStep):
 
     # ── Buy a fresh domain at Hetzner ────────────────────────────────
 
-    def _buy(
-        self, ctx: BootstrapContext, nameservers: list[str] | None = None
-    ) -> None:
+    def _buy(self, ctx: BootstrapContext, nameservers: list[str] | None = None) -> None:
         ui.info(
             "Ich öffne den Browser für die Registrierung. "
             "Du musst dich bei Hetzner einloggen und den Kauf bestätigen."

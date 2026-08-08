@@ -46,7 +46,6 @@ def test_run_restore_uses_latest_backup_files(tmp_path, monkeypatch):
     def fake_run(command, **kwargs):
         captured["command"] = command
         captured["kwargs"] = kwargs
-        return None
 
     monkeypatch.setattr(ansible_commands, "_run_command", fake_run)
 

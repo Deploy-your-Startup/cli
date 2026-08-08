@@ -53,9 +53,7 @@ def ensure_pages_project(ctx: BootstrapContext) -> None:
         ui.action_done("Cloudflare Pages Projekt erstellt")
         return
 
-    raise RuntimeError(
-        f"Cloudflare Pages Projekt konnte nicht erstellt werden: {data}"
-    )
+    raise RuntimeError(f"Cloudflare Pages Projekt konnte nicht erstellt werden: {data}")
 
 
 def pages_project_exists(ctx: BootstrapContext) -> bool:
@@ -153,7 +151,9 @@ class PitchFinalizeStep(WizardStep):
         _run_command(["git", "add", "-A"], cwd=ctx.project_dir)
         status = subprocess.run(
             ["git", "status", "--porcelain"],
-            cwd=ctx.project_dir, capture_output=True, text=True,
+            cwd=ctx.project_dir,
+            capture_output=True,
+            text=True,
         )
         if status.stdout.strip():
             _run_command(
@@ -166,7 +166,8 @@ class PitchFinalizeStep(WizardStep):
 
         subprocess.run(
             ["git", "remote", "remove", "origin"],
-            cwd=ctx.project_dir, capture_output=True,
+            cwd=ctx.project_dir,
+            capture_output=True,
         )
         if not repo_exists(ctx.full_repo):
             ui.action_start("GitHub-Repository erstellen...")
@@ -177,21 +178,40 @@ class PitchFinalizeStep(WizardStep):
             ui.action_done("Repository erstellt")
         else:
             _run_command(
-                ["git", "remote", "add", "origin",
-                 f"https://github.com/{ctx.full_repo}.git"],
+                [
+                    "git",
+                    "remote",
+                    "add",
+                    "origin",
+                    f"https://github.com/{ctx.full_repo}.git",
+                ],
                 cwd=ctx.project_dir,
             )
 
         ui.action_start("Cloudflare Secrets setzen...")
         _run_command(
-            ["gh", "secret", "set", "CLOUDFLARE_API_TOKEN",
-             "--body", ctx.cloudflare_api_token],
-            cwd=ctx.project_dir, capture_output=True,
+            [
+                "gh",
+                "secret",
+                "set",
+                "CLOUDFLARE_API_TOKEN",
+                "--body",
+                ctx.cloudflare_api_token,
+            ],
+            cwd=ctx.project_dir,
+            capture_output=True,
         )
         _run_command(
-            ["gh", "secret", "set", "CLOUDFLARE_ACCOUNT_ID",
-             "--body", ctx.cloudflare_account_id],
-            cwd=ctx.project_dir, capture_output=True,
+            [
+                "gh",
+                "secret",
+                "set",
+                "CLOUDFLARE_ACCOUNT_ID",
+                "--body",
+                ctx.cloudflare_account_id,
+            ],
+            cwd=ctx.project_dir,
+            capture_output=True,
         )
         ui.action_done("Secrets gesetzt")
 
@@ -201,7 +221,8 @@ class PitchFinalizeStep(WizardStep):
         ui.action_start("Push nach GitHub...")
         _run_command(
             ["git", "push", "-u", "origin", "main"],
-            cwd=ctx.project_dir, capture_output=True,
+            cwd=ctx.project_dir,
+            capture_output=True,
         )
         ui.action_done("Gepusht")
 

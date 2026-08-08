@@ -7,11 +7,10 @@ separate from the Cloud Console but using the same Hetzner account.
 
 from __future__ import annotations
 
-import asyncio
 from urllib.parse import urlparse
 
-from . import config
 from . import _output as ui
+from . import config
 
 
 class HetznerKonsoleHAutomation:
@@ -243,9 +242,7 @@ class HetznerKonsoleHAutomation:
 
         # Fallback: go via DNS-Verwaltung and click the "Nameserver ändern" button.
         try:
-            await self.page.goto(
-                config.KONSOLEH_DNS_EDIT_URL, wait_until="networkidle"
-            )
+            await self.page.goto(config.KONSOLEH_DNS_EDIT_URL, wait_until="networkidle")
             btn = self.page.locator(
                 'a:has-text("Nameserver ändern"), button:has-text("Nameserver ändern")'
             ).first

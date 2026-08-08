@@ -6,6 +6,7 @@ Startup CLI - Command line tool for Deploy Your Startup operations
 import subprocess
 import sys
 from pathlib import Path
+
 import click
 
 
@@ -35,7 +36,6 @@ def get_python_cmd():
 @click.group()
 def cli():
     """Startup CLI - Command line tool for Deploy Your Startup operations"""
-    pass
 
 
 # === BOOTSTRAP COMMAND ===
@@ -51,6 +51,7 @@ def bootstrap(verbose):
     re-run after an interruption.
     """
     import re
+
     from cli import wizard_output as ui
     from cli.bootstrap_wizard import BootstrapContext, run_wizard
     from cli.sync_commands import _github_owner
@@ -103,6 +104,7 @@ def bootstrap(verbose):
             show_default=False,
         )
         import os
+
         sentry_dsn = os.environ.get("SENTRY_DSN", "")
         if not sentry_dsn:
             sentry_dsn = ui.text_input(
@@ -127,13 +129,15 @@ def bootstrap(verbose):
     # ── Summary + confirmation ───────────────────────────────────
 
     summary = {
-        "Modus":   "Full-Stack" if kind == "fullstack" else "Pitch (Cloudflare Pages)",
+        "Modus": "Full-Stack" if kind == "fullstack" else "Pitch (Cloudflare Pages)",
         "Projekt": project_name,
-        "Domain":  base_domain,
-        "GitHub":  f"{github_username}/{project_name}",
+        "Domain": base_domain,
+        "GitHub": f"{github_username}/{project_name}",
     }
     if kind == "fullstack":
-        summary["Provider"] = "Hetzner" if provider == "hetzner" else "Bring your own server"
+        summary["Provider"] = (
+            "Hetzner" if provider == "hetzner" else "Bring your own server"
+        )
         summary["Registry"] = f"ghcr.io/{github_username}"
         summary["Postgres"] = "17"
     ui.input_summary(summary)
@@ -158,18 +162,44 @@ def bootstrap(verbose):
     run_wizard(ctx)
 
 
+def _password_scope(repo: str) -> str:
+    """The directory whose name identifies the project to the password backend.
+
+    A vault lives at ``<project>/deployment/group_vars/...``, so --repo may point
+    anywhere from the project root down to a single file. Walk up to the
+    ``deployment`` boundary, which is what the ansible commands always pass, so
+    that ``-r group_vars/all.yml`` asks for the project's password rather than
+    for one called VAULT_PASSWORD_GROUP_VARS.
+
+    Falls back to the directory itself when there is no such ancestor, which
+    keeps repositories laid out differently working as before.
+    """
+    path = Path(repo)
+    if not path.exists():
+        return repo
+    path = path.resolve()
+    if path.is_file():
+        path = path.parent
+    for candidate in (path, *path.parents):
+        if candidate.name == "deployment":
+            return str(candidate)
+    return str(path)
+
+
 @cli.group()
 def secrets():
     """Manage vault secrets"""
-    pass
 
 
 @secrets.command("update")
 @click.option(
     "--vault-password",
     "-p",
-    required=True,
-    help="Vault password for encryption/decryption",
+    default=None,
+    help=(
+        "Vault password. Omit it to read the password from the configured "
+        "backend (default: macOS Keychain), the way `startup ansible` does."
+    ),
 )
 @click.option(
     "--repo",
@@ -207,6 +237,26 @@ def secrets():
     multiple=True,
     nargs=2,
     help="Set specific value for inline vault field: FIELD VALUE (can be repeated)",
+)
+@click.option(
+    "--field-stdin",
+    "-fi",
+    default=None,
+    help=(
+        "Set an inline vault field to a value read from stdin. Keeps the "
+        "secret out of the process arguments, where --field-set leaves it "
+        "readable to anyone who can run `ps`. One field per invocation."
+    ),
+)
+@click.option(
+    "--create-in",
+    default=None,
+    type=click.Path(),
+    help=(
+        "YAML file to append fields to when they have no vault block yet. "
+        "Without it, a field that does not exist is an error rather than a "
+        "silent no-op."
+    ),
 )
 @click.option(
     "--file-rotate",
@@ -273,6 +323,8 @@ def update_secrets(
     verify_password,
     field_random,
     field_set,
+    field_stdin,
+    create_in,
     file_rotate,
     file_content,
     vault_field,
@@ -326,7 +378,15 @@ def update_secrets(
       # Preview changes without applying (dry run)
       startup secrets update -r . -p PASSWORD --field-random db_pass --dry-run
     """
+    from cli.ansible_commands import resolve_vault_password
     from cli.update_vault_secrets import update_secrets as update_vault_secrets
+
+    # Same resolution `startup ansible` uses: an explicit --vault-password wins,
+    # otherwise the backend (macOS Keychain by default) is asked, keyed by the
+    # project the path belongs to. Before this, the password had to be passed on
+    # the command line, where `ps` and the shell history can see it.
+    #
+    vault_password = resolve_vault_password(vault_password, _password_scope(repo))
 
     # Merge new and old parameter names for backward compatibility
     # Prefer new names if both are provided
@@ -337,6 +397,17 @@ def update_secrets(
     merged_field_set = list(field_set) if field_set else []
     if set_field:  # Old parameter name
         merged_field_set.extend(set_field)
+
+    # A value read from stdin never appears in the process arguments. Read it
+    # whole rather than by line so a multi-line credential survives, and strip
+    # only the trailing newline a shell or an editor adds.
+    if field_stdin:
+        value = sys.stdin.read().removesuffix("\n")
+        if not value:
+            raise click.ClickException(
+                f"--field-stdin {field_stdin} was given but stdin was empty."
+            )
+        merged_field_set.append((field_stdin, value))
 
     merged_file_rotate = list(file_rotate) if file_rotate else []
     if vault_file:  # Old parameter name
@@ -351,7 +422,7 @@ def update_secrets(
     set_file_content_pairs = merged_file_content if merged_file_content else None
 
     # Call the update_secrets function directly
-    success, updated, password_verification_failed = update_vault_secrets(
+    success, _updated, password_verification_failed = update_vault_secrets(
         repo=repo,
         vault_password=vault_password,
         vault_fields=merged_field_random if merged_field_random else None,
@@ -363,6 +434,7 @@ def update_secrets(
         verify_password=verify_password,
         set_field=set_field_pairs,
         set_file_content=set_file_content_pairs,
+        create_in=create_in,
     )
 
     # Return appropriate exit code based on the result
@@ -489,7 +561,6 @@ def update_inline_vault_field_cmd(file, field, value, vault_password, verbose):
 @cli.group()
 def deploy():
     """Deployment operations"""
-    pass
 
 
 @cli.group(invoke_without_command=True)
@@ -535,7 +606,6 @@ def sync(ctx, owner, repo_name, source_owner, source_repo, private, dry_run):
 @cli.group()
 def ansible():
     """Shared Ansible deployment operations"""
-    pass
 
 
 @deploy.command("create")
@@ -1157,7 +1227,6 @@ def ansible_restore(
 @cli.group()
 def hetzner():
     """Hetzner Cloud account, project, domain & token management via browser automation."""
-    pass
 
 
 @hetzner.command("setup")
@@ -1201,7 +1270,7 @@ def hetzner_setup(headless, project, token_name, register, email):
 
     if token:
         click.echo(f"\n  Token: {token[:8]}...{token[-4:]}")
-        click.echo(f"  Use with: startup bootstrap --hetzner-token <token>")
+        click.echo("  Use with: startup bootstrap --hetzner-token <token>")
     else:
         click.echo("\n  No token obtained.", err=True)
         raise SystemExit(1)
@@ -1295,6 +1364,7 @@ def hetzner_status():
 def hetzner_clean():
     """Remove stored credentials and browser state."""
     import shutil
+
     from cli.hetzner.config import CONFIG_DIR
 
     if click.confirm(f"  Delete all stored data in {CONFIG_DIR}?", default=False):

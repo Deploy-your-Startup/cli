@@ -99,9 +99,7 @@ class ByosStep(WizardStep):
                 break
             ui.error("Bitte eine gültige IP-Adresse oder einen Hostnamen angeben.")
 
-        ctx.byos_ssh_user = ui.text_input(
-            "SSH-User auf dem Server", default="root"
-        )
+        ctx.byos_ssh_user = ui.text_input("SSH-User auf dem Server", default="root")
 
         ui.info(
             f"Stelle sicher, dass auf {ctx.byos_host} die Ports 22 (SSH), 80 und "

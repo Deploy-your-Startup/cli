@@ -12,21 +12,22 @@ Features:
 import logging
 import sys
 from pathlib import Path
+
 from ansible.parsing.vault import VaultSecret
 
 # Import from our modular vault package
 from cli.vault import (
+    check_can_decrypt_with_password,
+    contains_vault_blocks,
+    find_vaulted_files,
     # File handling
     is_full_vault_file,
     rotate_full_vault_file,
-    check_can_decrypt_with_password,
-    safe_write,
     # Field handling
     rotate_inline_blocks,
-    contains_vault_blocks,
+    safe_write,
     # Repository utilities
     walk_files,
-    find_vaulted_files,
 )
 
 logger = logging.getLogger(__name__)

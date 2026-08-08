@@ -153,8 +153,7 @@ def _normalize_repo_url(repo_url: str) -> str:
     normalized = re.sub(
         r"https://x-access-token:[^@]+@github\.com/", "https://github.com/", normalized
     )
-    if normalized.endswith(".git"):
-        normalized = normalized[:-4]
+    normalized = normalized.removesuffix(".git")
     return normalized.rstrip("/")
 
 
@@ -463,7 +462,11 @@ def clone_or_update_shared_roles(
                 except subprocess.CalledProcessError:
                     pass
             return target_dir
-        except (click.ClickException, subprocess.CalledProcessError, FileNotFoundError) as exc:
+        except (
+            click.ClickException,
+            subprocess.CalledProcessError,
+            FileNotFoundError,
+        ) as exc:
             last_error = exc
 
     if target_dir.exists() and not (target_dir / ".git").exists():
@@ -508,7 +511,11 @@ def clone_or_update_shared_roles(
                 cwd=working_dir,
             )
             return target_dir
-        except (click.ClickException, subprocess.CalledProcessError, FileNotFoundError) as exc:
+        except (
+            click.ClickException,
+            subprocess.CalledProcessError,
+            FileNotFoundError,
+        ) as exc:
             last_error = exc
 
     raise click.ClickException(
@@ -763,7 +770,9 @@ def _run_byos_playbook(
     working_dir = _resolve_working_dir(working_directory)
     env = _ansible_env(working_dir, shared_dir)
 
-    with byos_private_key_file(working_directory, vault_password, shared_dir) as key_path:
+    with byos_private_key_file(
+        working_directory, vault_password, shared_dir
+    ) as key_path:
         command = [
             _find_uv(),
             "run",

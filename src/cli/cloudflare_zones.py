@@ -43,7 +43,9 @@ def _zone_from_result(zone: dict, *, created: bool) -> ZoneInfo:
     )
 
 
-def _find_parent_zone(headers: dict[str, str], account_id: str, domain: str) -> dict | None:
+def _find_parent_zone(
+    headers: dict[str, str], account_id: str, domain: str
+) -> dict | None:
     """Return the existing account zone that ``domain`` is a subdomain of.
 
     Cloudflare refuses to create a zone for a subdomain (error 1116); such hosts
@@ -165,9 +167,7 @@ def add_pages_custom_domain(
     Cloudflare auto-provisions the DNS record and TLS certificate.
     """
     headers = _headers(token)
-    url = (
-        f"{API_BASE}/accounts/{account_id}/pages/projects/{project}/domains"
-    )
+    url = f"{API_BASE}/accounts/{account_id}/pages/projects/{project}/domains"
 
     resp = httpx.post(url, headers=headers, json={"name": domain}, timeout=TIMEOUT)
     data = resp.json()
@@ -180,9 +180,7 @@ def add_pages_custom_domain(
     ):
         return True
 
-    raise RuntimeError(
-        f"Custom Domain konnte nicht mit Pages verknüpft werden: {data}"
-    )
+    raise RuntimeError(f"Custom Domain konnte nicht mit Pages verknüpft werden: {data}")
 
 
 def _already_exists(status_code: int, data: dict) -> bool:
@@ -195,12 +193,8 @@ def _already_exists(status_code: int, data: dict) -> bool:
     return False
 
 
-def _domain_attached(
-    token: str, account_id: str, project: str, domain: str
-) -> bool:
-    url = (
-        f"{API_BASE}/accounts/{account_id}/pages/projects/{project}/domains/{domain}"
-    )
+def _domain_attached(token: str, account_id: str, project: str, domain: str) -> bool:
+    url = f"{API_BASE}/accounts/{account_id}/pages/projects/{project}/domains/{domain}"
     try:
         resp = httpx.get(url, headers=_headers(token), timeout=TIMEOUT)
         return resp.status_code == 200 and resp.json().get("success", False)

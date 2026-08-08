@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from click.testing import CliRunner
 
 from cli import ansible_commands

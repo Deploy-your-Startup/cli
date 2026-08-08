@@ -2,9 +2,9 @@
 Utility functions for vault feature tests.
 """
 
-import subprocess
 import random
 import string
+import subprocess
 from pathlib import Path
 
 

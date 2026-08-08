@@ -136,8 +136,8 @@ async def _async_get_or_create_token(
     register: bool,
     email: str | None,
 ) -> str | None:
-    from .automation import HetznerAutomation
     from . import _output as ui
+    from .automation import HetznerAutomation
     from .credentials import save_token
 
     async with HetznerAutomation(headless=headless) as bot:
@@ -198,8 +198,8 @@ async def _async_register_domain(
     headless: bool,
     nameservers: list[str] | None = None,
 ) -> bool:
-    from .robot import HetznerKonsoleHAutomation
     from . import _output as ui
+    from .robot import HetznerKonsoleHAutomation
 
     async with HetznerKonsoleHAutomation(headless=headless) as bot:
         # Step 1: Login to KonsoleH
@@ -229,8 +229,8 @@ async def _async_set_domain_nameservers(
     nameservers: list[str],
     headless: bool,
 ) -> bool:
-    from .robot import HetznerKonsoleHAutomation
     from . import _output as ui
+    from .robot import HetznerKonsoleHAutomation
 
     async with HetznerKonsoleHAutomation(headless=headless) as bot:
         ui.step(1, "KonsoleH Login")

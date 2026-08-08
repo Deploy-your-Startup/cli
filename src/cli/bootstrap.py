@@ -14,7 +14,6 @@ from pathlib import Path
 import click
 
 from cli.sync_commands import (
-    _github_owner,
     _replace_placeholders,
     _run_command,
 )
@@ -76,7 +75,15 @@ def _ensure_ghcr_scopes() -> None:
         "Öffne Browser für gh auth refresh..."
     )
     subprocess.run(
-        ["gh", "auth", "refresh", "-h", "github.com", "-s", "read:packages,write:packages"],
+        [
+            "gh",
+            "auth",
+            "refresh",
+            "-h",
+            "github.com",
+            "-s",
+            "read:packages,write:packages",
+        ],
         check=True,
     )
 
@@ -350,8 +357,8 @@ def bootstrap_project(
     click.echo("")
     click.echo("Next steps:")
     click.echo(f"  cd {project_dir}/deployment")
-    click.echo(f"  ./make.sh setup_ansible")
+    click.echo("  ./make.sh setup_ansible")
     click.echo(
-        f"  ./make.sh infrastructure --environment production --vault_password <pw>"
+        "  ./make.sh infrastructure --environment production --vault_password <pw>"
     )
-    click.echo(f"  ./make.sh deploy --environment production --vault_password <pw>")
+    click.echo("  ./make.sh deploy --environment production --vault_password <pw>")

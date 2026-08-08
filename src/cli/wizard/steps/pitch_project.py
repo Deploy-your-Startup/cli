@@ -29,7 +29,10 @@ class PitchProjectStep(WizardStep):
             ui.action_start("Pitch-Template klonen...")
             _run_command(
                 [
-                    "git", "clone", "--depth", "1",
+                    "git",
+                    "clone",
+                    "--depth",
+                    "1",
                     f"https://github.com/{TEMPLATE_OWNER}/{PITCH_TEMPLATE_REPO}.git",
                     str(ctx.project_dir),
                 ],

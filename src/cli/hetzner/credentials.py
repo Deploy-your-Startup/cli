@@ -5,8 +5,8 @@ import stat
 from datetime import datetime
 from pathlib import Path
 
-from . import config
 from . import _output as ui
+from . import config
 
 
 def save_token(

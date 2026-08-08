@@ -1,14 +1,15 @@
 import json
 import re
+import secrets
+import shutil
+import string
 import subprocess
 import sys
 import tempfile
-import shutil
 from pathlib import Path
-import secrets
-import string
-from ansible.parsing.vault import VaultLib, VaultSecret
+
 from ansible.constants import DEFAULT_VAULT_IDENTITY
+from ansible.parsing.vault import VaultLib, VaultSecret
 
 from .ansible_bin import ansible_bin
 
@@ -40,11 +41,11 @@ def is_full_vault_file(path: Path) -> bool:
 def rotate_full_vault_file(
     path: Path,
     vault_password: str,
-    work_dir: Path = None,
-    new_content: str = None,
+    work_dir: Path | None = None,
+    new_content: str | None = None,
     dry_run: bool = False,
-    dry_dir: Path = None,
-    new_password: str = None,
+    dry_dir: Path | None = None,
+    new_password: str | None = None,
     verify_password: bool = True,
 ):
     """Rotate a full vault file or replace its content."""
@@ -183,9 +184,7 @@ def regen_vault_string(name, plaintext, vault_pass_file):
         plaintext,
     ]
     try:
-        proc = subprocess.run(
-            cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
+        proc = subprocess.run(cmd, check=True, capture_output=True)
         return proc.stdout.decode()
     except subprocess.CalledProcessError as e:
         print(f"Error encrypting {name}: {e.stderr.decode()}", file=sys.stderr)
@@ -271,8 +270,33 @@ def generate_random_secret(length=32):
     return first + rest
 
 
+# Directories that never hold a project's own secrets but do hold enormous
+# numbers of YAML files. A `deployment/.venv` with ansible installed carries
+# over 3000 of them, which made `-r .` appear to hang.
+SCAN_EXCLUDED_DIRS = frozenset(
+    {
+        ".git",
+        ".venv",
+        "venv",
+        "node_modules",
+        ".shared-roles",
+        "__pycache__",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".tox",
+        "dry-run-output",
+    }
+)
+
+
 def find_yaml_files(root: Path):
-    return list(root.rglob("*.yml")) + list(root.rglob("*.yaml"))
+    """Every .yml/.yaml under root, skipping vendored and generated trees."""
+    return [
+        path
+        for pattern in ("*.yml", "*.yaml")
+        for path in root.rglob(pattern)
+        if not SCAN_EXCLUDED_DIRS.intersection(path.relative_to(root).parts[:-1])
+    ]
 
 
 def load_text(path: Path):
@@ -330,6 +354,7 @@ def update_secrets(
     verify_password=False,
     set_field=None,
     set_file_content=None,
+    create_in=None,
 ):
     """
     Core function to update vault secrets in a repository.
@@ -347,6 +372,10 @@ def update_secrets(
     - verify_password: If True, verify vault password can decrypt existing secrets before updating
     - set_field: List of (field, value) tuples to set specific field values
     - set_file_content: List of (file_path, content) tuples to set specific file contents
+    - create_in: YAML file to append fields to that have no vault block anywhere.
+      Without it such a field is reported as an error; previously it was a
+      silent no-op, so a secret could appear to have been stored when nothing
+      had been written.
 
     Returns:
     - tuple of (success, updated_files, password_verification_failed)
@@ -503,6 +532,12 @@ For more help: startup secrets update --help
                 if verbose:
                     print(f"Setting {field} to explicitly provided value")
 
+        # Which fields actually reached a file. A field whose vault block does
+        # not exist anywhere matches nothing and used to fall through here
+        # without a word, so `--field-set api_key ...` could report success
+        # having written nothing at all.
+        written_fields = set()
+
         for yml in yaml_files_to_process:
             # Skip full vault files when processing inline blocks
             if is_full_vault_file(yml):
@@ -519,7 +554,9 @@ For more help: startup secrets update --help
 
             for var, plain in updates_dict.items():
                 # Check if the variable exists with a vault block
-                if not re.search(rf"^[ \t]*{re.escape(var)}:\s*!vault \|", text, re.M):
+                if not re.search(
+                    rf"^[ \t]*{re.escape(var)}:\s*!vault \|", text, re.MULTILINE
+                ):
                     if only_existing:
                         if verbose:
                             print(f"Skip {var} in {rel}, no existing block.")
@@ -542,6 +579,7 @@ For more help: startup secrets update --help
                 if count:
                     modified = True
                     text = new_text
+                    written_fields.add(var)
                     if verbose:
                         print(f"Replaced {var} ({count}) in {rel}")
             if modified:
@@ -557,6 +595,50 @@ For more help: startup secrets update --help
                     backup_and_write(yml, text)
                     if verbose:
                         print(f"Updated {yml}")
+
+        # Fields that matched no vault block anywhere. Either create them in the
+        # file the caller named, or say so - never pretend they were stored.
+        missing = [v for v in updates_dict if v not in written_fields]
+        if missing and not only_existing:
+            if create_in:
+                target = Path(create_in)
+                if not target.is_absolute():
+                    target = work_dir / create_in
+                if not target.exists():
+                    print(f"Error: --create-in file does not exist: {target}")
+                    return False, updated, password_verification_failed
+
+                text = load_text(target) or ""
+                if text and not text.endswith("\n"):
+                    text += "\n"
+                for var in missing:
+                    block = regen_vault_string(var, updates_dict[var], vault_file)
+                    text += "\n" + block.rstrip("\n") + "\n"
+                    written_fields.add(var)
+
+                rel = (
+                    target.relative_to(work_dir)
+                    if work_dir in target.parents
+                    else target.name
+                )
+                if dry_run:
+                    out = dry_dir / rel
+                    out.parent.mkdir(parents=True, exist_ok=True)
+                    out.write_text(text)
+                    print(f"Dry-run: would create {', '.join(missing)} in {rel}")
+                else:
+                    backup_and_write(target, text)
+                    print(f"Created {', '.join(missing)} in {rel}")
+                if rel not in updated:
+                    updated.append(rel)
+            else:
+                print(
+                    "Error: no vault block exists for: "
+                    + ", ".join(sorted(missing))
+                    + "\nNothing was written for these. Pass --create-in <file.yml> "
+                    "to add them, or --only-existing to skip them on purpose."
+                )
+                return False, updated, password_verification_failed
 
     # Process fully encrypted YAML files for field updates
     if updates or vault_fields or set_field:

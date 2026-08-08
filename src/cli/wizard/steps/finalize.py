@@ -35,7 +35,9 @@ class FinalizeStep(WizardStep):
         _run_command(["git", "add", "-A"], cwd=ctx.project_dir)
         status = subprocess.run(
             ["git", "status", "--porcelain"],
-            cwd=ctx.project_dir, capture_output=True, text=True,
+            cwd=ctx.project_dir,
+            capture_output=True,
+            text=True,
         )
         if status.stdout.strip():
             _run_command(
@@ -49,7 +51,8 @@ class FinalizeStep(WizardStep):
         # 4b. GitHub repo + remote
         subprocess.run(
             ["git", "remote", "remove", "origin"],
-            cwd=ctx.project_dir, capture_output=True,
+            cwd=ctx.project_dir,
+            capture_output=True,
         )
         if not repo_exists(ctx.full_repo):
             ui.action_start("GitHub-Repository erstellen...")
@@ -60,25 +63,47 @@ class FinalizeStep(WizardStep):
             ui.action_done("Repository erstellt")
         else:
             _run_command(
-                ["git", "remote", "add", "origin",
-                 f"https://github.com/{ctx.full_repo}.git"],
+                [
+                    "git",
+                    "remote",
+                    "add",
+                    "origin",
+                    f"https://github.com/{ctx.full_repo}.git",
+                ],
                 cwd=ctx.project_dir,
             )
 
         # 4c. GitHub Actions config
         ui.action_start("GitHub Actions konfigurieren...")
         _run_command(
-            ["gh", "api", "-X", "PUT",
-             f"repos/{ctx.full_repo}/actions/permissions",
-             "-F", "enabled=true", "-f", "allowed_actions=all"],
-            cwd=ctx.project_dir, capture_output=True,
+            [
+                "gh",
+                "api",
+                "-X",
+                "PUT",
+                f"repos/{ctx.full_repo}/actions/permissions",
+                "-F",
+                "enabled=true",
+                "-f",
+                "allowed_actions=all",
+            ],
+            cwd=ctx.project_dir,
+            capture_output=True,
         )
         _run_command(
-            ["gh", "api", "-X", "PUT",
-             f"repos/{ctx.full_repo}/actions/permissions/workflow",
-             "-f", "default_workflow_permissions=write",
-             "-F", "can_approve_pull_request_reviews=true"],
-            cwd=ctx.project_dir, capture_output=True,
+            [
+                "gh",
+                "api",
+                "-X",
+                "PUT",
+                f"repos/{ctx.full_repo}/actions/permissions/workflow",
+                "-f",
+                "default_workflow_permissions=write",
+                "-F",
+                "can_approve_pull_request_reviews=true",
+            ],
+            cwd=ctx.project_dir,
+            capture_output=True,
         )
         ui.action_done("GitHub Actions konfiguriert")
 
@@ -91,7 +116,8 @@ class FinalizeStep(WizardStep):
         ui.action_start("Vault-Passwort als GitHub Secret...")
         _run_command(
             ["gh", "secret", "set", "VAULT_PASSWORD", "--body", ctx.vault_password],
-            cwd=ctx.project_dir, capture_output=True,
+            cwd=ctx.project_dir,
+            capture_output=True,
         )
         ui.action_done("GitHub Secret gesetzt")
 
@@ -99,7 +125,8 @@ class FinalizeStep(WizardStep):
         ui.action_start("Push nach GitHub...")
         _run_command(
             ["git", "push", "-u", "origin", "main"],
-            cwd=ctx.project_dir, capture_output=True,
+            cwd=ctx.project_dir,
+            capture_output=True,
         )
         ui.action_done("Gepusht")
 
@@ -138,7 +165,9 @@ class FinalizeStep(WizardStep):
                 time.sleep(2)
             proc = subprocess.run(
                 ["gh", "workflow", "run", "deploy-infrastructure.yml", "--ref", "main"],
-                cwd=ctx.project_dir, capture_output=True, text=True,
+                cwd=ctx.project_dir,
+                capture_output=True,
+                text=True,
             )
             if proc.returncode == 0:
                 triggered = True

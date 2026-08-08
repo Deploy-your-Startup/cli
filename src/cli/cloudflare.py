@@ -46,7 +46,10 @@ def _require_playwright() -> None:
 
 
 def create_api_token(
-    *, token_name: str = "deploy-your-startup", headless: bool = False, register: bool = False
+    *,
+    token_name: str = "deploy-your-startup",
+    headless: bool = False,
+    register: bool = False,
 ) -> str | None:
     """Launch a real browser, guide login/sign-up, and create a user API token."""
     _require_playwright()
@@ -176,7 +179,9 @@ class CloudflareAutomation:
     async def _click_create_token_entry(self) -> None:
         try:
             await self._dismiss_blocking_ui()
-            await self.page.get_by_role("button", name="Create Token").click(timeout=5_000)
+            await self.page.get_by_role("button", name="Create Token").click(
+                timeout=5_000
+            )
         except Exception:
             pass
 
@@ -186,7 +191,9 @@ class CloudflareAutomation:
             )
             return
         except Exception:
-            await self.page.goto(f"{CF_TOKEN_URL}/create", wait_until="domcontentloaded")
+            await self.page.goto(
+                f"{CF_TOKEN_URL}/create", wait_until="domcontentloaded"
+            )
 
     async def _set_permission_row(
         self, index: int, resource: str, permission: str, level: str
@@ -194,12 +201,16 @@ class CloudflareAutomation:
         await self.page.get_by_role("button", name="Resources").nth(index).click()
         await self.page.get_by_role("option", name=resource, exact=True).click()
 
-        permission_input = self.page.get_by_role("textbox", name="Permissions").nth(index)
+        permission_input = self.page.get_by_role("textbox", name="Permissions").nth(
+            index
+        )
         await permission_input.click()
         await permission_input.fill(permission)
         await self.page.get_by_role("option", name=permission, exact=True).click()
 
-        level_input = self.page.get_by_role("combobox", name="Permissions levels").nth(index)
+        level_input = self.page.get_by_role("combobox", name="Permissions levels").nth(
+            index
+        )
         await self._open_permission_level_menu(level_input)
         if level == "Edit":
             await level_input.press("ArrowDown")
@@ -239,7 +250,9 @@ class CloudflareAutomation:
             return token
 
         try:
-            copy_button = self.page.get_by_role("button", name=re.compile(r"Copy|Kopieren"))
+            copy_button = self.page.get_by_role(
+                "button", name=re.compile(r"Copy|Kopieren")
+            )
             if await copy_button.first.count():
                 await copy_button.first.click(timeout=3_000)
                 token = await self.page.evaluate("navigator.clipboard.readText()")
@@ -253,9 +266,9 @@ class CloudflareAutomation:
             '[data-testid*="token"] input',
             '[data-testid*="token"] code',
             '[data-testid*="token"] pre',
-            'input[readonly]',
-            'code',
-            'pre',
+            "input[readonly]",
+            "code",
+            "pre",
         ]
         for selector in selectors:
             try:
@@ -360,7 +373,9 @@ class CloudflareAutomation:
         actions = [
             lambda: self.page.get_by_role("button", name="Reject All"),
             lambda: self.page.get_by_role("button", name="Accept All Cookies"),
-            lambda: self.page.get_by_role("button", name=re.compile(r"Close|Schließen")),
+            lambda: self.page.get_by_role(
+                "button", name=re.compile(r"Close|Schließen")
+            ),
         ]
 
         for locator_factory in actions:
