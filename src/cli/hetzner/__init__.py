@@ -12,18 +12,14 @@ project deployments (they never run the browser flows).
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 
 import click
 
 
 def _check_playwright() -> bool:
     """Check if playwright is importable."""
-    try:
-        import playwright  # noqa: F401
-
-        return True
-    except ImportError:
-        return False
+    return importlib.util.find_spec("playwright") is not None
 
 
 def _require_playwright():

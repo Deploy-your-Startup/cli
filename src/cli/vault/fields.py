@@ -205,7 +205,10 @@ def get_inline_vault_value(
                 if verbose:
                     print(f"Successfully decrypted {var_name} using VaultLib")
                 return decrypted.strip()
-            except Exception as e:
+            # Ansible reports a wrong vault password as any of several exception
+            # types (AnsibleError, ValueError, binascii.Error, UnicodeDecodeError, ...),
+            # so this stays broad on purpose.
+            except Exception as e:  # noqa: BLE001
                 if verbose:
                     print(f"VaultLib decryption failed: {e}")
 
@@ -282,10 +285,12 @@ def get_inline_vault_value(
                     Path(vault_file_path).unlink()
                 if Path(pwd_file_path).exists():
                     Path(pwd_file_path).unlink()
-            except Exception as e:
+            except OSError as e:
                 if verbose:
                     print(f"Failed to clean up temporary files: {e}")
-    except Exception as e:
+    # Top-level boundary: any failure here is reported to the user and
+    # handled, never surfaced as a traceback.
+    except Exception as e:  # noqa: BLE001
         if verbose:
             print(f"Error getting inline vault value: {e}")
         return None
@@ -328,7 +333,9 @@ def update_inline_vault_field(file_path, var_name, new_value, vault_password):
             return True
 
         return False
-    except Exception as e:
+    # Top-level boundary: any failure here is reported to the user and
+    # handled, never surfaced as a traceback.
+    except Exception as e:  # noqa: BLE001
         print(f"Error updating inline vault field: {e}")
 
 
@@ -345,7 +352,7 @@ def contains_vault_blocks(path):
     try:
         text = path.read_text(encoding="utf-8", errors="ignore")
         return "$ANSIBLE_VAULT" in text and "!vault" in text
-    except Exception as e:
+    except OSError as e:
         logger.error(f"Error checking if file contains vault blocks: {e}")
         return False
 
@@ -385,11 +392,16 @@ def check_vault_blocks_with_password(path, password):
                 vault_secret = VaultSecret(password.encode())
                 vault = VaultLib([(DEFAULT_VAULT_IDENTITY, vault_secret)])
                 vault.decrypt(block.encode())
-            except Exception:
+            # Ansible reports a wrong vault password as any of several exception
+            # types (AnsibleError, ValueError, binascii.Error, UnicodeDecodeError, ...),
+            # so this stays broad on purpose.
+            except Exception:  # noqa: BLE001
                 return False
 
         return True
-    except Exception as e:
+    # Top-level boundary: any failure here is reported to the user and
+    # handled, never surfaced as a traceback.
+    except Exception as e:  # noqa: BLE001
         logger.error(f"Error checking vault blocks with password: {e}")
         return False
 
@@ -451,7 +463,10 @@ def rotate_inline_blocks(text, old_password, new_password, dry_run=False):
                     modified = True
                     # Return original in dry-run mode
                     return m.group(0)
-                except Exception as e:
+                # Ansible reports a wrong vault password as any of several exception
+                # types (AnsibleError, ValueError, binascii.Error, UnicodeDecodeError, ...),
+                # so this stays broad on purpose.
+                except Exception as e:  # noqa: BLE001
                     logger.error(f"Failed to decrypt vault block in dry-run: {e}")
                     return m.group(0)
 
@@ -468,7 +483,10 @@ def rotate_inline_blocks(text, old_password, new_password, dry_run=False):
             recoded = "".join(indent + line for line in new_block_lines)
             modified = True
             return f"{key}!vault |\n{recoded}"
-        except Exception as e:
+        # Ansible reports a wrong vault password as any of several exception
+        # types (AnsibleError, ValueError, binascii.Error, UnicodeDecodeError, ...),
+        # so this stays broad on purpose.
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Failed to rotate vault block: {e}")
             # Return original if we can't decrypt/encrypt
             return m.group(0)

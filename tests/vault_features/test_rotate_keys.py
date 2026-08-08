@@ -61,6 +61,7 @@ def test_rotate_vault_key_for_inline_fields():
             ],
             capture_output=True,
             text=True,
+            check=False,
         )
 
         # THEN the yaml file remains encrypted but with the new key
@@ -170,6 +171,7 @@ def test_rotate_vault_key_for_full_files():
             ],
             capture_output=True,
             text=True,
+            check=False,
         )
 
         # THEN the file remains encrypted but with the new key

@@ -148,7 +148,7 @@ class CloudflareStep(WizardStep):
                 f"Cloudflare-Zone konnte nicht angelegt werden: {exc}\n"
                 "Hat der Token die Permissions 'Zone → Zone → Edit' und "
                 "'Zone → DNS → Edit'?"
-            )
+            ) from exc
         ctx.cloudflare_zone_id = zone.zone_id
         ctx.cloudflare_nameservers = zone.nameservers
         ctx.cloudflare_zone_is_subdomain = (

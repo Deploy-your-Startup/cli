@@ -59,6 +59,7 @@ def test_update_existing_field_with_random_value():
             ],
             capture_output=True,
             text=True,
+            check=False,
         )
 
         # THEN the field is updated with a new random value
@@ -131,6 +132,7 @@ def test_update_multiple_fields_with_random_values():
             ],
             capture_output=True,
             text=True,
+            check=False,
         )
 
         # THEN both fields are updated with new random values
@@ -204,6 +206,7 @@ def test_update_existing_field_with_specific_value():
             ],
             capture_output=True,
             text=True,
+            check=False,
         )
 
         # THEN the field is updated with the provided value
@@ -313,6 +316,7 @@ def test_update_field_with_direct_file_path():
             ],
             capture_output=True,
             text=True,
+            check=False,
         )
 
         # THEN the field is updated with the provided value

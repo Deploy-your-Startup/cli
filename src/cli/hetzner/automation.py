@@ -7,6 +7,7 @@ what happens and complete manual steps (login, 2FA, captcha).
 
 from __future__ import annotations
 
+from ..playwright_errors import playwright_error
 from . import _output as ui
 from . import config
 
@@ -93,7 +94,7 @@ class HetznerAutomation:
             ).first
             await email_input.fill(email, timeout=5000)
             ui.success(f"Email pre-filled: {email}")
-        except Exception:
+        except playwright_error():
             ui.warning("Could not pre-fill email — please enter manually.")
 
         ui.info(
@@ -110,7 +111,7 @@ class HetznerAutomation:
                 timeout=config.LOGIN_WAIT_TIMEOUT,
             )
             return True
-        except Exception:
+        except playwright_error():
             return False
 
     # ── Login ───────────────────────────────────────────────────────────
@@ -124,7 +125,7 @@ class HetznerAutomation:
             if "/projects" in self.page.url and "accounts.hetzner" not in self.page.url:
                 ui.success("Already logged in (saved session).")
                 return True
-        except Exception:
+        except playwright_error():
             pass
 
         ui.info("Opening Hetzner login page...")
@@ -142,7 +143,7 @@ class HetznerAutomation:
                 timeout=config.LOGIN_WAIT_TIMEOUT,
             )
             return True
-        except Exception:
+        except playwright_error():
             return False
 
     # ── Project Creation ────────────────────────────────────────────────
@@ -162,18 +163,18 @@ class HetznerAutomation:
                 )
                 await self._navigate_into_project(project_name)
                 return self._in_project(self.page.url)
-        except Exception:
+        except playwright_error():
             pass
 
         # Click "New Project"
         try:
             btn = self.page.locator(config.SELECTORS_NEW_PROJECT_BUTTON).first
             await btn.click(timeout=10000)
-        except Exception:
+        except playwright_error():
             try:
                 btn = self.page.locator(config.SELECTORS_ADD_BUTTON_FALLBACK).first
                 await btn.click(timeout=5000)
-            except Exception:
+            except playwright_error():
                 ui.error("Could not find the 'New Project' button.")
                 return await self._wait_for_manual_project_creation(project_name)
 
@@ -182,13 +183,13 @@ class HetznerAutomation:
             name_input = self.page.locator(config.SELECTORS_PROJECT_NAME_INPUT).first
             await name_input.wait_for(state="visible", timeout=5000)
             await name_input.fill(project_name)
-        except Exception:
+        except playwright_error():
             ui.warning("Could not fill project name — please enter manually.")
 
         try:
             submit_btn = self.page.locator(config.SELECTORS_SUBMIT_BUTTON).first
             await submit_btn.click(timeout=5000)
-        except Exception:
+        except playwright_error():
             ui.warning("Please confirm the dialog in the browser.")
 
         # Hetzner does NOT redirect into the new project — it stays on the
@@ -200,7 +201,7 @@ class HetznerAutomation:
             await self.page.locator(
                 f'[data-projectname="{project_name}"]'
             ).first.wait_for(state="visible", timeout=10000)
-        except Exception:
+        except playwright_error():
             pass
 
         if self._in_project(self.page.url):
@@ -233,7 +234,7 @@ class HetznerAutomation:
             card = self.page.locator(f'[data-projectname="{project_name}"]').first
             await card.click(timeout=10000)
             await self.page.wait_for_url("**/projects/**", timeout=10000)
-        except Exception:
+        except playwright_error():
             ui.warning(
                 f'Could not navigate into project "{project_name}" automatically.'
             )
@@ -247,7 +248,7 @@ class HetznerAutomation:
             await self.page.wait_for_url(
                 "**/projects/**", timeout=config.LOGIN_WAIT_TIMEOUT
             )
-        except Exception:
+        except playwright_error():
             pass
         return self._in_project(self.page.url)
 
@@ -268,7 +269,7 @@ class HetznerAutomation:
             tokens_link = self.page.locator(config.SELECTORS_API_TOKENS_LINK).first
             await tokens_link.click(timeout=5000)
             navigated = True
-        except Exception:
+        except playwright_error():
             pass
 
         if not navigated:
@@ -280,14 +281,14 @@ class HetznerAutomation:
                     tokens_url = f"{base}/projects/{segment}/security/tokens"
                     try:
                         await self.page.goto(tokens_url, wait_until="domcontentloaded")
-                    except Exception:
+                    except playwright_error():
                         ui.warning("Could not navigate to the API tokens page.")
 
         # Click "Add API Token"
         try:
             gen_btn = self.page.locator(config.SELECTORS_GENERATE_TOKEN_BUTTON).first
             await gen_btn.click(timeout=10000)
-        except Exception:
+        except playwright_error():
             ui.warning(
                 "Could not find 'Add API Token' button — please click it manually."
             )
@@ -305,14 +306,14 @@ class HetznerAutomation:
             ).first
             await desc_input.wait_for(state="visible", timeout=10000)
             await desc_input.fill(token_name)
-        except Exception:
+        except playwright_error():
             ui.warning("Could not fill token name — please enter manually.")
 
         # Select "Read & Write" (best effort — it is the default selection)
         try:
             rw_option = self.page.locator(config.SELECTORS_TOKEN_READWRITE).first
             await rw_option.click(timeout=3000)
-        except Exception:
+        except playwright_error():
             pass
 
         # Submit and confirm the dialog actually advanced to the token view.
@@ -329,7 +330,7 @@ class HetznerAutomation:
                 '.click-to-show, :text("Klicken um anzuzeigen"), :text("Click to show")'
             ).first
             await reveal.click(timeout=3000)
-        except Exception:
+        except playwright_error():
             pass
 
         token = await self._extract_token()
@@ -360,7 +361,7 @@ class HetznerAutomation:
                 submit_btn = self.page.locator(config.SELECTORS_TOKEN_SUBMIT).first
                 await submit_btn.wait_for(state="visible", timeout=5000)
                 await submit_btn.click(timeout=5000)
-            except Exception:
+            except playwright_error():
                 if attempt == 0:
                     continue
                 return False
@@ -372,13 +373,13 @@ class HetznerAutomation:
                     state="visible", timeout=8000
                 )
                 return True
-            except Exception:
+            except playwright_error():
                 pass
             try:
                 desc = self.page.locator(config.SELECTORS_TOKEN_DESCRIPTION_INPUT).first
                 if not await desc.is_visible(timeout=1000):
                     return True
-            except Exception:
+            except playwright_error():
                 return True
 
         return False
@@ -398,15 +399,15 @@ class HetznerAutomation:
                         text = text.strip()
                         if self._looks_like_token(text):
                             return text
-                    except Exception:
+                    except playwright_error():
                         pass
                     try:
                         val = await el.get_attribute("value")
                         if val and self._looks_like_token(val):
                             return val.strip()
-                    except Exception:
+                    except playwright_error():
                         pass
-            except Exception:
+            except playwright_error():
                 continue
 
         # Fallback: try copy button + clipboard
@@ -416,7 +417,7 @@ class HetznerAutomation:
             token = await self.page.evaluate("navigator.clipboard.readText()")
             if token and self._looks_like_token(token.strip()):
                 return token.strip()
-        except Exception:
+        except playwright_error():
             pass
 
         return None

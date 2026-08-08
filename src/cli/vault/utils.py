@@ -44,10 +44,7 @@ def is_excluded(path: Path) -> bool:
     if any(part in EXCLUDED_DIR_NAMES for part in path.parts):
         return True
 
-    for pat in EXCLUDED_PATTERNS:
-        if path.match(pat):
-            return True
-    return False
+    return any(path.match(pat) for pat in EXCLUDED_PATTERNS)
 
 
 def walk_files(base: Path, specific: Path | None = None):
@@ -114,7 +111,7 @@ def find_vaulted_files(repo=".", file_path=None, verbose=False):
                 if verbose:
                     logger.info(f"Found file with vault blocks: {rel_path}")
                 vaulted_files.append(str(rel_path))
-        except Exception as e:
+        except OSError as e:
             logger.warning(f"Could not read {path}: {e}")
 
     return vaulted_files
