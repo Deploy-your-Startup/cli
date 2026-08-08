@@ -2,10 +2,10 @@
 Tests for updating encrypted fields in Ansible vault.
 """
 
-import tempfile
 import shutil
-from pathlib import Path
 import subprocess
+import tempfile
+from pathlib import Path
 
 from cli.vault.fields import get_inline_vault_value, update_inline_vault_field
 

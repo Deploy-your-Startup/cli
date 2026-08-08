@@ -2,10 +2,10 @@
 Tests for edge cases in Ansible vault secrets management.
 """
 
-import tempfile
 import shutil
-from pathlib import Path
 import subprocess
+import tempfile
+from pathlib import Path
 
 from cli.vault.fields import get_inline_vault_value
 

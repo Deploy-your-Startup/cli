@@ -21,15 +21,23 @@ from .steps.pitch_project import PitchProjectStep
 from .steps.project import ProjectStep
 
 FULLSTACK_STEPS: list[type[WizardStep]] = [
-    DomainStep, HetznerStep, ProjectStep, FinalizeStep,
+    DomainStep,
+    HetznerStep,
+    ProjectStep,
+    FinalizeStep,
 ]
 # Bring-your-own-server: no Hetzner token and no domain-registrar step — the user
 # brings an existing VPS and points DNS at it themselves (explained in ByosStep).
 BYOS_STEPS: list[type[WizardStep]] = [
-    ByosStep, ProjectStep, FinalizeStep,
+    ByosStep,
+    ProjectStep,
+    FinalizeStep,
 ]
 PITCH_STEPS: list[type[WizardStep]] = [
-    CloudflareStep, DomainStep, PitchProjectStep, PitchFinalizeStep,
+    CloudflareStep,
+    DomainStep,
+    PitchProjectStep,
+    PitchFinalizeStep,
 ]
 
 
@@ -43,7 +51,9 @@ def check_prerequisites(ctx: BootstrapContext) -> None:
     """Fail fast if required external tools are missing."""
     required = [("git", "Git: https://git-scm.com/downloads")]
     if ctx.kind != "pitch":
-        required.append(("ssh-keygen", "OpenSSH (sollte mit dem System geliefert werden)"))
+        required.append(
+            ("ssh-keygen", "OpenSSH (sollte mit dem System geliefert werden)")
+        )
     if ctx.mode == "github":
         required.append(("gh", "GitHub CLI: https://cli.github.com (brew install gh)"))
 
@@ -53,7 +63,9 @@ def check_prerequisites(ctx: BootstrapContext) -> None:
         raise click.ClickException("Fehlende Tools:\n" + "\n".join(lines))
 
     if ctx.mode == "github":
-        result = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True)
+        result = subprocess.run(
+            ["gh", "auth", "status"], capture_output=True, text=True
+        )
         if result.returncode != 0:
             raise click.ClickException(
                 "GitHub CLI ist nicht eingeloggt. Bitte `gh auth login` ausführen."
@@ -90,6 +102,7 @@ def run_wizard(ctx: BootstrapContext) -> None:
     keychain_service = None
     if ctx.kind != "pitch":
         from cli.ansible_commands import keychain_service_name
+
         keychain_service = keychain_service_name(ctx.project_name)
     byos_deploy_key_command = None
     if ctx.kind == "fullstack" and ctx.provider == "byos":

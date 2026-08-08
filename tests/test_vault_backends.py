@@ -14,7 +14,9 @@ from cli.vault_backends import (
 
 
 def test_keychain_service_name_mapping():
-    assert keychain_service_name("gaming-buch-club") == "VAULT_PASSWORD_GAMING_BUCH_CLUB"
+    assert (
+        keychain_service_name("gaming-buch-club") == "VAULT_PASSWORD_GAMING_BUCH_CLUB"
+    )
     assert keychain_service_name("about-phil") == "VAULT_PASSWORD_ABOUT_PHIL"
 
 

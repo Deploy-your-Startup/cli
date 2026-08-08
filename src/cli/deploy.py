@@ -3,14 +3,15 @@ GitHub repository deployment module for creating repositories from templates.
 """
 
 import http.server
-import socketserver
-import threading
-import webbrowser
-import httpx
-import subprocess
 import os
+import socketserver
+import subprocess
+import threading
 import urllib.parse
+import webbrowser
 from pathlib import Path
+
+import httpx
 
 REDIRECT_URI = "http://localhost:8080/callback"
 ACCESS_TOKEN = None
@@ -77,9 +78,7 @@ class OAuthHandler(http.server.SimpleHTTPRequestHandler):
         # Show success message in browser
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(
-            "<h1>Login successful! You may close this window.</h1>".encode("utf-8")
-        )
+        self.wfile.write(b"<h1>Login successful! You may close this window.</h1>")
 
         # Stop the callback server
         if httpd is not None:
@@ -167,12 +166,14 @@ def run_ansible_deploy(
             "ansible-playbook",
             str(playbook_path),
             "--extra-vars",
-            f"github_token={token} "
-            f"repo_name={repo_name} "
-            f"repo_description='{repo_description}' "
-            f"repo_private={str(repo_private).lower()} "
-            f"template_owner={template_owner} "
-            f"template_repo={template_repo}",
+            (
+                f"github_token={token} "
+                f"repo_name={repo_name} "
+                f"repo_description='{repo_description}' "
+                f"repo_private={str(repo_private).lower()} "
+                f"template_owner={template_owner} "
+                f"template_repo={template_repo}"
+            ),
         ]
 
         if verbose:
