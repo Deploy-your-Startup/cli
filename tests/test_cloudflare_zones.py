@@ -31,8 +31,10 @@ def test_ensure_zone_reuses_existing():
             ],
         },
     )
-    with patch("cli.cloudflare_zones.httpx.get", return_value=existing) as mock_get, \
-         patch("cli.cloudflare_zones.httpx.post") as mock_post:
+    with (
+        patch("cli.cloudflare_zones.httpx.get", return_value=existing) as mock_get,
+        patch("cli.cloudflare_zones.httpx.post") as mock_post,
+    ):
         info = cz.ensure_zone("tok", "acc", "example.com")
 
     assert info.zone_id == "zone123"
@@ -55,8 +57,10 @@ def test_ensure_zone_creates_when_missing():
             },
         },
     )
-    with patch("cli.cloudflare_zones.httpx.get", return_value=empty), \
-         patch("cli.cloudflare_zones.httpx.post", return_value=created) as mock_post:
+    with (
+        patch("cli.cloudflare_zones.httpx.get", return_value=empty),
+        patch("cli.cloudflare_zones.httpx.post", return_value=created) as mock_post,
+    ):
         info = cz.ensure_zone("tok", "acc", "example.com")
 
     assert info.zone_id == "zoneNEW"
@@ -68,8 +72,10 @@ def test_ensure_zone_creates_when_missing():
 def test_ensure_zone_raises_on_failure():
     empty = _resp(200, {"success": True, "result": []})
     failed = _resp(403, {"success": False, "errors": [{"message": "no permission"}]})
-    with patch("cli.cloudflare_zones.httpx.get", return_value=empty), \
-         patch("cli.cloudflare_zones.httpx.post", return_value=failed):
+    with (
+        patch("cli.cloudflare_zones.httpx.get", return_value=empty),
+        patch("cli.cloudflare_zones.httpx.post", return_value=failed),
+    ):
         with pytest.raises(RuntimeError):
             cz.ensure_zone("tok", "acc", "example.com")
 
@@ -96,16 +102,20 @@ def test_add_pages_custom_domain_falls_back_to_get_check():
     # POST fails with a generic 400, but the domain is in fact attached.
     bad = _resp(400, {"success": False, "errors": [{"message": "bad request"}]})
     attached = _resp(200, {"success": True, "result": {"name": "example.com"}})
-    with patch("cli.cloudflare_zones.httpx.post", return_value=bad), \
-         patch("cli.cloudflare_zones.httpx.get", return_value=attached):
+    with (
+        patch("cli.cloudflare_zones.httpx.post", return_value=bad),
+        patch("cli.cloudflare_zones.httpx.get", return_value=attached),
+    ):
         assert cz.add_pages_custom_domain("tok", "acc", "proj", "example.com") is True
 
 
 def test_add_pages_custom_domain_raises_when_truly_failed():
     bad = _resp(500, {"success": False, "errors": [{"message": "server error"}]})
     not_found = _resp(404, {"success": False})
-    with patch("cli.cloudflare_zones.httpx.post", return_value=bad), \
-         patch("cli.cloudflare_zones.httpx.get", return_value=not_found):
+    with (
+        patch("cli.cloudflare_zones.httpx.post", return_value=bad),
+        patch("cli.cloudflare_zones.httpx.get", return_value=not_found),
+    ):
         with pytest.raises(RuntimeError):
             cz.add_pages_custom_domain("tok", "acc", "proj", "example.com")
 
@@ -127,9 +137,13 @@ def test_clear_conflicting_records_deletes_only_conflicting_types():
     )
     empty = _resp(200, {"success": True, "result": []})
     deleted_ok = _resp(200, {"success": True})
-    with patch("cli.cloudflare_zones.httpx.get", side_effect=[listing, empty]), \
-         patch("cli.cloudflare_zones.httpx.delete", return_value=deleted_ok) as mock_del:
-        n = cz.clear_conflicting_records("tok", "zone1", ["example.com", "www.example.com"])
+    with (
+        patch("cli.cloudflare_zones.httpx.get", side_effect=[listing, empty]),
+        patch("cli.cloudflare_zones.httpx.delete", return_value=deleted_ok) as mock_del,
+    ):
+        n = cz.clear_conflicting_records(
+            "tok", "zone1", ["example.com", "www.example.com"]
+        )
 
     assert n == 2  # A + CNAME deleted, TXT kept
     deleted_ids = [c.args[0].rsplit("/", 1)[-1] for c in mock_del.call_args_list]
@@ -138,8 +152,10 @@ def test_clear_conflicting_records_deletes_only_conflicting_types():
 
 def test_clear_conflicting_records_noop_when_empty():
     empty = _resp(200, {"success": True, "result": []})
-    with patch("cli.cloudflare_zones.httpx.get", return_value=empty), \
-         patch("cli.cloudflare_zones.httpx.delete") as mock_del:
+    with (
+        patch("cli.cloudflare_zones.httpx.get", return_value=empty),
+        patch("cli.cloudflare_zones.httpx.delete") as mock_del,
+    ):
         n = cz.clear_conflicting_records("tok", "zone1", ["example.com"])
     assert n == 0
     mock_del.assert_not_called()
@@ -151,9 +167,13 @@ def test_clear_conflicting_records_noop_when_empty():
 def test_ensure_cname_record_creates_when_missing():
     empty = _resp(200, {"success": True, "result": []})
     created = _resp(201, {"success": True, "result": {"id": "rec1"}})
-    with patch("cli.cloudflare_zones.httpx.get", return_value=empty), \
-         patch("cli.cloudflare_zones.httpx.post", return_value=created) as mock_post:
-        assert cz.ensure_cname_record("tok", "z1", "example.com", "proj.pages.dev") is True
+    with (
+        patch("cli.cloudflare_zones.httpx.get", return_value=empty),
+        patch("cli.cloudflare_zones.httpx.post", return_value=created) as mock_post,
+    ):
+        assert (
+            cz.ensure_cname_record("tok", "z1", "example.com", "proj.pages.dev") is True
+        )
     body = mock_post.call_args.kwargs["json"]
     assert body["type"] == "CNAME"
     assert body["content"] == "proj.pages.dev"
@@ -163,9 +183,17 @@ def test_ensure_cname_record_creates_when_missing():
 def test_ensure_cname_record_idempotent_when_present():
     existing = _resp(
         200,
-        {"success": True, "result": [{"id": "r", "type": "CNAME", "content": "proj.pages.dev."}]},
+        {
+            "success": True,
+            "result": [{"id": "r", "type": "CNAME", "content": "proj.pages.dev."}],
+        },
     )
-    with patch("cli.cloudflare_zones.httpx.get", return_value=existing), \
-         patch("cli.cloudflare_zones.httpx.post") as mock_post:
-        assert cz.ensure_cname_record("tok", "z1", "example.com", "proj.pages.dev") is False
+    with (
+        patch("cli.cloudflare_zones.httpx.get", return_value=existing),
+        patch("cli.cloudflare_zones.httpx.post") as mock_post,
+    ):
+        assert (
+            cz.ensure_cname_record("tok", "z1", "example.com", "proj.pages.dev")
+            is False
+        )
     mock_post.assert_not_called()

@@ -2,17 +2,16 @@
 Tests for updating encrypted files in Ansible vault.
 """
 
-import tempfile
 import shutil
-from pathlib import Path
 import subprocess
+import tempfile
+from pathlib import Path
 
 from cli.vault.files import (
     get_vault_file_content,
-    update_vault_file,
     is_full_vault_file,
+    update_vault_file,
 )
-
 
 from .. import TEST_ROOT_PATH
 from .utils import get_ansible_vault_cmd, get_dyscli_path

@@ -1,14 +1,15 @@
 import json
 import re
+import secrets
+import shutil
+import string
 import subprocess
 import sys
 import tempfile
-import shutil
 from pathlib import Path
-import secrets
-import string
-from ansible.parsing.vault import VaultLib, VaultSecret
+
 from ansible.constants import DEFAULT_VAULT_IDENTITY
+from ansible.parsing.vault import VaultLib, VaultSecret
 
 from .ansible_bin import ansible_bin
 
@@ -40,11 +41,11 @@ def is_full_vault_file(path: Path) -> bool:
 def rotate_full_vault_file(
     path: Path,
     vault_password: str,
-    work_dir: Path = None,
-    new_content: str = None,
+    work_dir: Path | None = None,
+    new_content: str | None = None,
     dry_run: bool = False,
-    dry_dir: Path = None,
-    new_password: str = None,
+    dry_dir: Path | None = None,
+    new_password: str | None = None,
     verify_password: bool = True,
 ):
     """Rotate a full vault file or replace its content."""
@@ -183,9 +184,7 @@ def regen_vault_string(name, plaintext, vault_pass_file):
         plaintext,
     ]
     try:
-        proc = subprocess.run(
-            cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
+        proc = subprocess.run(cmd, check=True, capture_output=True)
         return proc.stdout.decode()
     except subprocess.CalledProcessError as e:
         print(f"Error encrypting {name}: {e.stderr.decode()}", file=sys.stderr)
@@ -530,7 +529,9 @@ For more help: startup secrets update --help
 
             for var, plain in updates_dict.items():
                 # Check if the variable exists with a vault block
-                if not re.search(rf"^[ \t]*{re.escape(var)}:\s*!vault \|", text, re.M):
+                if not re.search(
+                    rf"^[ \t]*{re.escape(var)}:\s*!vault \|", text, re.MULTILINE
+                ):
                     if only_existing:
                         if verbose:
                             print(f"Skip {var} in {rel}, no existing block.")

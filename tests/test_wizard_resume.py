@@ -1,8 +1,10 @@
 from cli.wizard.context import BootstrapContext
 from cli.wizard.steps import project as project_step
-from cli.wizard.steps.project import BYOS_DEPLOY_PUBLIC_KEY_IGNORE
-from cli.wizard.steps.project import BYOS_DEPLOY_PUBLIC_KEY_FILE
-from cli.wizard.steps.project import ProjectStep
+from cli.wizard.steps.project import (
+    BYOS_DEPLOY_PUBLIC_KEY_FILE,
+    BYOS_DEPLOY_PUBLIC_KEY_IGNORE,
+    ProjectStep,
+)
 
 
 def test_project_step_skip_restores_vault_password(monkeypatch, tmp_path):
@@ -26,7 +28,9 @@ def test_project_step_skip_restores_vault_password(monkeypatch, tmp_path):
         project_step, "read_keychain_password", lambda _project_name: "stored-secret"
     )
     monkeypatch.setattr(
-        project_step, "vault_is_decryptable", lambda _path, password: password == "stored-secret"
+        project_step,
+        "vault_is_decryptable",
+        lambda _path, password: password == "stored-secret",
     )
     monkeypatch.setattr(project_step.ui, "skip_indicator", lambda _message: None)
 

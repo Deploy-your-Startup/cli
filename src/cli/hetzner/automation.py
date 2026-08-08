@@ -7,8 +7,8 @@ what happens and complete manual steps (login, 2FA, captcha).
 
 from __future__ import annotations
 
-from . import config
 from . import _output as ui
+from . import config
 
 
 class HetznerAutomation:
@@ -118,7 +118,9 @@ class HetznerAutomation:
     async def login(self) -> bool:
         """Navigate to login and wait for user to complete (incl. 2FA)."""
         try:
-            await self.page.goto(config.HETZNER_PROJECTS_URL, wait_until="domcontentloaded")
+            await self.page.goto(
+                config.HETZNER_PROJECTS_URL, wait_until="domcontentloaded"
+            )
             if "/projects" in self.page.url and "accounts.hetzner" not in self.page.url:
                 ui.success("Already logged in (saved session).")
                 return True
@@ -210,7 +212,9 @@ class HetznerAutomation:
     async def _navigate_into_project(self, project_name: str) -> None:
         """Navigate into the named project by finding its href on the projects list."""
         try:
-            await self.page.goto(config.HETZNER_PROJECTS_URL, wait_until="domcontentloaded")
+            await self.page.goto(
+                config.HETZNER_PROJECTS_URL, wait_until="domcontentloaded"
+            )
 
             card_link = self.page.locator(
                 f'a.project-card:has([data-projectname="{project_name}"])'
@@ -346,7 +350,7 @@ class HetznerAutomation:
         filled-but-unsubmitted dialog.
         """
         reveal_selector = (
-            '.click-to-show, .click-to-copy__content, .click-to-copy__box, '
+            ".click-to-show, .click-to-copy__content, .click-to-copy__box, "
             'code, input[readonly], :text("Klicken um anzuzeigen"), '
             ':text("Click to show")'
         )
@@ -371,9 +375,7 @@ class HetznerAutomation:
             except Exception:
                 pass
             try:
-                desc = self.page.locator(
-                    config.SELECTORS_TOKEN_DESCRIPTION_INPUT
-                ).first
+                desc = self.page.locator(config.SELECTORS_TOKEN_DESCRIPTION_INPUT).first
                 if not await desc.is_visible(timeout=1000):
                     return True
             except Exception:

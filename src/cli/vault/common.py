@@ -4,6 +4,7 @@ Common utilities for Ansible vault operations.
 
 import secrets
 import string
+
 from ansible.parsing.vault import VaultLib, VaultSecret
 
 DEFAULT_VAULT_IDENTITY = "default"

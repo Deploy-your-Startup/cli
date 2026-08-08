@@ -1,7 +1,8 @@
-import sys
 import subprocess
-from unittest.mock import patch, MagicMock
+import sys
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from cli import deploy

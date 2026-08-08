@@ -6,6 +6,7 @@ Startup CLI - Command line tool for Deploy Your Startup operations
 import subprocess
 import sys
 from pathlib import Path
+
 import click
 
 
@@ -35,7 +36,6 @@ def get_python_cmd():
 @click.group()
 def cli():
     """Startup CLI - Command line tool for Deploy Your Startup operations"""
-    pass
 
 
 # === BOOTSTRAP COMMAND ===
@@ -51,6 +51,7 @@ def bootstrap(verbose):
     re-run after an interruption.
     """
     import re
+
     from cli import wizard_output as ui
     from cli.bootstrap_wizard import BootstrapContext, run_wizard
     from cli.sync_commands import _github_owner
@@ -164,7 +165,6 @@ def bootstrap(verbose):
 @cli.group()
 def secrets():
     """Manage vault secrets"""
-    pass
 
 
 @secrets.command("update")
@@ -403,7 +403,7 @@ def update_secrets(
     set_file_content_pairs = merged_file_content if merged_file_content else None
 
     # Call the update_secrets function directly
-    success, updated, password_verification_failed = update_vault_secrets(
+    success, _updated, password_verification_failed = update_vault_secrets(
         repo=repo,
         vault_password=vault_password,
         vault_fields=merged_field_random if merged_field_random else None,
@@ -542,7 +542,6 @@ def update_inline_vault_field_cmd(file, field, value, vault_password, verbose):
 @cli.group()
 def deploy():
     """Deployment operations"""
-    pass
 
 
 @cli.group(invoke_without_command=True)
@@ -588,7 +587,6 @@ def sync(ctx, owner, repo_name, source_owner, source_repo, private, dry_run):
 @cli.group()
 def ansible():
     """Shared Ansible deployment operations"""
-    pass
 
 
 @deploy.command("create")
@@ -1210,7 +1208,6 @@ def ansible_restore(
 @cli.group()
 def hetzner():
     """Hetzner Cloud account, project, domain & token management via browser automation."""
-    pass
 
 
 @hetzner.command("setup")
@@ -1254,7 +1251,7 @@ def hetzner_setup(headless, project, token_name, register, email):
 
     if token:
         click.echo(f"\n  Token: {token[:8]}...{token[-4:]}")
-        click.echo(f"  Use with: startup bootstrap --hetzner-token <token>")
+        click.echo("  Use with: startup bootstrap --hetzner-token <token>")
     else:
         click.echo("\n  No token obtained.", err=True)
         raise SystemExit(1)
@@ -1348,6 +1345,7 @@ def hetzner_status():
 def hetzner_clean():
     """Remove stored credentials and browser state."""
     import shutil
+
     from cli.hetzner.config import CONFIG_DIR
 
     if click.confirm(f"  Delete all stored data in {CONFIG_DIR}?", default=False):

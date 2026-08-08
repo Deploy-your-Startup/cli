@@ -100,10 +100,14 @@ def store_keychain_password(project_name: str, vault_password: str) -> None:
     """Store (or update) the vault password in the macOS Keychain."""
     subprocess.run(
         [
-            "security", "add-generic-password",
-            "-a", os.environ.get("USER", ""),
-            "-s", _keychain_service_name(project_name),
-            "-w", vault_password,
+            "security",
+            "add-generic-password",
+            "-a",
+            os.environ.get("USER", ""),
+            "-s",
+            _keychain_service_name(project_name),
+            "-w",
+            vault_password,
             "-U",  # update if exists
         ],
         check=True,
@@ -116,9 +120,12 @@ def read_keychain_password(project_name: str) -> str | None:
     try:
         result = subprocess.run(
             [
-                "security", "find-generic-password",
-                "-a", os.environ.get("USER", ""),
-                "-s", _keychain_service_name(project_name),
+                "security",
+                "find-generic-password",
+                "-a",
+                os.environ.get("USER", ""),
+                "-s",
+                _keychain_service_name(project_name),
                 "-w",
             ],
             capture_output=True,
