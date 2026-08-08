@@ -4,8 +4,8 @@ if [ "$1" == "setup_local" ]; then
   echo "Installing development dependencies..."
   echo "Installing uv..."
   curl -LsSf https://astral.sh/uv/install.sh | sh
-  echo "Installing ruff..."
-  uv tool install ruff@latest
+  # No global ruff install: `./make.sh format` / `lint` run the version pinned
+  # in pyproject.toml, so everyone lints against the same rule set.
   echo "Installing deploy-your-startup-cli..."
   uv tool install --reinstall deploy-your-startup-cli --from .
   echo "Setup complete!"
@@ -13,13 +13,21 @@ fi
 
 if [ "$1" == "format" ]; then
   echo "Formatting code and running ruff checks..."
-  uvx ruff format
-  uvx ruff check --fix
+  # `uv run --extra dev` uses the ruff pinned in pyproject.toml. `uvx ruff`
+  # would silently fetch the newest release, whose default rule set differs.
+  uv run --extra dev ruff format
+  uv run --extra dev ruff check --fix
+fi
+
+if [ "$1" == "lint" ]; then
+  echo "Checking formatting and lint (no changes) — same as CI..."
+  uv run --extra dev ruff format --check
+  uv run --extra dev ruff check
 fi
 
 if [ "$1" == "test" ]; then
   echo "Running tests..."
-  uv run pytest
+  uv run --extra dev pytest
 fi
 
 if [ "$1" == "install_tool" ]; then
@@ -41,8 +49,9 @@ fi
 
 if [ "$1" == "help" ] || [ -z "$1" ]; then
   echo "Available commands:"
-  echo "  setup_local   - Install uv, ruff, and deploy-your-startup-cli"
+  echo "  setup_local   - Install uv and deploy-your-startup-cli"
   echo "  format        - Format code and run ruff checks"
+  echo "  lint          - Check formatting and lint without changing files"
   echo "  test          - Run pytest tests"
   echo "  install_tool  - Install CLI as a global tool"
   echo "  dev_install   - Install in development mode"

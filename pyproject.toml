@@ -31,7 +31,10 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=9.1.1",
-    "ruff>=0.16.0",
+    # Pinned to a minor series on purpose: `ruff>=` plus `uvx ruff` meant every
+    # developer and CI run could pick up a different ruff whose default rule set
+    # had grown. Bump this deliberately, then run `./make.sh format`.
+    "ruff>=0.16.0,<0.17",
 ]
 server = [
     "fastapi>=0.141.1",
@@ -58,3 +61,29 @@ include = ["cli*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+
+# Lint rules are selected explicitly. Ruff's *default* rule set grows with new
+# releases, so relying on it means a routine `ruff` upgrade can flood the repo
+# with errors nobody introduced (this is exactly what happened with 0.16).
+# Pin the set here and widen it deliberately.
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "UP",    # pyupgrade
+    "B",     # bugbear
+    "C4",    # comprehensions
+    "SIM",   # simplify
+    "DTZ",   # timezone-naive datetimes
+    "BLE",   # blind except
+    "PLE",   # pylint errors
+    "PLW",   # pylint warnings
+    "RUF",   # ruff-specific
+]
+ignore = [
+    "E501",    # line length is the formatter's job; it cannot split long
+               # comments/strings and we do not want them mangled
+    "RUF001",  # ambiguous unicode: the UI strings are German and use – — ×
+]

@@ -38,6 +38,7 @@ class FinalizeStep(WizardStep):
             cwd=ctx.project_dir,
             capture_output=True,
             text=True,
+            check=False,
         )
         if status.stdout.strip():
             _run_command(
@@ -53,6 +54,7 @@ class FinalizeStep(WizardStep):
             ["git", "remote", "remove", "origin"],
             cwd=ctx.project_dir,
             capture_output=True,
+            check=False,
         )
         if not repo_exists(ctx.full_repo):
             ui.action_start("GitHub-Repository erstellen...")
@@ -168,6 +170,7 @@ class FinalizeStep(WizardStep):
                 cwd=ctx.project_dir,
                 capture_output=True,
                 text=True,
+                check=False,
             )
             if proc.returncode == 0:
                 triggered = True

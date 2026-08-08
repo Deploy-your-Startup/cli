@@ -67,6 +67,7 @@ def is_pushed(project_dir: Path) -> bool:
             cwd=project_dir,
             capture_output=True,
             text=True,
+            check=False,
         )
         ahead_in_sync = False
         for line in result.stdout.splitlines():
@@ -110,7 +111,7 @@ def open_browser(url: str, label: str) -> None:
     ui.action_start(f"{label} im Browser öffnen...")
     try:
         opened = webbrowser.open(url)
-    except Exception:
+    except (webbrowser.Error, OSError):
         opened = False
     if opened:
         ui.action_done("Browser geöffnet")

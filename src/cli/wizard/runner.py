@@ -64,7 +64,7 @@ def check_prerequisites(ctx: BootstrapContext) -> None:
 
     if ctx.mode == "github":
         result = subprocess.run(
-            ["gh", "auth", "status"], capture_output=True, text=True
+            ["gh", "auth", "status"], capture_output=True, text=True, check=False
         )
         if result.returncode != 0:
             raise click.ClickException(
@@ -93,9 +93,11 @@ def run_wizard(ctx: BootstrapContext) -> None:
             ui.success(f"Step {idx} abgeschlossen")
         except click.ClickException:
             raise
+        # Top-level boundary: any failure here is reported to the user and
+        # handled, never surfaced as a traceback.
         except Exception as exc:
             ui.error(f"Fehler in Step {idx}: {exc}")
-            raise click.ClickException(str(exc))
+            raise click.ClickException(str(exc)) from exc
 
     # All steps done — show summary
     github_url = ctx.github_url if ctx.mode == "github" else None

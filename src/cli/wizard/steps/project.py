@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import shlex
 import shutil
 import tempfile
@@ -219,10 +220,8 @@ class ProjectStep(WizardStep):
 
         # 3g. Remove .bak files left behind by vault encryption
         for bak in ctx.project_dir.rglob("*.bak"):
-            try:
+            with contextlib.suppress(OSError):
                 bak.unlink()
-            except OSError:
-                pass
 
         # 3h. Provider-specific finishing touches
         if ctx.provider == "byos":

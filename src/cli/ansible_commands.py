@@ -336,6 +336,7 @@ def _configure_sparse_checkout(target_dir: Path, cwd: Path) -> None:
                 cwd=str(cwd),
                 capture_output=True,
                 text=True,
+                check=False,
             ).returncode
             == 0
         )
@@ -446,7 +447,7 @@ def clone_or_update_shared_roles(
             )
             _configure_sparse_checkout(target_dir, working_dir)
             if re.fullmatch(r"[A-Za-z0-9._/-]+", version):
-                try:
+                with contextlib.suppress(subprocess.CalledProcessError):
                     _run_command(
                         [
                             "git",
@@ -459,8 +460,6 @@ def clone_or_update_shared_roles(
                         ],
                         cwd=working_dir,
                     )
-                except subprocess.CalledProcessError:
-                    pass
             return target_dir
         except (
             click.ClickException,
@@ -745,10 +744,8 @@ def byos_private_key_file(
             fh.write(ssh_key if ssh_key.endswith("\n") else ssh_key + "\n")
         yield key_path
     finally:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(key_path)
-        except OSError:
-            pass
 
 
 def _run_byos_playbook(
@@ -1124,10 +1121,8 @@ def run_kubeconfig(
     finally:
         tmp_path.unlink(missing_ok=True)
         if ssh_key_path:
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(ssh_key_path)
-            except OSError:
-                pass
 
 
 def run_backup(

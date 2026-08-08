@@ -227,7 +227,7 @@ requires-dist = [
     { name = "playwright", specifier = ">=1.61.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.1.1" },
     { name = "pyyaml", specifier = ">=6.0.3" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.16.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.16.0,<0.17" },
     { name = "uvicorn", marker = "extra == 'server'", specifier = ">=0.52.0" },
 ]
 provides-extras = ["dev", "server"]

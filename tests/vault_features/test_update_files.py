@@ -62,6 +62,7 @@ def test_update_encrypted_file_with_random_value():
             ],
             capture_output=True,
             text=True,
+            check=False,
         )
 
         # THEN the file is updated with a new random value
@@ -121,6 +122,7 @@ def test_update_encrypted_file_with_specific_value():
             ],
             capture_output=True,
             text=True,
+            check=False,
         )
 
         # THEN the file is updated with the provided value
@@ -169,6 +171,7 @@ def test_create_missing_encrypted_file_with_specific_value():
             ],
             capture_output=True,
             text=True,
+            check=False,
         )
 
         assert result.returncode == 0, f"Command failed: {result.stderr}"
@@ -304,6 +307,7 @@ def test_update_multiple_encrypted_files_with_random_values():
             ],
             capture_output=True,
             text=True,
+            check=False,
         )
 
         # THEN all files are updated with new random values

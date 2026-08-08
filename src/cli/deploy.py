@@ -38,7 +38,8 @@ def _oauth_client_secret():
 
 class OAuthHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
-        global ACCESS_TOKEN
+        global ACCESS_TOKEN  # noqa: PLW0603 — the callback handler has no
+        # other way back to the waiting main thread
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path != "/callback":
             self.send_response(404)
@@ -68,7 +69,9 @@ class OAuthHandler(http.server.SimpleHTTPRequestHandler):
             token_res.raise_for_status()
             ACCESS_TOKEN = token_res.json().get("access_token")
             print(f"✅ Access token received: {ACCESS_TOKEN}")
-        except Exception as e:
+        # Top-level boundary: any failure here is reported to the user and
+        # handled, never surfaced as a traceback.
+        except Exception as e:  # noqa: BLE001
             print(f"❌ Error while fetching token: {e}")
             self.send_response(500)
             self.end_headers()
@@ -86,7 +89,7 @@ class OAuthHandler(http.server.SimpleHTTPRequestHandler):
 
 
 def start_callback_server():
-    global httpd
+    global httpd  # noqa: PLW0603 — shutdown() is called from another thread
     handler = OAuthHandler
     httpd = socketserver.TCPServer(("", 8080), handler)
     print("🌐 Waiting for GitHub callback at http://localhost:8080/callback ...")
@@ -209,7 +212,7 @@ def generate_default_playbook(path, verbose=False):
   hosts: localhost
   connection: local
   gather_facts: no
-  
+
   vars:
     github_token: "{{ github_token }}"
     repo_name: "{{ repo_name }}"
@@ -217,7 +220,7 @@ def generate_default_playbook(path, verbose=False):
     repo_private: "{{ repo_private | default('true') }}"
     template_owner: "{{ template_owner | default('Deploy-your-Startup') }}"
     template_repo: "{{ template_repo | default('django-backend-template') }}"
-  
+
   tasks:
     - name: Create GitHub repository from template
       uri:
@@ -233,11 +236,11 @@ def generate_default_playbook(path, verbose=False):
           private: "{{ repo_private }}"
         status_code: [201]
       register: repo_creation
-      
+
     - name: Show repository creation result
       debug:
         var: repo_creation
-        
+
     - name: Success message
       debug:
         msg: "🎉 Successfully created repository {{ repo_name }} from template {{ template_owner }}/{{ template_repo }}"
@@ -271,7 +274,7 @@ def deploy_github_repo(
     Returns:
         int: Exit code (0 for success, 1 for failure)
     """
-    global ACCESS_TOKEN
+    global ACCESS_TOKEN  # noqa: PLW0603 — reset the OAuth handshake result
     ACCESS_TOKEN = None
 
     try:
