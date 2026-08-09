@@ -13,25 +13,13 @@ from ansible.constants import DEFAULT_VAULT_IDENTITY
 from ansible.parsing.vault import VaultLib, VaultSecret
 
 from .ansible_bin import ansible_bin
-from .vault.fields import normalize_vault_block
-
-
-def verify_vault_password(vault_text, vault_password):
-    """Verify if the provided vault password can decrypt the vault text."""
-    if not vault_text.startswith("$ANSIBLE_VAULT"):
-        return False
-
-    try:
-        vault_secret = VaultSecret(vault_password.encode())
-        vault = VaultLib([(DEFAULT_VAULT_IDENTITY, vault_secret)])
-        # Try to decrypt - if it fails, the password is incorrect
-        vault.decrypt(vault_text.encode())
-        return True
-    # Ansible reports a wrong vault password as any of several exception
-    # types (AnsibleError, ValueError, binascii.Error, UnicodeDecodeError, ...),
-    # so this stays broad on purpose.
-    except Exception:  # noqa: BLE001
-        return False
+from .vault.common import generate_random_secret, verify_vault_password
+from .vault.fields import (
+    extract_vault_block,
+    normalize_vault_block,
+    regen_vault_string,
+    replace_block,
+)
 
 
 def is_full_vault_file(path: Path) -> bool:
@@ -180,80 +168,6 @@ def rotate_full_vault_file(
                 return True
 
         return False
-
-
-def regen_vault_string(name, plaintext, vault_pass_file):
-    """Encrypt a plaintext into an inline Ansible vault block."""
-    # Use '--' to prevent plaintext starting with '-' being parsed as option
-    cmd = [
-        ansible_bin("ansible-vault"),
-        "encrypt_string",
-        "--name",
-        name,
-        "--vault-password-file",
-        vault_pass_file,
-        "--",
-        plaintext,
-    ]
-    try:
-        proc = subprocess.run(cmd, check=True, capture_output=True)
-        return proc.stdout.decode()
-    except subprocess.CalledProcessError as e:
-        print(f"Error encrypting {name}: {e.stderr.decode()}", file=sys.stderr)
-        raise
-
-
-def extract_vault_block(content, var_name):
-    """Extract the vault block for a variable name."""
-    pattern = (
-        rf"(?m)^(?P<indent>[ \t]*){re.escape(var_name)}:"  # indent + var_name:
-        r"\s*!vault \|(?:\r?\n[ \t].*)*"  # vault block
-    )
-    match = re.search(pattern, content)
-    if match:
-        # Extract the vault content (without the variable name and !vault | marker)
-        full_match = match.group(0)
-        lines = full_match.split("\n")
-        # Skip the first line which contains the variable name
-        vault_lines = []
-        for line in lines[1:]:  # Start from the second line
-            if line.strip() and not line.strip().startswith(var_name):
-                # Remove indentation
-                indent = len(line) - len(line.lstrip())
-                vault_lines.append(line[indent:])
-        return "\n".join(vault_lines)
-    return None
-
-
-def replace_block(content, var_name, new_block, verbose=False):
-    """Replace all contiguous vault blocks for var_name, ensuring consistent indentation."""
-
-    def _repl(match):
-        return normalize_vault_block(new_block, match.group("indent"))
-
-    # Match var_name line and all following indented lines, capturing leading indent
-    pattern = (
-        rf"(?m)^(?P<indent>[ \t]*){re.escape(var_name)}:"  # indent + var_name:
-        r"\s*!vault \|(?:\r?\n[ \t].*)*"  # vault block
-    )
-
-    # Debug output for verbose logging only
-    debug_match = re.search(pattern, content)
-    if not debug_match and verbose:
-        print(f"Warning: No vault block found for {var_name} with pattern {pattern}")
-
-    new_content, count = re.subn(pattern, _repl, content)
-    if count == 0 and verbose:
-        print(f"Warning: Failed to replace vault block for {var_name}")
-    return new_content, count
-
-
-def generate_random_secret(length=32):
-    """Generate a URL-safe random secret not starting with '-' or '_'"""
-    alphabet = string.ascii_letters + string.digits
-    first = secrets.choice(string.ascii_letters)
-    rest = "".join(secrets.choice(alphabet + "-_") for _ in range(length - 1))
-    return first + rest
 
 
 # Directories that never hold a project's own secrets but do hold enormous
@@ -564,7 +478,7 @@ For more help: startup secrets update --help
                             continue
 
                 new_block = regen_vault_string(var, plain, vault_file)
-                new_text, count = replace_block(text, var, new_block, verbose)
+                new_text, count = replace_block(text, var, new_block)
                 if count:
                     modified = True
                     text = new_text

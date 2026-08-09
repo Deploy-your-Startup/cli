@@ -5,6 +5,7 @@ Utilities for handling inline encrypted fields in Ansible vault.
 import logging
 import re
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -162,8 +163,14 @@ def regen_vault_string(name, plaintext, vault_pass_file):
         "--",
         plaintext,
     ]
-    proc = subprocess.run(cmd, check=True, stdout=subprocess.PIPE)
-    return proc.stdout.decode()
+    try:
+        proc = subprocess.run(cmd, check=True, capture_output=True)
+        return proc.stdout.decode()
+    except subprocess.CalledProcessError as e:
+        # Surface what ansible-vault said. Without this the caller sees a bare
+        # non-zero exit and no reason. Never the plaintext, which is `cmd[-1]`.
+        print(f"Error encrypting {name}: {e.stderr.decode()}", file=sys.stderr)
+        raise
 
 
 def get_inline_vault_value(
