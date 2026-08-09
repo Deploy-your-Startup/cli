@@ -250,7 +250,7 @@ def test_get_field_falls_back_to_the_keychain(group_vars, monkeypatch):
 
     # THEN
     assert result.exit_code == 0, result.output
-    assert result.output.strip().splitlines()[-1] == "the-value"
+    assert result.stdout.strip() == "the-value"
 
 
 def test_update_inline_field_falls_back_to_the_keychain(group_vars, monkeypatch):

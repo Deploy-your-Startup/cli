@@ -4,6 +4,7 @@ Common utilities for Ansible vault operations.
 
 import secrets
 import string
+import sys
 
 from ansible.parsing.vault import VaultLib, VaultSecret
 
@@ -22,21 +23,29 @@ def verify_vault_password(vault_text, vault_password, strict=False):
     Returns:
         bool: True if the password can decrypt the vault text, False otherwise
     """
+    # Diagnostics go to stderr, never stdout: `secrets get-field` exists to emit
+    # one value, and a caller piping it must not have to filter chatter out.
     if not vault_text.startswith("$ANSIBLE_VAULT"):
-        print(f"Text does not start with $ANSIBLE_VAULT: {vault_text[:20]}...")
+        print(
+            f"Text does not start with $ANSIBLE_VAULT: {vault_text[:20]}...",
+            file=sys.stderr,
+        )
         return False
 
     try:
         vault_secret = VaultSecret(vault_password.encode())
         vault = VaultLib([(DEFAULT_VAULT_IDENTITY, vault_secret)])
         vault.decrypt(vault_text.encode())
-        print("Successfully decrypted with password: xxxxx")
         return True
     # Ansible reports a wrong vault password as any of several exception
     # types (AnsibleError, ValueError, binascii.Error, UnicodeDecodeError, ...),
     # so this stays broad on purpose.
     except Exception as e:  # noqa: BLE001
-        print(f"Failed to decrypt with password '{vault_password}': {e}")
+        # The password itself never goes into the message. It used to, and with
+        # the keychain fallback that is worse than it looks: a password the user
+        # never typed would surface in terminals, scrollback and CI logs the
+        # moment a file did not match.
+        print(f"Failed to decrypt vault content: {e}", file=sys.stderr)
         return False
 
 
