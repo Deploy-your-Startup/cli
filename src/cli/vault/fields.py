@@ -88,6 +88,32 @@ def extract_vault_block(content, var_name):
     return "\n".join(vault_lines)
 
 
+def normalize_vault_block(block, indent=""):
+    """
+    Re-indent a vault block so every field in a file looks the same.
+
+    `ansible-vault encrypt_string` indents its ciphertext lines to line up under
+    the variable name, which varies with the name's length. Left as it comes,
+    files end up looking hand-edited by several people, and diffs carry noise
+    that has nothing to do with the change. Content lines get `indent` plus two
+    spaces, whatever the block arrived with.
+
+    Args:
+        block (str): The vault block as `ansible-vault` emitted it
+        indent (str): Leading whitespace of the line being replaced
+
+    Returns:
+        str: The block, re-indented, with a trailing newline
+    """
+    lines = block.rstrip("\n").split("\n")
+    name, _, marker = lines[0].partition(":")
+
+    head = f"{indent}{name}: {marker.strip()}" if marker else indent + lines[0]
+    body = [indent + "  " + line.strip() for line in lines[1:]]
+
+    return "\n".join([head, *body]) + "\n"
+
+
 def replace_block(content, var_name, new_block):
     """
     Replace all contiguous vault blocks for var_name, ensuring consistent indentation.
@@ -102,33 +128,7 @@ def replace_block(content, var_name, new_block):
     """
 
     def _repl(match):
-        indent = match.group("indent")
-        # Split the new_block into lines
-        lines = new_block.rstrip("\n").split("\n")
-
-        # Extract just the variable name and vault marker from the first line
-        # The format is typically "var_name: !vault |"
-        first_line_parts = lines[0].split(":", 1)
-        if len(first_line_parts) == 2:
-            var_part = first_line_parts[0]
-            vault_marker = first_line_parts[1].strip()
-            # Reconstruct the first line with proper indentation
-            result = [f"{indent}{var_part}: {vault_marker}"]
-
-            # For all vault content lines, use consistent indentation (2 spaces)
-            for line in lines[1:]:
-                result.append(indent + "  " + line.strip())
-
-            return "\n".join(result) + "\n"
-        else:
-            # Fallback if parsing fails
-            return (
-                indent
-                + lines[0]
-                + "\n"
-                + "\n".join(indent + "  " + line.strip() for line in lines[1:])
-                + "\n"
-            )
+        return normalize_vault_block(new_block, match.group("indent"))
 
     # Match var_name line and all following indented lines, capturing leading indent
     pattern = (

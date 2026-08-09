@@ -13,6 +13,7 @@ from ansible.constants import DEFAULT_VAULT_IDENTITY
 from ansible.parsing.vault import VaultLib, VaultSecret
 
 from .ansible_bin import ansible_bin
+from .vault.fields import normalize_vault_block
 
 
 def verify_vault_password(vault_text, vault_password):
@@ -228,33 +229,7 @@ def replace_block(content, var_name, new_block, verbose=False):
     """Replace all contiguous vault blocks for var_name, ensuring consistent indentation."""
 
     def _repl(match):
-        indent = match.group("indent")
-        # Split the new_block into lines
-        lines = new_block.rstrip("\n").split("\n")
-
-        # Extract just the variable name and vault marker from the first line
-        # The format is typically "var_name: !vault |"
-        first_line_parts = lines[0].split(":", 1)
-        if len(first_line_parts) == 2:
-            var_part = first_line_parts[0]
-            vault_marker = first_line_parts[1].strip()
-            # Reconstruct the first line with proper indentation
-            result = [f"{indent}{var_part}: {vault_marker}"]
-
-            # For all vault content lines, use consistent indentation (2 spaces)
-            for line in lines[1:]:
-                result.append(indent + "  " + line.strip())
-
-            return "\n".join(result) + "\n"
-        else:
-            # Fallback if parsing fails
-            return (
-                indent
-                + lines[0]
-                + "\n"
-                + "\n".join(indent + "  " + line.strip() for line in lines[1:])
-                + "\n"
-            )
+        return normalize_vault_block(new_block, match.group("indent"))
 
     # Match var_name line and all following indented lines, capturing leading indent
     pattern = (
@@ -627,7 +602,9 @@ For more help: startup secrets update --help
                     text += "\n"
                 for var in missing:
                     block = regen_vault_string(var, updates_dict[var], vault_file)
-                    text += "\n" + block.rstrip("\n") + "\n"
+                    # Same indentation the replace path produces, so a created
+                    # field is indistinguishable from one that was already there.
+                    text += "\n" + normalize_vault_block(block)
                     written_fields.add(var)
 
                 rel = (

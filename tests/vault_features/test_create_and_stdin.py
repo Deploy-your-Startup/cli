@@ -69,6 +69,38 @@ def test_create_in_adds_a_new_vault_field(group_vars):
     assert "existing_secret: !vault |" in group_vars.read_text()
 
 
+def test_created_field_is_indented_like_a_replaced_one(group_vars):
+    # GIVEN one field created from scratch and one replaced in place.
+    # `ansible-vault encrypt_string` lines its ciphertext up under the variable
+    # name, so the indentation depends on how long that name is. The replace
+    # path normalised it; the create path passed it through, and files ended up
+    # looking hand-edited by two different people.
+    update_secrets(
+        repo=str(group_vars),
+        vault_password=PASSWORD,
+        set_field=[
+            ("a_short_one", "value"),
+            ("a_considerably_longer_field_name", "value"),
+        ],
+        create_in=str(group_vars),
+    )
+    update_secrets(
+        repo=str(group_vars),
+        vault_password=PASSWORD,
+        set_field=[("a_short_one", "replaced")],
+    )
+
+    # THEN every ciphertext line sits two spaces in, whatever the name's length
+    # and whichever path wrote it
+    ciphertext = [
+        line
+        for line in group_vars.read_text().splitlines()
+        if line.strip().startswith(("$ANSIBLE_VAULT", "3", "6"))
+    ]
+    assert ciphertext, "expected encrypted lines to inspect"
+    assert {len(line) - len(line.lstrip()) for line in ciphertext} == {2}
+
+
 def test_create_in_leaves_existing_fields_to_the_normal_path(group_vars):
     # GIVEN one existing field and one new one in the same invocation
     success, _, _ = update_secrets(
