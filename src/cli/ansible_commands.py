@@ -26,26 +26,18 @@ __all__ = ["keychain_service_name"]
 
 DEFAULT_SHARED_DIR = ".shared-roles"
 DEFAULT_VERSION = "main"
-SPARSE_PATHS = [
-    "roles",
-    "ansible.cfg",
-    "requirements.yml",
-    "backup-playbook.yml",
-    "restore-playbook.yml",
-    "update-vms-playbook.yml",
-    "inventory.ini",
-    "inventory.hcloud.yml",
-]
-
 ROOT_SHARED_FILES = [
     "ansible.cfg",
     "requirements.yml",
     "backup-playbook.yml",
     "restore-playbook.yml",
     "update-vms-playbook.yml",
+    "k3s-upgrade-playbook.yml",
     "inventory.ini",
     "inventory.hcloud.yml",
 ]
+
+SPARSE_PATHS = ["roles", *ROOT_SHARED_FILES]
 DEFAULT_SHARED_REPO_NAME = "deploy-your-startup"
 
 
@@ -254,33 +246,10 @@ def _copy_local_repo(source_dir: Path, target_dir: Path) -> Path:
     target_dir.mkdir(parents=True, exist_ok=True)
     shutil.copytree(source_dir / "roles", target_dir / "roles")
 
-    ansible_cfg = source_dir / "ansible.cfg"
-    if ansible_cfg.exists():
-        shutil.copy2(ansible_cfg, target_dir / "ansible.cfg")
-
-    requirements_file = source_dir / "requirements.yml"
-    if requirements_file.exists():
-        shutil.copy2(requirements_file, target_dir / "requirements.yml")
-
-    backup_playbook = source_dir / "backup-playbook.yml"
-    if backup_playbook.exists():
-        shutil.copy2(backup_playbook, target_dir / "backup-playbook.yml")
-
-    restore_playbook = source_dir / "restore-playbook.yml"
-    if restore_playbook.exists():
-        shutil.copy2(restore_playbook, target_dir / "restore-playbook.yml")
-
-    update_vms_playbook = source_dir / "update-vms-playbook.yml"
-    if update_vms_playbook.exists():
-        shutil.copy2(update_vms_playbook, target_dir / "update-vms-playbook.yml")
-
-    inventory_ini = source_dir / "inventory.ini"
-    if inventory_ini.exists():
-        shutil.copy2(inventory_ini, target_dir / "inventory.ini")
-
-    inventory_hcloud = source_dir / "inventory.hcloud.yml"
-    if inventory_hcloud.exists():
-        shutil.copy2(inventory_hcloud, target_dir / "inventory.hcloud.yml")
+    for filename in ROOT_SHARED_FILES:
+        source_file = source_dir / filename
+        if source_file.exists():
+            shutil.copy2(source_file, target_dir / filename)
 
     return target_dir
 
@@ -1234,6 +1203,75 @@ def run_update_vms(
             extra_vars=json.dumps(extra_vars),
         )
         return
+    hcloud_token = get_hcloud_token(
+        working_directory, vault_password, environment, shared_dir
+    )
+    env = _ansible_env(working_dir, shared_dir)
+    env["HCLOUD_TOKEN"] = hcloud_token
+
+    _run_command(
+        [
+            _find_uv(),
+            "run",
+            "--project",
+            str(working_dir),
+            ansible_bin("ansible-playbook"),
+            str(playbook_path),
+            "--vault-password-file",
+            "/bin/cat",
+            "-l",
+            effective_limit,
+            "--extra-vars",
+            json.dumps(extra_vars),
+        ],
+        cwd=working_dir,
+        env=env,
+        input_text=vault_password,
+    )
+
+
+def run_k3s_upgrade(
+    vault_password: str,
+    environment: str,
+    *,
+    working_directory: str = ".",
+    playbook: str = "k3s-upgrade-playbook.yml",
+    k3s_version: str | None = None,
+    limit: str | None = None,
+    shared_dir: str = DEFAULT_SHARED_DIR,
+    version: str = DEFAULT_VERSION,
+    repo_url: str | None = None,
+    refresh: bool = True,
+) -> None:
+    _validated_environment(environment)
+    working_dir = _resolve_working_dir(working_directory)
+    setup_ansible(
+        working_directory=working_directory,
+        shared_dir=shared_dir,
+        version=version,
+        repo_url=repo_url,
+        refresh=refresh,
+    )
+
+    playbook_path = _resolve_playbook_path(
+        working_dir, playbook, "k3s upgrade", shared_dir
+    )
+    effective_limit = f"{environment},{limit}" if limit else environment
+    extra_vars: dict[str, object] = {"k3s_upgrade": True}
+    if k3s_version:
+        extra_vars["k3s_version"] = k3s_version
+
+    if _is_byos(working_dir):
+        _run_byos_playbook(
+            working_directory,
+            vault_password,
+            shared_dir,
+            playbook=str(playbook_path),
+            limit=[effective_limit],
+            extra_vars=json.dumps(extra_vars),
+        )
+        return
+
     hcloud_token = get_hcloud_token(
         working_directory, vault_password, environment, shared_dir
     )
