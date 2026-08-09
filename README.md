@@ -111,10 +111,11 @@ startup secrets rotate-password --repo PATH --old-password OLD --new-password NE
 startup secrets list-vaults --repo PATH
 
 # Get decrypted value of a specific vault field
-startup secrets get-field --file PATH --field FIELD_NAME --vault-password PASSWORD
+# --vault-password is optional; omit it to read from the keychain
+startup secrets get-field --file PATH --field FIELD_NAME
 
 # Update a specific inline vault field directly
-startup secrets update-inline-field --file PATH --field FIELD_NAME --value NEW_VALUE --vault-password PASSWORD
+startup secrets update-inline-field --file PATH --field FIELD_NAME --value NEW_VALUE
 ```
 
 #### Backward Compatibility
