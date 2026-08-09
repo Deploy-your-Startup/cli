@@ -1136,6 +1136,92 @@ def ansible_update_vms(
     )
 
 
+@ansible.command("k3s-upgrade")
+@click.option(
+    "--vault-password",
+    "--vault_password",
+    "vault_password",
+    help="Vault password",
+)
+@click.option("--environment", required=True, help="Target environment")
+@click.option(
+    "--working-directory",
+    "--working_directory",
+    "working_directory",
+    default=".",
+    show_default=True,
+)
+@click.option(
+    "--playbook",
+    default="k3s-upgrade-playbook.yml",
+    show_default=True,
+    help="Playbook that upgrades k3s",
+)
+@click.option(
+    "--k3s-version",
+    "--k3s_version",
+    "k3s_version",
+    default=None,
+    help=(
+        "Target k3s version, e.g. v1.36.3+k3s1. Defaults to k3s_version from "
+        "the shared k3s role. Only one minor step at a time is supported."
+    ),
+)
+@click.option(
+    "--limit",
+    default=None,
+    help="Optional extra Ansible limit expression within the environment",
+)
+@click.option(
+    "--shared-dir", "--shared_dir", default=".shared-roles", show_default=True
+)
+@click.option("--version", default="main", show_default=True)
+@click.option(
+    "--refresh/--no-refresh",
+    default=True,
+    show_default=True,
+    help="Refresh `.shared-roles` from git instead of reusing an existing exported copy",
+)
+@click.option(
+    "--repo-url",
+    "--repo_url",
+    default=None,
+    help="Override shared roles repository URL",
+)
+def ansible_k3s_upgrade(
+    vault_password,
+    environment,
+    working_directory,
+    playbook,
+    k3s_version,
+    limit,
+    shared_dir,
+    version,
+    refresh,
+    repo_url,
+):
+    """Upgrade k3s cluster-wide: control plane first, then workers."""
+    from cli.ansible_commands import resolve_vault_password, run_k3s_upgrade
+
+    resolved_vault_password = resolve_vault_password(
+        vault_password=vault_password,
+        working_directory=working_directory,
+    )
+
+    run_k3s_upgrade(
+        vault_password=resolved_vault_password,
+        environment=environment,
+        working_directory=working_directory,
+        playbook=playbook,
+        k3s_version=k3s_version,
+        limit=limit,
+        shared_dir=shared_dir,
+        version=version,
+        refresh=refresh,
+        repo_url=repo_url,
+    )
+
+
 @ansible.command("restore")
 @click.option(
     "--vault-password",
