@@ -190,6 +190,75 @@ def test_vault_password_falls_back_to_the_keychain(group_vars, monkeypatch):
     )
 
 
+def test_get_field_falls_back_to_the_keychain(group_vars, monkeypatch):
+    # GIVEN a stored secret and no --vault-password on the command line.
+    # `secrets update` learned the keychain fallback first; reading a field back
+    # still demanded the password, so the two halves of the same workflow
+    # disagreed about where the password comes from.
+    update_secrets(
+        repo=str(group_vars),
+        vault_password=PASSWORD,
+        set_field=[("stored_secret", "the-value")],
+        create_in=str(group_vars),
+    )
+
+    class FakeBackend:
+        def read(self, key):
+            return PASSWORD
+
+    monkeypatch.setattr(
+        "cli.ansible_commands.get_backend", lambda *a, **kw: FakeBackend()
+    )
+
+    # WHEN
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["secrets", "get-field", "-f", str(group_vars), "--field", "stored_secret"]
+    )
+
+    # THEN
+    assert result.exit_code == 0, result.output
+    assert result.output.strip().splitlines()[-1] == "the-value"
+
+
+def test_update_inline_field_falls_back_to_the_keychain(group_vars, monkeypatch):
+    # GIVEN an existing block and no --vault-password
+    update_secrets(
+        repo=str(group_vars),
+        vault_password=PASSWORD,
+        set_field=[("stored_secret", "before")],
+        create_in=str(group_vars),
+    )
+
+    class FakeBackend:
+        def read(self, key):
+            return PASSWORD
+
+    monkeypatch.setattr(
+        "cli.ansible_commands.get_backend", lambda *a, **kw: FakeBackend()
+    )
+
+    # WHEN
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "secrets",
+            "update-inline-field",
+            "-f",
+            str(group_vars),
+            "--field",
+            "stored_secret",
+            "--value",
+            "after",
+        ],
+    )
+
+    # THEN
+    assert result.exit_code == 0, result.output
+    assert get_inline_vault_value(group_vars, "stored_secret", PASSWORD) == "after"
+
+
 def test_password_scope_walks_up_to_the_deployment_boundary(tmp_path):
     # GIVEN the layout every project here uses
     from cli.startup import _password_scope

@@ -503,17 +503,26 @@ def list_vault_files(repo, file, verbose):
 )
 @click.option("--field", required=True, help="Name of the vault field to retrieve")
 @click.option(
-    "--vault-password", "-p", required=True, help="Vault password for decryption"
+    "--vault-password",
+    "-p",
+    default=None,
+    help=(
+        "Vault password. Omit it to read the password from the configured "
+        "backend (default: macOS Keychain), the way `startup ansible` does."
+    ),
 )
 @click.option("--verbose", "-V", is_flag=True, help="Verbose output")
 def get_vault_field(file, field, vault_password, verbose):
     """Get the decrypted value of a vault field from a file"""
+    from cli.ansible_commands import resolve_vault_password
     from cli.vault.fields import get_inline_vault_value
 
     file_path = Path(file)
     if not file_path.exists():
         click.echo(f"Error: File {file} does not exist", err=True)
         return 1
+
+    vault_password = resolve_vault_password(vault_password, _password_scope(file))
 
     if verbose:
         click.echo(f"Getting value for field {field} from file {file}")
@@ -534,17 +543,26 @@ def get_vault_field(file, field, vault_password, verbose):
 @click.option("--field", required=True, help="Name of the vault field to update")
 @click.option("--value", required=True, help="New value for the field")
 @click.option(
-    "--vault-password", "-p", required=True, help="Vault password for encryption"
+    "--vault-password",
+    "-p",
+    default=None,
+    help=(
+        "Vault password. Omit it to read the password from the configured "
+        "backend (default: macOS Keychain), the way `startup ansible` does."
+    ),
 )
 @click.option("--verbose", "-V", is_flag=True, help="Verbose output")
 def update_inline_vault_field_cmd(file, field, value, vault_password, verbose):
     """Update the value of an inline vault field in a file"""
+    from cli.ansible_commands import resolve_vault_password
     from cli.vault.fields import update_inline_vault_field
 
     file_path = Path(file)
     if not file_path.exists():
         click.echo(f"Error: File {file} does not exist", err=True)
         return 1
+
+    vault_password = resolve_vault_password(vault_password, _password_scope(file))
 
     if verbose:
         click.echo(f"Updating value for field {field} in file {file}")
