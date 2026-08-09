@@ -1,0 +1,38 @@
+---
+# Default playbook for GitHub repository creation
+- name: Create GitHub repository from template
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  
+  vars:
+    github_token: "{{ github_token }}"
+    repo_name: "{{ repo_name }}"
+    repo_description: "{{ repo_description | default('Created by DeployYourStartup.com') }}"
+    repo_private: "{{ repo_private | default('true') }}"
+    template_owner: "{{ template_owner | default('Deploy-your-Startup') }}"
+    template_repo: "{{ template_repo | default('django-backend-template') }}"
+  
+  tasks:
+    - name: Create GitHub repository from template
+      uri:
+        url: "https://api.github.com/repos/{{ template_owner }}/{{ template_repo }}/generate"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ github_token }}"
+          Accept: "application/vnd.github.v3+json"
+        body_format: json
+        body:
+          name: "{{ repo_name }}"
+          description: "{{ repo_description }}"
+          private: "{{ repo_private }}"
+        status_code: [201]
+      register: repo_creation
+      
+    - name: Show repository creation result
+      debug:
+        var: repo_creation
+        
+    - name: Success message
+      debug:
+        msg: "🎉 Successfully created repository {{ repo_name }} from template {{ template_owner }}/{{ template_repo }}"

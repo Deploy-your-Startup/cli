@@ -68,7 +68,9 @@ class OAuthHandler(http.server.SimpleHTTPRequestHandler):
             )
             token_res.raise_for_status()
             ACCESS_TOKEN = token_res.json().get("access_token")
-            print(f"✅ Access token received: {ACCESS_TOKEN}")
+            # The token itself stays out of the terminal - it grants everything
+            # the OAuth scope covers, and this runs where scrollback is kept.
+            print("✅ Access token received")
         # Top-level boundary: any failure here is reported to the user and
         # handled, never surfaced as a traceback.
         except Exception as e:  # noqa: BLE001
