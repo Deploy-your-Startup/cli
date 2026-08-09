@@ -27,7 +27,10 @@ def test_a_well_formed_block_comes_back_without_its_indentation():
     content = "a: 1\n" + block("$ANSIBLE_VAULT;1.1;AES256", HEX, HEX) + "b: 2\n"
 
     # THEN only the block's own lines come back, unindented
-    assert extract_vault_block(content, "secret") == f"$ANSIBLE_VAULT;1.1;AES256\n{HEX}\n{HEX}"
+    assert (
+        extract_vault_block(content, "secret")
+        == f"$ANSIBLE_VAULT;1.1;AES256\n{HEX}\n{HEX}"
+    )
 
 
 def test_the_next_field_does_not_bleed_into_the_block():
@@ -50,7 +53,9 @@ def test_indentation_depth_does_not_matter():
 
 def test_a_nested_field_is_found_too():
     # GIVEN a block under a parent key
-    content = "parent:\n  secret: !vault |\n    $ANSIBLE_VAULT;1.1;AES256\n    " + HEX + "\n"
+    content = (
+        "parent:\n  secret: !vault |\n    $ANSIBLE_VAULT;1.1;AES256\n    " + HEX + "\n"
+    )
 
     # THEN
     assert extract_vault_block(content, "secret") == f"$ANSIBLE_VAULT;1.1;AES256\n{HEX}"
@@ -96,11 +101,18 @@ def test_a_field_whose_name_is_a_prefix_is_not_matched(tmp_path):
 
 def test_normalize_reindents_whatever_it_is_given():
     # GIVEN the deep indentation ansible-vault emits
-    raw = "secret: !vault |\n          $ANSIBLE_VAULT;1.1;AES256\n          " + HEX + "\n"
+    raw = (
+        "secret: !vault |\n          $ANSIBLE_VAULT;1.1;AES256\n          " + HEX + "\n"
+    )
 
     # THEN content lines sit two spaces in, and the head keeps the caller's
-    assert normalize_vault_block(raw) == f"secret: !vault |\n  $ANSIBLE_VAULT;1.1;AES256\n  {HEX}\n"
-    assert normalize_vault_block(raw, "    ").startswith("    secret: !vault |\n      $")
+    assert (
+        normalize_vault_block(raw)
+        == f"secret: !vault |\n  $ANSIBLE_VAULT;1.1;AES256\n  {HEX}\n"
+    )
+    assert normalize_vault_block(raw, "    ").startswith(
+        "    secret: !vault |\n      $"
+    )
 
 
 def test_a_rewritten_field_stays_readable_and_keeps_its_neighbours(tmp_path):
