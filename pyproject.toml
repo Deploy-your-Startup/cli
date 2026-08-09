@@ -24,7 +24,7 @@ dependencies = [
     # feature set. Project deployments don't run the browser flows, so they prune
     # it via `[tool.uv] override-dependencies` (see a deployment pyproject) —
     # playwright bundles a ~130 MB node driver we don't want in CI pipelines.
-    "playwright>=1.61.0",
+    "playwright>=1.62.0",
     "pyyaml>=6.0.3",
 ]
 
@@ -34,11 +34,11 @@ dev = [
     # Pinned to a minor series on purpose: `ruff>=` plus `uvx ruff` meant every
     # developer and CI run could pick up a different ruff whose default rule set
     # had grown. Bump this deliberately, then run `./make.sh format`.
-    "ruff>=0.16.0,<0.17",
+    "ruff>=0.16.1,<0.17",
 ]
 server = [
     "fastapi>=0.141.1",
-    "uvicorn>=0.52.0",
+    "uvicorn>=0.52.1",
 ]
 
 [project.urls]
