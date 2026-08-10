@@ -338,8 +338,29 @@ def _normalize_inventory_value(value: object) -> str | None:
     return str(value)
 
 
+def _local_changes(target_dir: Path, working_dir: Path) -> str:
+    """Return `git status --porcelain` for the shared-roles checkout.
+
+    Empty when the checkout matches its HEAD. Anything else means the roles
+    Ansible is about to run are not the roles the pinned commit contains.
+    """
+    try:
+        return _run_command(
+            ["git", "-C", str(target_dir), "status", "--porcelain"],
+            cwd=working_dir,
+            capture_output=True,
+        ).stdout.strip()
+    except click.ClickException:
+        return ""
+
+
 def _is_up_to_date(target_dir: Path, working_dir: Path, version: str) -> bool:
     """Check if the local checkout is already up to date with the remote."""
+    # A dirty tree is not up to date, whatever HEAD says. Skipping the refresh
+    # here would print "Shared roles are up to date" and then run Ansible
+    # against locally modified roles without a word about it.
+    if _local_changes(target_dir, working_dir):
+        return False
     try:
         local_head = _run_command(
             ["git", "-C", str(target_dir), "rev-parse", "HEAD"],
@@ -401,10 +422,35 @@ def clone_or_update_shared_roles(
                     "Recreate shared roles checkout with new source"
                 )
 
+            # Re-apply the sparse cone before deciding anything. The set of
+            # files SPARSE_PATHS asks for grows with the CLI, and a checkout
+            # created by an older version keeps its narrower cone in
+            # .git/info/sparse-checkout forever: HEAD matches the remote, so the
+            # fast path below returns, and the never-checked-out file stays
+            # missing. `git status` does not report it — the file is in the
+            # commit, just not in the worktree — so this is invisible until a
+            # playbook is not found. Materializing the cone first costs three
+            # cheap git calls and makes the fast path safe.
+            _configure_sparse_checkout(target_dir, working_dir)
+
             # Quick check: skip fetch/pull if already up to date
             if _is_up_to_date(target_dir, working_dir, version):
                 click.echo("Shared roles are up to date.")
                 return target_dir
+
+            # The fetch/checkout below keeps uncommitted edits, so say plainly
+            # that this run will not use the roles the pinned commit contains.
+            # `.shared-roles` is a managed checkout — edits there are almost
+            # always a leftover experiment.
+            dirty = _local_changes(target_dir, working_dir)
+            if dirty:
+                click.echo(
+                    f"WARNING: '{target_dir}' has uncommitted changes; Ansible "
+                    f"will run against them, not against {version}:"
+                )
+                for line in dirty.splitlines():
+                    click.echo(f"  {line}")
+                click.echo(f"  Discard them with: git -C {target_dir} checkout -- .")
 
             _configure_sparse_checkout(target_dir, working_dir)
             _run_command(
