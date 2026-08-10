@@ -33,6 +33,7 @@ ROOT_SHARED_FILES = [
     "restore-playbook.yml",
     "update-vms-playbook.yml",
     "k3s-upgrade-playbook.yml",
+    "os-upgrade-playbook.yml",
     "inventory.ini",
     "inventory.hcloud.yml",
 ]
@@ -1343,6 +1344,95 @@ def run_k3s_upgrade(
         env=env,
         input_text=vault_password,
     )
+
+
+OS_UPGRADE_IMAGE_REMINDER = """
+Reminder: this upgraded the OS on existing nodes. It did not change
+`hetzner_os_image`, so any server created from now on still comes up with the
+old Ubuntu and drifts away from the fleet you just upgraded.
+
+If the upgrade went well, pin the new image in the project's
+group_vars/all.yml, e.g.:
+
+    hetzner_os_image: ubuntu-26.04
+
+The value is a Hetzner image name (`hcloud image list`), not the version the
+node reports.
+"""
+
+
+def run_os_upgrade(
+    vault_password: str,
+    environment: str,
+    *,
+    working_directory: str = ".",
+    playbook: str = "os-upgrade-playbook.yml",
+    allow_single_node: bool = False,
+    limit: str | None = None,
+    shared_dir: str = DEFAULT_SHARED_DIR,
+    version: str = DEFAULT_VERSION,
+    repo_url: str | None = None,
+    refresh: bool = True,
+) -> None:
+    _validated_environment(environment)
+    working_dir = _resolve_working_dir(working_directory)
+    setup_ansible(
+        working_directory=working_directory,
+        shared_dir=shared_dir,
+        version=version,
+        repo_url=repo_url,
+        refresh=refresh,
+    )
+
+    playbook_path = _resolve_playbook_path(
+        working_dir, playbook, "OS upgrade", shared_dir
+    )
+    effective_limit = f"{environment},{limit}" if limit else environment
+    extra_vars: dict[str, object] = {"os_upgrade": True}
+    if allow_single_node:
+        extra_vars["os_upgrade_allow_single_node"] = True
+
+    if _is_byos(working_dir):
+        _run_byos_playbook(
+            working_directory,
+            vault_password,
+            shared_dir,
+            playbook=str(playbook_path),
+            limit=[effective_limit],
+            extra_vars=json.dumps(extra_vars),
+        )
+        click.echo(OS_UPGRADE_IMAGE_REMINDER)
+        return
+
+    hcloud_token = get_hcloud_token(
+        working_directory, vault_password, environment, shared_dir
+    )
+    env = _ansible_env(working_dir, shared_dir)
+    env["HCLOUD_TOKEN"] = hcloud_token
+
+    _run_command(
+        [
+            _find_uv(),
+            "run",
+            "--project",
+            str(working_dir),
+            ansible_bin("ansible-playbook"),
+            str(playbook_path),
+            "--vault-password-file",
+            "/bin/cat",
+            "-l",
+            effective_limit,
+            "--extra-vars",
+            json.dumps(extra_vars),
+        ],
+        cwd=working_dir,
+        env=env,
+        input_text=vault_password,
+    )
+    # Only after a successful run — _run_command raises on failure, and telling
+    # someone to pin a new image right after a failed upgrade is the last thing
+    # they need.
+    click.echo(OS_UPGRADE_IMAGE_REMINDER)
 
 
 def run_restore(
