@@ -1346,18 +1346,21 @@ def run_k3s_upgrade(
     )
 
 
+# Printed after every successful run, including one where every node reported
+# "no newer release" and nothing happened. The CLI does not parse the playbook
+# output, so it cannot tell those apart — hence the conditional wording rather
+# than a claim that an upgrade took place.
 OS_UPGRADE_IMAGE_REMINDER = """
-Reminder: this upgraded the OS on existing nodes. It did not change
-`hetzner_os_image`, so any server created from now on still comes up with the
-old Ubuntu and drifts away from the fleet you just upgraded.
-
-If the upgrade went well, pin the new image in the project's
-group_vars/all.yml, e.g.:
+Reminder: if a node was upgraded just now, `hetzner_os_image` was not touched.
+That pin decides what newly created servers come up with, so until you bump it
+in the project's group_vars/all.yml, e.g.:
 
     hetzner_os_image: ubuntu-26.04
 
-The value is a Hetzner image name (`hcloud image list`), not the version the
-node reports.
+the next server created joins the cluster on the old release. The value is a
+Hetzner image name (`hcloud image list`), not the version a node reports.
+
+Nothing to do if every node reported that no newer release is offered.
 """
 
 
