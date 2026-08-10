@@ -422,6 +422,17 @@ def clone_or_update_shared_roles(
                     "Recreate shared roles checkout with new source"
                 )
 
+            # Re-apply the sparse cone before deciding anything. The set of
+            # files SPARSE_PATHS asks for grows with the CLI, and a checkout
+            # created by an older version keeps its narrower cone in
+            # .git/info/sparse-checkout forever: HEAD matches the remote, so the
+            # fast path below returns, and the never-checked-out file stays
+            # missing. `git status` does not report it — the file is in the
+            # commit, just not in the worktree — so this is invisible until a
+            # playbook is not found. Materializing the cone first costs three
+            # cheap git calls and makes the fast path safe.
+            _configure_sparse_checkout(target_dir, working_dir)
+
             # Quick check: skip fetch/pull if already up to date
             if _is_up_to_date(target_dir, working_dir, version):
                 click.echo("Shared roles are up to date.")
