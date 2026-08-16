@@ -150,9 +150,29 @@ class CloudflareAutomation:
         ui.action_start("Cloudflare API-Token erstellen...")
         await self.page.goto(CF_TOKEN_URL, wait_until="domcontentloaded")
         await self._dismiss_blocking_ui()
+
+        # Cloudflare re-authenticates its API-token pages even when a dashboard
+        # session already exists, and that round trip through the SSO provider
+        # lands on the dashboard root instead of the page that was requested.
+        # `login()` may well have passed a moment earlier — it returns as soon as
+        # the token page is reachable once. Without checking again here, every
+        # click below hunts for a form that is on another page entirely, and the
+        # run dies on a 60s timeout looking for "Get started".
+        if not await self._on_token_page() and not await self._wait_for_session_ready():
+            raise RuntimeError(
+                "Cloudflare did not come back to the API token page after login."
+            )
+
         await self._click_create_token_entry()
         await self._dismiss_blocking_ui()
-        await self.page.get_by_role("button", name="Get started").first.click()
+        try:
+            await self.page.get_by_role("button", name="Get started").first.click(
+                timeout=15_000
+            )
+        except playwright_error():
+            # "Get started" is the empty-state button; an account that already
+            # has tokens opens the form directly.
+            pass
         await self.page.get_by_role("textbox").first.fill(token_name)
 
         for index, spec in enumerate(DEFAULT_PERMISSIONS):
