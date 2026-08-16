@@ -8,6 +8,8 @@ import webbrowser
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+import click
+
 from cli import wizard_output as ui
 
 from .context import BootstrapContext
@@ -83,13 +85,24 @@ def is_pushed(project_dir: Path) -> bool:
     return False
 
 
-def prompt_user_public_key() -> str:
+def prompt_user_public_key(*, non_interactive: bool = False) -> str:
     """Ask the user for their own SSH public key for server SSH access."""
     candidates = [
         Path.home() / ".ssh" / "id_ed25519.pub",
         Path.home() / ".ssh" / "id_rsa.pub",
     ]
     default = next((str(p) for p in candidates if p.exists()), None)
+    if non_interactive:
+        # Nobody is there to accept the default, and a prompt that cannot be
+        # answered kills the run after the Hetzner project and token already
+        # exist.
+        if not default:
+            raise click.ClickException(
+                "No SSH public key found at ~/.ssh/id_ed25519.pub or "
+                "~/.ssh/id_rsa.pub, and there is no way to ask for one. "
+                "Create a key with `ssh-keygen -t ed25519` first."
+            )
+        return Path(default).read_text().strip()
     while True:
         path_str = ui.text_input(
             "Pfad zu deinem Public SSH Key (für SSH-Zugriff auf den Server)",

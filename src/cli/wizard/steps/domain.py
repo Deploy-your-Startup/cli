@@ -66,6 +66,16 @@ class DomainStep(WizardStep):
                 "zuerst laufen."
             )
 
+        if ctx.non_interactive:
+            # Everything below either buys a domain or walks the user through a
+            # registrar's UI — neither works without someone at the keyboard.
+            raise click.ClickException(
+                f'"{ctx.base_domain}" is not a subdomain of a zone already on '
+                "Cloudflare, so its nameservers have to be switched at the "
+                "registrar. Run the wizard interactively for this domain, or "
+                "point it at Cloudflare first."
+            )
+
         choice = ui.numbered_choice(
             f'Besitzt du "{ctx.base_domain}" bereits?',
             [
