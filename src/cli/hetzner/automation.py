@@ -165,9 +165,9 @@ class HetznerAutomation:
         """
         for attempt in (1, 2):
             try:
-                await self.page.locator(
-                    config.SELECTORS_PROJECTS_READY
-                ).first.wait_for(state="visible", timeout=config.NAVIGATION_TIMEOUT)
+                await self.page.locator(config.SELECTORS_PROJECTS_READY).first.wait_for(
+                    state="visible", timeout=config.NAVIGATION_TIMEOUT
+                )
                 return True
             except playwright_error():
                 if attempt == 1:

@@ -188,18 +188,20 @@ class HetznerKonsoleHAutomation:
 
         Hetzner has no registrar API for NS delegation, so this drives KonsoleH's
         DNS management UI (verified flow):
-          1. Select the domain from the product overview (sets session context)
-          2. Open the "Nameserver ändern" form (dns.php?dnsaction2=changedns)
-          3. Fill the ``newdns[]`` fields and submit "Speichern"
+          1. Read the domain's number from the product overview
+          2. Open /domains/<number>/dns/update_nameservers
+          3. Fill the ns1…ns5 fields and submit "Speichern"
         Falls back to a manual confirmation prompt if the form is not found.
         """
         ui.info(f'Switching nameservers for "{domain}" to:')
         for ns in nameservers:
             ui.info(f"     • {ns}")
 
-        await self._select_domain(domain)
+        domain_number = await self._select_domain(domain)
+        if not domain_number:
+            ui.warning(f'Could not find "{domain}" in the KonsoleH overview.')
 
-        if not await self._open_change_nameserver_form():
+        if not await self._open_change_nameserver_form(domain_number):
             ui.warning(
                 "Could not open the nameserver-change form automatically.\n"
                 "     Please open: Einstellungen → DNS-Verwaltung → "
@@ -216,48 +218,72 @@ class HetznerKonsoleHAutomation:
         )
         return True
 
-    async def _select_domain(self, domain: str) -> None:
-        """Click the domain on the product overview to set the session context."""
+    async def _select_domain(self, domain: str) -> str | None:
+        """Select the domain on the product overview and return its number.
+
+        KonsoleH addresses domains by an internal number (``D0123456789``) that
+        every per-domain URL is built from. The overview links carry it as
+        ``?domain_number=…``, so read it there instead of guessing a path.
+        """
         try:
             await self.page.goto(
                 f"{config.KONSOLEH_BASE_URL}/", wait_until="networkidle"
+            )
+            number = await self.page.evaluate(
+                """(domain) => {
+                    const link = [...document.querySelectorAll('a')].find(
+                        a => (a.textContent || '').trim() === domain
+                             && (a.getAttribute('href') || '').includes('domain_number=')
+                    );
+                    if (!link) return null;
+                    const match = link.getAttribute('href').match(/domain_number=([^&]+)/);
+                    return match ? match[1] : null;
+                }""",
+                domain,
             )
             link = self.page.locator(f'a:has-text("{domain}")').first
             if await link.count() > 0:
                 await link.click(timeout=10000)
                 await self.page.wait_for_load_state("networkidle")
+            return number
         except playwright_error():
-            pass
+            return None
 
-    async def _open_change_nameserver_form(self) -> bool:
-        """Open dns.php?dnsaction2=changedns and confirm the form is present."""
-        # Direct navigation works once a domain is selected in the session.
-        try:
-            await self.page.goto(
-                config.KONSOLEH_DNS_CHANGE_URL, wait_until="networkidle"
-            )
-            if await self.page.locator('input[name="newdns[]"]').count() > 0:
-                return True
-        except playwright_error():
-            pass
+    async def _open_change_nameserver_form(self, domain_number: str | None) -> bool:
+        """Open the nameserver form and confirm its fields are present."""
+        if domain_number:
+            try:
+                await self.page.goto(
+                    config.konsoleh_nameserver_url(domain_number),
+                    wait_until="networkidle",
+                )
+                if await self.page.locator(config.SELECTORS_KONSOLEH_NS_FIELD).count():
+                    return True
+            except playwright_error():
+                pass
 
-        # Fallback: go via DNS-Verwaltung and click the "Nameserver ändern" button.
+        # Fallback: from DNS-Verwaltung, click through to the form.
         try:
-            await self.page.goto(config.KONSOLEH_DNS_EDIT_URL, wait_until="networkidle")
+            if domain_number:
+                await self.page.goto(
+                    config.konsoleh_dns_url(domain_number), wait_until="networkidle"
+                )
             btn = self.page.locator(
                 'a:has-text("Nameserver ändern"), button:has-text("Nameserver ändern")'
             ).first
             if await btn.count() > 0:
                 await btn.click(timeout=5000)
                 await self.page.wait_for_load_state("networkidle")
-            return await self.page.locator('input[name="newdns[]"]').count() > 0
+            return (
+                await self.page.locator(config.SELECTORS_KONSOLEH_NS_FIELD).count() > 0
+            )
         except playwright_error():
             return False
 
     async def _fill_and_submit_nameservers(self, nameservers: list[str]) -> bool:
-        """Fill the newdns[] fields and click Speichern. Returns success."""
+        """Fill the nameserver fields and click Speichern. Returns success."""
         try:
-            fields = self.page.locator('input[name="newdns[]"]')
+            fields = self.page.locator(config.SELECTORS_KONSOLEH_NS_FIELD)
             count = await fields.count()
             if count == 0:
                 return False
