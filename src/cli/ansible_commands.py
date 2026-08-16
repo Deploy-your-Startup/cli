@@ -810,6 +810,34 @@ def _run_byos_playbook(
         _run_command(command, cwd=working_dir, env=env, input_text=vault_password)
 
 
+def _dynamic_inventory_hosts(
+    working_dir: Path, shared_dir: str, env: dict[str, str]
+) -> list[str]:
+    """Return the hosts the Hetzner dynamic inventory currently resolves to."""
+    inventory_path = working_dir / "inventory.hcloud.yml"
+    if not inventory_path.exists():
+        inventory_path = working_dir / shared_dir / "inventory.hcloud.yml"
+    if not inventory_path.exists():
+        return []
+    result = _run_command(
+        [
+            _find_uv(),
+            "run",
+            "--project",
+            str(working_dir),
+            "ansible-inventory",
+            "-i",
+            str(inventory_path),
+            "--list",
+        ],
+        cwd=working_dir,
+        env=env,
+        capture_output=True,
+    )
+    data = json.loads(result.stdout or "{}")
+    return sorted((data.get("_meta", {}).get("hostvars") or {}).keys())
+
+
 def run_deploy(
     vault_password: str,
     environment: str,
@@ -843,6 +871,16 @@ def run_deploy(
     )
     env = _ansible_env(working_dir, shared_dir)
     env["HCLOUD_TOKEN"] = hcloud_token
+    # A deploy against zero hosts is not a success. Ansible skips every play,
+    # prints an empty PLAY RECAP and exits 0, so a deploy that overtakes the
+    # infrastructure provisioning (both are triggered by the initial push)
+    # reports green while having deployed nothing at all.
+    if not _dynamic_inventory_hosts(working_dir, shared_dir, env):
+        raise click.ClickException(
+            "The Hetzner inventory resolved to zero hosts — there is nothing to "
+            "deploy to. Provision the servers first with "
+            "`startup ansible infrastructure`, then run the deploy again."
+        )
     _run_command(
         [
             _find_uv(),
