@@ -71,6 +71,24 @@ def check_prerequisites(ctx: BootstrapContext) -> None:
                 "GitHub CLI ist nicht eingeloggt. Bitte `gh auth login` ausführen."
             )
 
+        # ghcr.io image pulls need `read:packages`. This used to be noticed deep
+        # inside the project step, several minutes and a Hetzner project later;
+        # settle it here, before anything has been created.
+        from cli.bootstrap import _ensure_ghcr_scopes, _gh_token_has_scope
+
+        if not (
+            _gh_token_has_scope("read:packages")
+            or _gh_token_has_scope("write:packages")
+        ):
+            if ctx.non_interactive:
+                raise click.ClickException(
+                    "The gh token is missing the 'read:packages' scope needed for "
+                    "ghcr.io pulls. Run `gh auth refresh -h github.com -s "
+                    "read:packages` once — it opens a browser, so it cannot be "
+                    "done as part of an unattended run."
+                )
+            _ensure_ghcr_scopes()
+
 
 def run_wizard(ctx: BootstrapContext) -> None:
     """Run the full bootstrap wizard pipeline."""
