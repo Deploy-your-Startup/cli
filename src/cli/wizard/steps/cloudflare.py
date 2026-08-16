@@ -88,13 +88,32 @@ class CloudflareStep(WizardStep):
         )
 
     def run(self, ctx: BootstrapContext) -> None:
-        has_account = ui.confirm("Cloudflare-Account schon vorhanden?", default=True)
-        choice = ui.numbered_choice(
-            "Wie soll der Cloudflare API Token bereitgestellt werden?",
-            [
-                "Im Browser erstellen (empfohlen)",
-                "Ich habe schon einen Token (einfügen)",
-            ],
+        # A token passed on the command line answers both questions below; the
+        # account/zone handling afterwards stays exactly the same.
+        if ctx.cloudflare_api_token:
+            ui.action_start("Token validieren...")
+            ok, auto_account_id = validate_cf_token(ctx.cloudflare_api_token)
+            if not ok:
+                raise click.ClickException("The given Cloudflare token is not valid.")
+            ui.action_done("Token validiert")
+            return self._resolve_account_and_zone(ctx, auto_account_id)
+
+        has_account = (
+            True
+            if ctx.non_interactive
+            else ui.confirm("Cloudflare-Account schon vorhanden?", default=True)
+        )
+        # Unattended, only the browser path gets by without further input.
+        choice = (
+            1
+            if ctx.non_interactive
+            else ui.numbered_choice(
+                "Wie soll der Cloudflare API Token bereitgestellt werden?",
+                [
+                    "Im Browser erstellen (empfohlen)",
+                    "Ich habe schon einen Token (einfügen)",
+                ],
+            )
         )
 
         while True:
@@ -126,9 +145,20 @@ class CloudflareStep(WizardStep):
                 )
             ui.error("Bitte erneut versuchen.")
 
+        return self._resolve_account_and_zone(ctx, auto_account_id)
+
+    def _resolve_account_and_zone(
+        self, ctx: BootstrapContext, auto_account_id: str | None
+    ) -> None:
+        """Pin down the account, then create or find the zone."""
         if auto_account_id:
             ctx.cloudflare_account_id = auto_account_id
             ui.info(f"Account-ID automatisch ermittelt: {auto_account_id}")
+        elif ctx.non_interactive:
+            raise click.ClickException(
+                "Several Cloudflare accounts found and no way to ask which one "
+                "to use. Pass --cloudflare-account-id."
+            )
         else:
             ui.info(
                 "Mehrere Accounts gefunden — finde deine Account-ID rechts "

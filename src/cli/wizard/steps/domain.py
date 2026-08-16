@@ -24,6 +24,12 @@ class DomainStep(WizardStep):
         # Pitch always runs: run() decides buy vs. nameserver-switch.
         if ctx.kind == "pitch":
             return False
+        if ctx.domain_owned is not None:
+            return ctx.domain_owned
+        if ctx.non_interactive:
+            # Never buy a domain unattended — that spends money. Registering one
+            # stays an explicit choice via --buy-domain.
+            return True
         # Fullstack: ask; skip the buy flow if the user already owns it.
         choice = ui.numbered_choice(
             f'Besitzt du "{ctx.base_domain}" bereits?',

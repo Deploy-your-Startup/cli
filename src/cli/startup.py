@@ -41,7 +41,60 @@ def cli():
 # === BOOTSTRAP COMMAND ===
 @cli.command("bootstrap")
 @click.option("--verbose", "-V", is_flag=True, help="Verbose output")
-def bootstrap(verbose):
+@click.option(
+    "--kind",
+    type=click.Choice(["fullstack", "pitch"]),
+    help="Bootstrap mode (skips the first question).",
+)
+@click.option(
+    "--provider",
+    type=click.Choice(["hetzner", "byos"]),
+    help="Where to deploy (full-stack only).",
+)
+@click.option("--project-name", help="Project name in kebab-case.")
+@click.option("--base-domain", help="Domain the project is served under.")
+@click.option("--additional-domains", help="Comma-separated extra domains.")
+@click.option("--sentry-dsn", help="Sentry DSN (full-stack only).")
+@click.option("--github-username", help="GitHub user or org (default: gh user).")
+@click.option("--output-dir", help="Directory the project is created in.")
+@click.option(
+    "--domain-owned/--buy-domain",
+    default=None,
+    help="Whether the domain already belongs to you (skips that question).",
+)
+@click.option("--hetzner-token", help="Use this token instead of creating one.")
+@click.option("--byos-host", help="Existing server's IP or hostname (provider byos).")
+@click.option("--byos-ssh-user", help="SSH user on that server (default: root).")
+@click.option("--cloudflare-token", help="Cloudflare API token (pitch only).")
+@click.option(
+    "--cloudflare-account-id",
+    help="Cloudflare account to use when several exist (pitch only).",
+)
+@click.option(
+    "--yes",
+    "-y",
+    "assume_yes",
+    is_flag=True,
+    help="Run without questions — every answer must come from the options above.",
+)
+def bootstrap(
+    verbose,
+    kind,
+    provider,
+    project_name,
+    base_domain,
+    additional_domains,
+    sentry_dsn,
+    github_username,
+    output_dir,
+    domain_owned,
+    hetzner_token,
+    byos_host,
+    byos_ssh_user,
+    cloudflare_token,
+    cloudflare_account_id,
+    assume_yes,
+):
     """Bootstrap a new startup — guided wizard.
 
     Walks you through the complete setup: Domain, Hetzner project/token,
@@ -49,6 +102,10 @@ def bootstrap(verbose):
 
     Each step checks if its outcome already exists, so you can safely
     re-run after an interruption.
+
+    Every question can also be answered up front with an option; with --yes
+    the wizard then runs unattended, which is what automation should use
+    instead of driving the prompts with a tool like `expect`.
     """
     import re
 
@@ -58,55 +115,75 @@ def bootstrap(verbose):
 
     ui.banner()
 
+    def _require(value, option: str):
+        """In --yes mode a missing answer is an error, not a prompt."""
+        if assume_yes and not value:
+            raise click.ClickException(f"--yes needs {option} to be set as well.")
+        return value
+
     # ── Mode selection ───────────────────────────────────────────
 
-    choice = ui.numbered_choice(
-        "Welcher Bootstrap-Modus?",
-        [
-            "Full-Stack — Django + k3s (Hetzner oder eigener VPS)",
-            "Pitch     — Astro Landing → Cloudflare Pages (für Coming-Soon/Marketing)",
-        ],
-    )
-    kind = "fullstack" if choice == 1 else "pitch"
+    if kind is None:
+        _require(kind, "--kind")
+        choice = ui.numbered_choice(
+            "Welcher Bootstrap-Modus?",
+            [
+                "Full-Stack — Django + k3s (Hetzner oder eigener VPS)",
+                "Pitch     — Astro Landing → Cloudflare Pages (für Coming-Soon/Marketing)",
+            ],
+        )
+        kind = "fullstack" if choice == 1 else "pitch"
 
     # ── Provider selection (full-stack only) ─────────────────────
 
-    provider = "hetzner"
-    if kind == "fullstack":
-        provider_choice = ui.numbered_choice(
-            "Wo soll deployed werden?",
-            [
-                "Hetzner — VMs automatisch provisionieren (Cloud-Account nötig)",
-                "Bring your own server — eigener VPS (z.B. IONOS) per SSH, günstiger",
-            ],
-        )
-        provider = "hetzner" if provider_choice == 1 else "byos"
+    if kind != "fullstack":
+        provider = "hetzner"
+    elif provider is None:
+        if assume_yes:
+            provider = "hetzner"
+        else:
+            provider_choice = ui.numbered_choice(
+                "Wo soll deployed werden?",
+                [
+                    "Hetzner — VMs automatisch provisionieren (Cloud-Account nötig)",
+                    "Bring your own server — eigener VPS (z.B. IONOS) per SSH, günstiger",
+                ],
+            )
+            provider = "hetzner" if provider_choice == 1 else "byos"
 
     # ── Collect inputs ───────────────────────────────────────────
 
-    # Project name (kebab-case validated)
-    while True:
+    # Project name (kebab-case validated — including one passed as an option,
+    # since it becomes a repo name, a k8s namespace and a Keychain entry).
+    while not project_name or not re.match(r"^[a-z][a-z0-9-]*$", project_name):
+        if project_name:
+            ui.error("Bitte kebab-case verwenden (z.B. mein-startup).")
+            if assume_yes:
+                raise click.ClickException(
+                    f"--project-name '{project_name}' is not kebab-case."
+                )
+        _require(project_name, "--project-name")
         project_name = ui.text_input("Projektname (kebab-case)")
-        if re.match(r"^[a-z][a-z0-9-]*$", project_name):
-            break
-        ui.error("Bitte kebab-case verwenden (z.B. mein-startup).")
 
     # Domain
-    base_domain = ui.text_input("Domain (z.B. mein-startup.de)")
+    if not base_domain:
+        _require(base_domain, "--base-domain")
+        base_domain = ui.text_input("Domain (z.B. mein-startup.de)")
 
     # Full-stack-only inputs
-    additional_domains = ""
-    sentry_dsn = ""
+    additional_domains = additional_domains or ""
+    sentry_dsn = sentry_dsn or ""
     if kind == "fullstack":
-        additional_domains = ui.text_input(
-            "Weitere Domains (komma-getrennt, Enter zum Überspringen)",
-            default="",
-            show_default=False,
-        )
+        if not additional_domains and not assume_yes:
+            additional_domains = ui.text_input(
+                "Weitere Domains (komma-getrennt, Enter zum Überspringen)",
+                default="",
+                show_default=False,
+            )
         import os
 
-        sentry_dsn = os.environ.get("SENTRY_DSN", "")
-        if not sentry_dsn:
+        sentry_dsn = sentry_dsn or os.environ.get("SENTRY_DSN", "")
+        if not sentry_dsn and not assume_yes:
             sentry_dsn = ui.text_input(
                 "Sentry DSN (optional, Enter zum Überspringen)",
                 default="",
@@ -114,18 +191,25 @@ def bootstrap(verbose):
             )
 
     # Auto-detect GitHub username
-    try:
-        github_username = _github_owner(None)
-        ui.info(f"GitHub User: {github_username}")
-    except (click.ClickException, subprocess.SubprocessError, OSError):
-        # gh missing, logged out, or offline — fall back to asking.
-        github_username = ui.text_input("GitHub username/org")
+    if not github_username:
+        try:
+            github_username = _github_owner(None)
+            ui.info(f"GitHub User: {github_username}")
+        except (click.ClickException, subprocess.SubprocessError, OSError):
+            # gh missing, logged out, or offline — fall back to asking.
+            _require(github_username, "--github-username")
+            github_username = ui.text_input("GitHub username/org")
 
     # Output directory
-    output_dir = ui.text_input(
-        "Output-Verzeichnis",
-        default=str(Path.home() / "Projects"),
-    )
+    if not output_dir:
+        output_dir = (
+            str(Path.home() / "Projects")
+            if assume_yes
+            else ui.text_input(
+                "Output-Verzeichnis",
+                default=str(Path.home() / "Projects"),
+            )
+        )
 
     # ── Summary + confirmation ───────────────────────────────────
 
@@ -143,8 +227,11 @@ def bootstrap(verbose):
         summary["Postgres"] = "17"
     ui.input_summary(summary)
 
-    if not ui.confirm("Passt das?", default=True):
+    if not assume_yes and not ui.confirm("Passt das?", default=True):
         raise SystemExit(0)
+
+    if assume_yes and provider == "byos" and not byos_host:
+        raise click.ClickException("--provider byos needs --byos-host as well.")
 
     # ── Run wizard ───────────────────────────────────────────────
 
@@ -158,6 +245,13 @@ def bootstrap(verbose):
         output_dir=Path(output_dir),
         kind=kind,
         provider=provider,
+        byos_host=byos_host,
+        byos_ssh_user=byos_ssh_user or "root",
+        hetzner_token=hetzner_token,
+        cloudflare_api_token=cloudflare_token,
+        cloudflare_account_id=cloudflare_account_id,
+        non_interactive=assume_yes,
+        domain_owned=domain_owned,
     )
 
     run_wizard(ctx)
