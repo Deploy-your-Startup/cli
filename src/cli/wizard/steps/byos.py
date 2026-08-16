@@ -11,6 +11,7 @@ from __future__ import annotations
 import socket
 from pathlib import Path
 
+import click
 import yaml
 
 from cli import wizard_output as ui
@@ -92,14 +93,22 @@ class ByosStep(WizardStep):
             "root-SSH-Zugang."
         )
 
-        while True:
+        # A host given on the command line is validated the same way, so a typo
+        # surfaces here instead of as an SSH timeout minutes later.
+        if ctx.byos_host and not _looks_like_host(ctx.byos_host):
+            raise click.ClickException(
+                f"'{ctx.byos_host}' is neither an IP address nor a hostname."
+            )
+
+        while not ctx.byos_host:
             host = ui.text_input("Server IP oder Hostname (z.B. 203.0.113.10)")
             if _looks_like_host(host):
                 ctx.byos_host = host.strip()
                 break
             ui.error("Bitte eine gültige IP-Adresse oder einen Hostnamen angeben.")
 
-        ctx.byos_ssh_user = ui.text_input("SSH-User auf dem Server", default="root")
+        if not ctx.non_interactive:
+            ctx.byos_ssh_user = ui.text_input("SSH-User auf dem Server", default="root")
 
         ui.info(
             f"Stelle sicher, dass auf {ctx.byos_host} die Ports 22 (SSH), 80 und "

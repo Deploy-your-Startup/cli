@@ -26,6 +26,12 @@ class BootstrapContext:
     byos_host: str | None = None  # VPS IP or hostname Ansible connects to
     byos_ssh_user: str = "root"
 
+    # Set when every answer came from the command line: steps must then never
+    # block on a prompt, because nobody is there to answer it.
+    non_interactive: bool = False
+    # None means "ask"; True/False answer the domain-ownership question.
+    domain_owned: bool | None = None
+
     # Populated by steps
     hetzner_token: str | None = None
     vault_password: str | None = None

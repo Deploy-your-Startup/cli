@@ -44,12 +44,29 @@ class HetznerStep(WizardStep):
         return False
 
     def run(self, ctx: BootstrapContext) -> None:
-        choice = ui.numbered_choice(
-            "Wie soll der Hetzner API Token bereitgestellt werden?",
-            [
-                "Ich habe schon einen Token (einfügen)",
-                "Projekt + Token im Browser erstellen",
-            ],
+        # A token handed in on the command line answers this question already.
+        if ctx.hetzner_token:
+            ui.action_start("Token validieren...")
+            if not validate_hetzner_token(ctx.hetzner_token):
+                raise click.ClickException("The given Hetzner token is not valid.")
+            ui.action_done("Token validiert")
+            from cli.hetzner.credentials import save_token
+
+            save_token(ctx.hetzner_token, ctx.project_name)
+            return
+
+        # Unattended: create project and token in the browser, which is the
+        # only path that needs no further input.
+        choice = (
+            2
+            if ctx.non_interactive
+            else ui.numbered_choice(
+                "Wie soll der Hetzner API Token bereitgestellt werden?",
+                [
+                    "Ich habe schon einen Token (einfügen)",
+                    "Projekt + Token im Browser erstellen",
+                ],
+            )
         )
 
         if choice == 1:
