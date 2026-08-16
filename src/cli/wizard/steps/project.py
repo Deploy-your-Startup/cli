@@ -126,7 +126,7 @@ class ProjectStep(WizardStep):
             ui.action_done("Template geklont")
 
         # 3b. SSH Keys
-        user_public_key = prompt_user_public_key()
+        user_public_key = prompt_user_public_key(non_interactive=ctx.non_interactive)
         ui.action_start("CI SSH Key generieren...")
         with tempfile.TemporaryDirectory(prefix="bootstrap-ssh-") as ssh_tmp:
             ci_private_key, ci_public_key = _generate_ssh_keypair(
