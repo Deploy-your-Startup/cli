@@ -14,9 +14,22 @@ KONSOLEH_BASE_URL = "https://konsoleh.hetzner.com"
 KONSOLEH_ORDER_URL = f"{KONSOLEH_BASE_URL}/order.php"
 KONSOLEH_DOMAINS_URL = f"{KONSOLEH_BASE_URL}/domain.php"
 KONSOLEH_HANDLES_URL = f"{KONSOLEH_BASE_URL}/contact.php"
-# DNS management (per selected domain). Edit = overview, changedns = NS form.
-KONSOLEH_DNS_EDIT_URL = f"{KONSOLEH_BASE_URL}/dns.php?dnsaction2=edit"
-KONSOLEH_DNS_CHANGE_URL = f"{KONSOLEH_BASE_URL}/dns.php?dnsaction2=changedns"
+
+
+# DNS management is addressed per domain number (D0123456789), which the
+# product overview exposes as ?domain_number=… on each domain link. The older
+# dns.php?dnsaction2=… paths now answer with "Seite nicht gefunden".
+def konsoleh_dns_url(domain_number: str) -> str:
+    return f"{KONSOLEH_BASE_URL}/domains/{domain_number}/dns"
+
+
+def konsoleh_nameserver_url(domain_number: str) -> str:
+    return f"{konsoleh_dns_url(domain_number)}/update_nameservers"
+
+
+# The nameserver inputs carry ids (ns1…ns5) and no name attribute, so the old
+# input[name="newdns[]"] selector matches nothing.
+SELECTORS_KONSOLEH_NS_FIELD = "#ns1, #ns2, #ns3, #ns4, #ns5, input[name='newdns[]']"
 
 # ── Hetzner Default Nameservers ──────────────────────────────────────
 HETZNER_NAMESERVERS = [
