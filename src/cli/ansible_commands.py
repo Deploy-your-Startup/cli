@@ -975,8 +975,13 @@ def _extract_master_host(inventory_data: dict) -> str | None:
 
 
 def _derive_context_name(remote_name: str, environment: str, env_suffix: bool) -> str:
-    match = re.match(r"^([^-]+-[^-]+).*$", remote_name.lower())
-    project_name = re.sub(r"[^a-z0-9._-]+", "-", match.group(1) if match else "")
+    # Nodes are named "<project>-<role>-<index>", e.g. my-app-master-0, so the
+    # project is what remains once that suffix is removed. The previous rule
+    # kept the first two dash-separated segments instead, which truncated every
+    # longer name ("gaming-buch-club" became "gaming-buch") and gave two
+    # projects sharing their first two segments the very same context.
+    stripped = re.sub(r"-(master|worker|agent)-\d+$", "", remote_name.lower())
+    project_name = re.sub(r"[^a-z0-9._-]+", "-", stripped)
     context = project_name or f"k3s-{environment}"
     if env_suffix and environment:
         context = f"{context}-{environment}"
