@@ -69,6 +69,17 @@ SELECTORS_ADD_BUTTON_FALLBACK = (
     'button[aria-label*="create" i]'
 )
 
+# The console is an Angular app behind a static shell: `domcontentloaded` fires
+# while the body is still empty. Anything that reads or clicks the projects list
+# must wait for one of these first — an existing project card, or the "new
+# project" button for an account without any projects.
+SELECTORS_PROJECTS_READY = (
+    "a.project-card, "
+    "[data-projectname], "
+    'button:has-text("Neues Projekt"), '
+    'button:has-text("New project")'
+)
+
 SELECTORS_PROJECT_NAME_INPUT = (
     'input[name="name"], '
     'input[placeholder*="Project" i], '
