@@ -148,11 +148,41 @@ class HetznerAutomation:
 
     # ── Project Creation ────────────────────────────────────────────────
 
+    async def _await_projects_page(self) -> bool:
+        """Wait until the projects list has actually painted.
+
+        `domcontentloaded` fires while the body is still empty, and after the
+        login redirect the app's first paint can take several seconds. Acting
+        immediately breaks two things: a click gets only its own timeout to
+        cover the whole app boot, and — silently — the non-waiting
+        `is_visible()` fast path below reports "no such project" for a project
+        that merely has not rendered yet, so a re-run would create a duplicate
+        instead of reusing the existing one.
+
+        Reloads once before giving up: right after login the page can still be
+        mid-redirect, and a fresh navigation is more likely to help than more
+        waiting.
+        """
+        for attempt in (1, 2):
+            try:
+                await self.page.locator(
+                    config.SELECTORS_PROJECTS_READY
+                ).first.wait_for(state="visible", timeout=config.NAVIGATION_TIMEOUT)
+                return True
+            except playwright_error():
+                if attempt == 1:
+                    await self.page.goto(
+                        config.HETZNER_PROJECTS_URL, wait_until="domcontentloaded"
+                    )
+        ui.warning("Projects page did not render in time.")
+        return False
+
     async def create_project(self, project_name: str) -> bool:
         """Create or navigate to a project in Hetzner Cloud Console."""
         ui.info(f'Creating project "{project_name}"...')
 
         await self.page.goto(config.HETZNER_PROJECTS_URL, wait_until="domcontentloaded")
+        await self._await_projects_page()
 
         # Fast path: project already exists → navigate into it
         try:
@@ -216,6 +246,7 @@ class HetznerAutomation:
             await self.page.goto(
                 config.HETZNER_PROJECTS_URL, wait_until="domcontentloaded"
             )
+            await self._await_projects_page()
 
             card_link = self.page.locator(
                 f'a.project-card:has([data-projectname="{project_name}"])'
