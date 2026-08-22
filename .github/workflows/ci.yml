@@ -23,12 +23,16 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-      # ruff comes from the `dev` extra, pinned in pyproject.toml, so CI and
-      # local runs always enforce the identical rule set.
-      - name: Check formatting
-        run: uv run --extra dev ruff format --check
+      # One entrypoint, so CI and a local `./make.sh lint` can never drift
+      # apart. What it runs (ruff + ty here) is the service's business — the
+      # pipeline only knows the verb, which is what keeps it language-agnostic.
+      # ruff and ty are both pinned in pyproject.toml, so the rule set is fixed.
       - name: Lint
-        run: uv run --extra dev ruff check --output-format github
+        run: ./make.sh lint
+        env:
+          # Renders ruff findings as inline PR annotations without make.sh
+          # needing to know it is running inside GitHub Actions.
+          RUFF_OUTPUT_FORMAT: github
 
   test:
     runs-on: ubuntu-latest
@@ -38,4 +42,4 @@ jobs:
         with:
           enable-cache: true
       - name: Run tests
-        run: uv run --extra dev pytest -q
+        run: ./make.sh test

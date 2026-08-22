@@ -35,6 +35,11 @@ dev = [
     # developer and CI run could pick up a different ruff whose default rule set
     # had grown. Bump this deliberately, then run `./make.sh format`.
     "ruff>=0.16.0,<0.17",
+    # Exact pin, not a range: ty is 0.0.x and explicitly has no stable API —
+    # diagnostics can change between any two releases. Since `./make.sh lint`
+    # gates CI, an unpinned bump would turn every pipeline red at once. Bump
+    # deliberately, then run `./make.sh lint`.
+    "ty==0.0.74",
 ]
 server = [
     "fastapi>=0.141.1",

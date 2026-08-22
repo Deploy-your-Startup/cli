@@ -9,7 +9,10 @@ import sys
 import tempfile
 from pathlib import Path
 
-from ansible.constants import DEFAULT_VAULT_IDENTITY
+# ansible ships no type information, so ty cannot see this constant. Suppressed
+# at the import rather than by disabling `unresolved-import` globally — a real
+# typo in any other import must still fail the lint gate.
+from ansible.constants import DEFAULT_VAULT_IDENTITY  # ty: ignore[unresolved-import]
 from ansible.parsing.vault import VaultLib, VaultSecret
 
 from .ansible_bin import ansible_bin

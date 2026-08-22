@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# Fail on the first failing command. Without this the script returns the exit
+# code of the *last* line only, so a failing `ruff check` would be masked by a
+# passing `ty check` and CI would go green on a lint error.
+set -e
+
 if [ "$1" == "setup_local" ]; then
   echo "Installing development dependencies..."
   echo "Installing uv..."
@@ -23,6 +28,7 @@ if [ "$1" == "lint" ]; then
   echo "Checking formatting and lint (no changes) — same as CI..."
   uv run --extra dev ruff format --check
   uv run --extra dev ruff check
+  uv run --extra dev ty check
 fi
 
 if [ "$1" == "test" ]; then
@@ -51,7 +57,7 @@ if [ "$1" == "help" ] || [ -z "$1" ]; then
   echo "Available commands:"
   echo "  setup_local   - Install uv and deploy-your-startup-cli"
   echo "  format        - Format code and run ruff checks"
-  echo "  lint          - Check formatting and lint without changing files"
+  echo "  lint          - Check formatting, lint and types without changing files"
   echo "  test          - Run pytest tests"
   echo "  install_tool  - Install CLI as a global tool"
   echo "  dev_install   - Install in development mode"

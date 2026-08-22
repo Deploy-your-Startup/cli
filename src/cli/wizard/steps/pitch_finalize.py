@@ -191,6 +191,7 @@ class PitchFinalizeStep(WizardStep):
             )
 
         ui.action_start("Cloudflare Secrets setzen...")
+        token, account_id = ctx.require_cloudflare()
         _run_command(
             [
                 "gh",
@@ -198,7 +199,7 @@ class PitchFinalizeStep(WizardStep):
                 "set",
                 "CLOUDFLARE_API_TOKEN",
                 "--body",
-                ctx.cloudflare_api_token,
+                token,
             ],
             cwd=ctx.project_dir,
             capture_output=True,
@@ -210,7 +211,7 @@ class PitchFinalizeStep(WizardStep):
                 "set",
                 "CLOUDFLARE_ACCOUNT_ID",
                 "--body",
-                ctx.cloudflare_account_id,
+                account_id,
             ],
             cwd=ctx.project_dir,
             capture_output=True,
@@ -243,6 +244,7 @@ class PitchFinalizeStep(WizardStep):
             ensure_cname_record,
         )
 
+        token, account_id = ctx.require_cloudflare()
         apex = ctx.base_domain
         www = f"www.{apex}"
         target = _pages_target(ctx)
@@ -253,21 +255,21 @@ class PitchFinalizeStep(WizardStep):
             # any apex/www A/AAAA/CNAME so the Pages domain can own those hosts.
             if ctx.cloudflare_zone_id:
                 removed = clear_conflicting_records(
-                    ctx.cloudflare_api_token, ctx.cloudflare_zone_id, [apex, www]
+                    token, ctx.cloudflare_zone_id, [apex, www]
                 )
                 if removed:
                     ui.info(f"{removed} kollidierende DNS-Records entfernt")
 
             for host in (apex, www):
                 add_pages_custom_domain(
-                    ctx.cloudflare_api_token,
-                    ctx.cloudflare_account_id,
+                    token,
+                    account_id,
                     ctx.project_name,
                     host,
                 )
                 if ctx.cloudflare_zone_id:
                     ensure_cname_record(
-                        ctx.cloudflare_api_token,
+                        token,
                         ctx.cloudflare_zone_id,
                         host,
                         target,
