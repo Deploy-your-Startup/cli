@@ -168,11 +168,8 @@ class CloudflareStep(WizardStep):
 
         ui.action_start(f"Cloudflare-Zone für {ctx.base_domain} sicherstellen...")
         try:
-            zone = ensure_zone(
-                ctx.cloudflare_api_token,
-                ctx.cloudflare_account_id,
-                ctx.base_domain,
-            )
+            token, account_id = ctx.require_cloudflare()
+            zone = ensure_zone(token, account_id, ctx.base_domain)
         except (RuntimeError, httpx.HTTPError) as exc:
             raise click.ClickException(
                 f"Cloudflare-Zone konnte nicht angelegt werden: {exc}\n"
