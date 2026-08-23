@@ -341,6 +341,7 @@ def sync_deploy_repo(
         replacements={
             "§§deploy_your_startup.github_username§§": resolved_owner,
             "§§deploy_your_startup.deploy_repo_name§§": repo_name,
+            "Deploy-your-Startup/deploy-your-startup/": f"{resolved_owner}/{repo_name}/",
         },
         actions_access_level=(
             "organization"
