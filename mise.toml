@@ -1,0 +1,8 @@
+[tasks.lint]
+run = "./make.sh lint"
+
+[tasks.test]
+run = "./make.sh test"
+
+[tasks.format]
+run = "./make.sh format"
