@@ -215,7 +215,6 @@ def bootstrap_project(
         "§§deploy_your_startup.base_domain§§": base_domain,
         "§§deploy_your_startup.additional_domains§§": additional_domains_yaml,
         "§§deploy_your_startup.github_username§§": github_username,
-        "Deploy-your-Startup/deploy-template/": f"{github_username}/deploy-your-startup/",
         "§§deploy_your_startup.docker_registry_host§§": f"{docker_registry_host}/{github_username}",
         "§§deploy_your_startup.postgres_version§§": postgres_version,
         "§§deploy_your_startup.ci_key§§": ci_public_key,
