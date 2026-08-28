@@ -13,7 +13,7 @@ authors = [
     {name = "Deploy Your Startup", email = "contact@deployyourstartup.com"}
 ]
 dependencies = [
-    "ansible==14.2.0",
+    "ansible==14.3.1",
     "click>=8.4.2",
     # Runtime requirement of the hetzner.hcloud Ansible collection (the deploy
     # playbooks import it); not imported by the CLI code directly.
