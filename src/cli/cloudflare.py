@@ -19,6 +19,8 @@ CHROME_USER_DATA_DIR = CONFIG_DIR / "chrome-profile"
 CHROME_CHANNEL = "chrome"
 DEFAULT_TIMEOUT = 60_000
 LOGIN_WAIT_TIMEOUT = 300_000
+FORM_READY_TIMEOUT = 45_000
+TOKEN_FORM_ATTEMPTS = 3
 DEFAULT_PERMISSIONS = [
     ("Account", "Cloudflare Pages", "Edit"),
     ("Account", "Account Settings", "Read"),
@@ -148,6 +150,43 @@ class CloudflareAutomation:
 
     async def create_api_token(self, *, token_name: str) -> str | None:
         ui.action_start("Cloudflare API-Token erstellen...")
+
+        # The re-auth below can fire at *any* point, so one pass through the
+        # form is not enough — see `_wait_for_form_ready`. Each attempt starts
+        # over from the token page, which is safe: nothing is created until the
+        # final "Create Token" click, and a half-filled form is discarded by the
+        # navigation that interrupted it.
+        for attempt in range(1, TOKEN_FORM_ATTEMPTS + 1):
+            try:
+                await self._open_token_page()
+                await self._submit_token_form(token_name)
+                break
+            except playwright_error() as exc:
+                if attempt == TOKEN_FORM_ATTEMPTS:
+                    ui.action_fail(
+                        f"Token-Formular nach {TOKEN_FORM_ATTEMPTS} Versuchen "
+                        "nicht abgeschlossen"
+                    )
+                    raise
+                ui.info(
+                    f"Cloudflare hat das Formular unterbrochen "
+                    f"(Versuch {attempt}/{TOKEN_FORM_ATTEMPTS}) — "
+                    f"Session prüfen und neu ausfüllen.\n"
+                    f"  {type(exc).__name__}: {str(exc).splitlines()[0]}"
+                )
+
+        token = await self._extract_token()
+        if token:
+            ui.action_done("Cloudflare API-Token erstellt")
+            return token
+
+        ui.action_fail("Cloudflare API-Token konnte nicht automatisch gelesen werden")
+        ui.info("Bitte den Token aus dem Browser kopieren und hier einfügen.")
+        manual_token = ui.text_input("Cloudflare API Token", hide_input=True)
+        return manual_token or None
+
+    async def _open_token_page(self) -> None:
+        """Land on the API-token page, completing a re-auth if one is demanded."""
         await self.page.goto(CF_TOKEN_URL, wait_until="domcontentloaded")
         await self._dismiss_blocking_ui()
 
@@ -163,6 +202,7 @@ class CloudflareAutomation:
                 "Cloudflare did not come back to the API token page after login."
             )
 
+    async def _submit_token_form(self, token_name: str) -> None:
         await self._click_create_token_entry()
         await self._dismiss_blocking_ui()
         try:
@@ -173,6 +213,8 @@ class CloudflareAutomation:
             # "Get started" is the empty-state button; an account that already
             # has tokens opens the form directly.
             pass
+
+        await self._wait_for_form_ready()
         await self.page.get_by_role("textbox").first.fill(token_name)
 
         for index, spec in enumerate(DEFAULT_PERMISSIONS):
@@ -183,15 +225,20 @@ class CloudflareAutomation:
         await self.page.get_by_test_id("api_tokens_summary_button").click()
         await self.page.get_by_role("button", name="Create Token").click()
 
-        token = await self._extract_token()
-        if token:
-            ui.action_done("Cloudflare API-Token erstellt")
-            return token
+    async def _wait_for_form_ready(self) -> None:
+        """Block until the permission form is really on screen.
 
-        ui.action_fail("Cloudflare API-Token konnte nicht automatisch gelesen werden")
-        ui.info("Bitte den Token aus dem Browser kopieren und hier einfügen.")
-        manual_token = ui.text_input("Cloudflare API Token", hide_input=True)
-        return manual_token or None
+        Cloudflare can bounce the tab back through its SSO provider *after* the
+        form has already opened. A locator clicked while that redirect chain is
+        in flight does not fail fast — it waits out the full timeout on a page
+        that is navigating away, and the traceback then blames whichever field
+        came next ("Resources") instead of the re-auth that actually happened.
+        Waiting for the first row here turns that into one explicit, retryable
+        failure before a single character is typed.
+        """
+        await self.page.get_by_role("button", name="Resources").first.wait_for(
+            state="visible", timeout=FORM_READY_TIMEOUT
+        )
 
     async def _click_create_token_entry(self) -> None:
         try:
