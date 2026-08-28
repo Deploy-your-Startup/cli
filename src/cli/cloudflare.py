@@ -20,6 +20,7 @@ CHROME_CHANNEL = "chrome"
 DEFAULT_TIMEOUT = 60_000
 LOGIN_WAIT_TIMEOUT = 300_000
 FORM_READY_TIMEOUT = 45_000
+TOKEN_VISIBLE_TIMEOUT = 30_000
 TOKEN_FORM_ATTEMPTS = 3
 DEFAULT_PERMISSIONS = [
     ("Account", "Cloudflare Pages", "Edit"),
@@ -152,16 +153,23 @@ class CloudflareAutomation:
         ui.action_start("Cloudflare API-Token erstellen...")
 
         # The re-auth below can fire at *any* point, so one pass through the
-        # form is not enough — see `_wait_for_form_ready`. Each attempt starts
-        # over from the token page, which is safe: nothing is created until the
-        # final "Create Token" click, and a half-filled form is discarded by the
-        # navigation that interrupted it.
+        # form is not enough — see `_wait_for_form_ready`.
         for attempt in range(1, TOKEN_FORM_ATTEMPTS + 1):
             try:
                 await self._open_token_page()
                 await self._submit_token_form(token_name)
                 break
             except playwright_error() as exc:
+                # Cloudflare reveals a token's value exactly once, on the screen
+                # that follows "Create Token". If the failure came after that
+                # click, the value is on screen *right now* and the retry below
+                # would navigate away from it — burning a token that can never
+                # be read again. Always look before starting over.
+                created = await self._extract_success_token()
+                if created:
+                    ui.action_done("Cloudflare API-Token erstellt")
+                    return created
+
                 if attempt == TOKEN_FORM_ATTEMPTS:
                     ui.action_fail(
                         f"Token-Formular nach {TOKEN_FORM_ATTEMPTS} Versuchen "
@@ -307,9 +315,12 @@ class CloudflareAutomation:
 
     async def _extract_token(self) -> str | None:
         await self.page.wait_for_load_state("domcontentloaded")
-        await asyncio.sleep(1)
 
-        token = await self._extract_success_token()
+        # The success screen swaps in asynchronously after "Create Token". A
+        # fixed one-second sleep raced it: the DOM probes below then found
+        # nothing and the run fell through to the manual paste prompt while the
+        # token was sitting on screen, seconds from being rendered.
+        token = await self._poll_success_token()
         if token:
             return token
 
@@ -358,6 +369,16 @@ class CloudflareAutomation:
             except playwright_error():
                 continue
 
+        return None
+
+    async def _poll_success_token(self) -> str | None:
+        """Watch for the freshly created token until it renders, or time out."""
+        deadline = asyncio.get_running_loop().time() + (TOKEN_VISIBLE_TIMEOUT / 1000)
+        while asyncio.get_running_loop().time() < deadline:
+            token = await self._extract_success_token()
+            if token:
+                return token
+            await asyncio.sleep(0.5)
         return None
 
     async def _extract_success_token(self) -> str | None:
