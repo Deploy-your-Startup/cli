@@ -39,7 +39,7 @@ dev = [
     # diagnostics can change between any two releases. Since `./make.sh lint`
     # gates CI, an unpinned bump would turn every pipeline red at once. Bump
     # deliberately, then run `./make.sh lint`.
-    "ty==0.0.74",
+    "ty==0.0.75",
 ]
 server = [
     "fastapi>=0.141.1",
