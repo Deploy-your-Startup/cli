@@ -147,3 +147,63 @@ def test_bootstrap_makes_a_relative_output_dir_absolute(tmp_path, monkeypatch):
     ctx = captured["ctx"]
     assert ctx.output_dir.is_absolute()
     assert ctx.project_dir == tmp_path / "projects" / "startups" / "my-shop-2"
+
+
+def _byos_ctx(tmp_path):
+    from cli.bootstrap_wizard import BootstrapContext
+
+    return BootstrapContext(
+        project_name="my-shop-2",
+        base_domain="my-shop-2.example.com",
+        additional_domains="",
+        github_username="philipp-lein",
+        postgres_version="17",
+        sentry_dsn="",
+        output_dir=tmp_path,
+        provider="byos",
+        byos_host="203.0.113.10",
+        byos_ssh_user="root",
+    )
+
+
+def test_install_byos_deploy_key_sends_the_key_on_stdin(tmp_path, monkeypatch):
+    from cli.wizard.steps import project as project_step
+
+    captured = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["input"] = kwargs.get("input")
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(project_step.subprocess, "run", fake_run)
+
+    installed = project_step.install_byos_deploy_key(
+        _byos_ctx(tmp_path), "ssh-ed25519 AAAA my-shop-2_ci\n"
+    )
+
+    assert installed is True
+    assert captured["command"][0] == "ssh"
+    assert "root@203.0.113.10" in captured["command"]
+    assert "BatchMode=yes" in captured["command"]
+    # The key goes over stdin, never into the remote argv, so nothing has to be
+    # quoted and it stays out of the server's process list.
+    assert captured["input"] == "ssh-ed25519 AAAA my-shop-2_ci"
+    assert not any("AAAA" in part for part in captured["command"])
+    # Appending twice would grow authorized_keys on every wizard re-run.
+    assert "grep -qxF" in captured["command"][-1]
+
+
+def test_install_byos_deploy_key_reports_an_unreachable_host(tmp_path, monkeypatch):
+    from cli.wizard.steps import project as project_step
+
+    monkeypatch.setattr(
+        project_step.subprocess,
+        "run",
+        lambda *a, **k: SimpleNamespace(returncode=255),
+    )
+
+    assert (
+        project_step.install_byos_deploy_key(_byos_ctx(tmp_path), "ssh-ed25519 AAAA")
+        is False
+    )

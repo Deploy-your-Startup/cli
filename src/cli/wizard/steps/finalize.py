@@ -123,7 +123,31 @@ class FinalizeStep(WizardStep):
         )
         ui.action_done("GitHub Secret gesetzt")
 
-        # 4e. Push
+        # 4e. Deploy key onto the VPS. Before the push on purpose: pushing starts
+        # the deploy workflow, and that workflow logs into the server with this
+        # key. Installing it afterwards means the first run always fails.
+        if ctx.provider == "byos":
+            from .project import (
+                BYOS_DEPLOY_PUBLIC_KEY_FILE,
+                byos_deploy_key_install_command,
+                install_byos_deploy_key,
+            )
+
+            deploy_public_key = (
+                (ctx.deployment_dir / BYOS_DEPLOY_PUBLIC_KEY_FILE).read_text().strip()
+            )
+            ui.action_start("Deploy-Key auf dem VPS installieren...")
+            if install_byos_deploy_key(ctx, deploy_public_key):
+                ui.action_done(f"Deploy-Key auf {ctx.byos_host} installiert")
+            else:
+                ui.info(
+                    f"Konnte {ctx.byos_ssh_user}@{ctx.byos_host} nicht per SSH "
+                    "erreichen. Führe das hier von einem Rechner aus, der auf "
+                    "den Server kommt — sonst schlägt der Deploy fehl:\n"
+                    f"  {byos_deploy_key_install_command(ctx, deploy_public_key)}"
+                )
+
+        # 4f. Push
         ui.action_start("Push nach GitHub...")
         _run_command(
             ["git", "push", "-u", "origin", "main"],
@@ -132,23 +156,13 @@ class FinalizeStep(WizardStep):
         )
         ui.action_done("Gepusht")
 
-        # 4f. Provision. On byos there is nothing to provision in the cloud — the
+        # 4g. Provision. On byos there is nothing to provision in the cloud — the
         # user runs the install/deploy locally against their VPS, so we just print
         # the next steps instead of kicking off the Hetzner infrastructure workflow.
         if ctx.provider == "byos":
-            from .project import (
-                BYOS_DEPLOY_PUBLIC_KEY_FILE,
-                byos_deploy_key_install_command,
-            )
-
-            deploy_key_path = ctx.deployment_dir / BYOS_DEPLOY_PUBLIC_KEY_FILE
-            deploy_public_key = deploy_key_path.read_text().strip()
             ui.action_done("BYOS — kein Cloud-Provisioning nötig")
             ui.info(
                 "Nächste Schritte:\n"
-                "  # Deploy-Key einmalig auf den VPS kopieren\n"
-                f"  {byos_deploy_key_install_command(ctx, deploy_public_key)}\n"
-                "  # Danach lokal deployen\n"
                 f"  cd {ctx.deployment_dir}\n"
                 "  ./make.sh setup\n"
                 "  ./make.sh infrastructure --environment production\n"
