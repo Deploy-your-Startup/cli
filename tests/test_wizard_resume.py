@@ -47,6 +47,32 @@ def test_write_byos_deploy_public_key(tmp_path):
     assert key_path.read_text() == public_key + "\n"
 
 
+def test_kubernetes_namespace_uses_project_name_for_byos(tmp_path):
+    byos = BootstrapContext(
+        project_name="my-test",
+        base_domain="example.com",
+        additional_domains="",
+        github_username="philipp-lein",
+        postgres_version="17",
+        sentry_dsn="",
+        output_dir=tmp_path,
+        provider="byos",
+    )
+    hetzner = BootstrapContext(
+        project_name="my-test",
+        base_domain="example.com",
+        additional_domains="",
+        github_username="philipp-lein",
+        postgres_version="17",
+        sentry_dsn="",
+        output_dir=tmp_path,
+        provider="hetzner",
+    )
+
+    assert project_step.kubernetes_namespace(byos) == "my-test"
+    assert project_step.kubernetes_namespace(hetzner) == "default"
+
+
 def test_ensure_byos_deploy_public_key_ignored_appends_once(tmp_path):
     gitignore = tmp_path / ".gitignore"
     gitignore.write_text(".idea/\n")

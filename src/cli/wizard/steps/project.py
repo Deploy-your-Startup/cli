@@ -33,6 +33,16 @@ BYOS_DEPLOY_PUBLIC_KEY_FILE = "byos_deploy_key.pub"
 BYOS_DEPLOY_PUBLIC_KEY_IGNORE = f"deployment/{BYOS_DEPLOY_PUBLIC_KEY_FILE}"
 
 
+def kubernetes_namespace(ctx: BootstrapContext) -> str:
+    """Return the namespace a bootstrapped project should deploy into.
+
+    Existing projects predate namespaces and continue to use ``default``. New
+    BYOS projects use their already validated kebab-case project name, so two
+    projects pointed at one VPS are isolated without an extra mode switch.
+    """
+    return ctx.project_name if ctx.provider == "byos" else "default"
+
+
 def write_byos_deploy_public_key(deployment_dir: Path, public_key: str) -> Path:
     """Write the public deploy key users must add to their existing VPS."""
     key_path = deployment_dir / BYOS_DEPLOY_PUBLIC_KEY_FILE
@@ -151,6 +161,7 @@ class ProjectStep(WizardStep):
             "§§deploy_your_startup.github_username§§": ctx.github_username,
             "§§deploy_your_startup.docker_registry_host§§": f"{ctx.docker_registry_host}/{ctx.github_username}",
             "§§deploy_your_startup.postgres_version§§": ctx.postgres_version,
+            "§§deploy_your_startup.k8s_namespace§§": kubernetes_namespace(ctx),
             "§§deploy_your_startup.ci_key§§": ci_public_key,
             "§§deploy_your_startup.user_key§§": user_public_key,
         }
