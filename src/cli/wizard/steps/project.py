@@ -17,6 +17,7 @@ from cli.bootstrap import (
     TEMPLATE_VAULT_PASSWORD,
     _generate_docker_config_b64,
     _generate_ssh_keypair,
+    template_replacements,
 )
 from cli.sync_commands import _replace_placeholders, _run_command
 
@@ -146,25 +147,17 @@ class ProjectStep(WizardStep):
 
         # 3c. Placeholders
         ui.action_start("Projekt konfigurieren...")
-        if ctx.additional_domains:
-            domains_list = [
-                d.strip() for d in ctx.additional_domains.split(",") if d.strip()
-            ]
-            additional_domains_yaml = "\n".join(f"  - {d}" for d in domains_list)
-        else:
-            additional_domains_yaml = "[]"
-
-        replacements = {
-            "§§deploy_your_startup.project_name§§": ctx.project_name,
-            "§§deploy_your_startup.base_domain§§": ctx.base_domain,
-            "§§deploy_your_startup.additional_domains§§": additional_domains_yaml,
-            "§§deploy_your_startup.github_username§§": ctx.github_username,
-            "§§deploy_your_startup.docker_registry_host§§": f"{ctx.docker_registry_host}/{ctx.github_username}",
-            "§§deploy_your_startup.postgres_version§§": ctx.postgres_version,
-            "§§deploy_your_startup.k8s_namespace§§": kubernetes_namespace(ctx),
-            "§§deploy_your_startup.ci_key§§": ci_public_key,
-            "§§deploy_your_startup.user_key§§": user_public_key,
-        }
+        replacements = template_replacements(
+            project_name=ctx.project_name,
+            base_domain=ctx.base_domain,
+            additional_domains=ctx.additional_domains,
+            github_username=ctx.github_username,
+            docker_registry_host=ctx.docker_registry_host,
+            postgres_version=ctx.postgres_version,
+            k8s_namespace=kubernetes_namespace(ctx),
+            ci_public_key=ci_public_key,
+            user_public_key=user_public_key,
+        )
         _replace_placeholders(ctx.project_dir, replacements)
         ui.action_done("Projekt konfiguriert")
 

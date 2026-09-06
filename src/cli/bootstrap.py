@@ -13,6 +13,7 @@ from pathlib import Path
 
 import click
 
+from cli.ansible_commands import DEFAULT_SHARED_REPO_NAME
 from cli.sync_commands import (
     _replace_placeholders,
     _run_command,
@@ -22,6 +23,43 @@ TEMPLATE_OWNER = "Deploy-your-Startup"
 TEMPLATE_REPO = "django-backend-template"
 TEMPLATE_VAULT_PASSWORD = "ranhah-ceqZu9-fihfez"
 PITCH_TEMPLATE_REPO = "pitch-template"
+
+
+def template_replacements(
+    *,
+    project_name: str,
+    base_domain: str,
+    additional_domains: str,
+    github_username: str,
+    docker_registry_host: str,
+    postgres_version: str,
+    k8s_namespace: str,
+    ci_public_key: str,
+    user_public_key: str,
+) -> dict[str, str]:
+    """Build the values used to configure a newly cloned project template."""
+    if additional_domains:
+        domains = [domain.strip() for domain in additional_domains.split(",")]
+        additional_domains_yaml = "\n".join(
+            f"  - {domain}" for domain in domains if domain
+        )
+    else:
+        additional_domains_yaml = "[]"
+
+    return {
+        "§§deploy_your_startup.project_name§§": project_name,
+        "§§deploy_your_startup.base_domain§§": base_domain,
+        "§§deploy_your_startup.additional_domains§§": additional_domains_yaml,
+        "§§deploy_your_startup.github_username§§": github_username,
+        "§§deploy_your_startup.deploy_repo_name§§": DEFAULT_SHARED_REPO_NAME,
+        "§§deploy_your_startup.docker_registry_host§§": (
+            f"{docker_registry_host}/{github_username}"
+        ),
+        "§§deploy_your_startup.postgres_version§§": postgres_version,
+        "§§deploy_your_startup.k8s_namespace§§": k8s_namespace,
+        "§§deploy_your_startup.ci_key§§": ci_public_key,
+        "§§deploy_your_startup.user_key§§": user_public_key,
+    }
 
 
 def _prompt_or_env(
@@ -203,25 +241,18 @@ def bootstrap_project(
     # Step 3: Replace placeholders
     click.echo("\n--- Step 3/7: Replacing placeholders ---")
 
-    # Format additional_domains as YAML list
-    if additional_domains:
-        domains_list = [d.strip() for d in additional_domains.split(",") if d.strip()]
-        additional_domains_yaml = "\n".join(f"  - {d}" for d in domains_list)
-    else:
-        additional_domains_yaml = "[]"
-
-    replacements = {
-        "§§deploy_your_startup.project_name§§": project_name,
-        "§§deploy_your_startup.base_domain§§": base_domain,
-        "§§deploy_your_startup.additional_domains§§": additional_domains_yaml,
-        "§§deploy_your_startup.github_username§§": github_username,
-        "§§deploy_your_startup.docker_registry_host§§": f"{docker_registry_host}/{github_username}",
-        "§§deploy_your_startup.postgres_version§§": postgres_version,
+    replacements = template_replacements(
+        project_name=project_name,
+        base_domain=base_domain,
+        additional_domains=additional_domains,
+        github_username=github_username,
+        docker_registry_host=docker_registry_host,
+        postgres_version=postgres_version,
         # This legacy entry point only creates standalone projects.
-        "§§deploy_your_startup.k8s_namespace§§": "default",
-        "§§deploy_your_startup.ci_key§§": ci_public_key,
-        "§§deploy_your_startup.user_key§§": user_public_key,
-    }
+        k8s_namespace="default",
+        ci_public_key=ci_public_key,
+        user_public_key=user_public_key,
+    )
 
     _replace_placeholders(project_dir, replacements)
     click.echo(f"  Replaced {len(replacements)} placeholders.")
