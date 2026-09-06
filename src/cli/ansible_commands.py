@@ -671,9 +671,11 @@ def _resolve_k8s_namespace(working_dir: Path) -> str:
     if not all_vars.exists():
         return "default"
 
+    # Anchored at column 0 on purpose: an indented `k8s_namespace:` is a key
+    # inside some other mapping, not the project's namespace.
     namespace_line = re.compile(r"^k8s_namespace:\s*(['\"]?)([^\s#'\"]+)\1\s*(?:#.*)?$")
     for line in all_vars.read_text(encoding="utf-8").splitlines():
-        match = namespace_line.match(line.strip())
+        match = namespace_line.match(line)
         if match:
             return match.group(2)
     return "default"
@@ -1241,14 +1243,17 @@ def run_backup(
 
     playbook_path = _resolve_playbook_path(working_dir, playbook, "Backup", shared_dir)
     project_name = _resolve_project_name(working_dir)
-    k8s_namespace = _resolve_k8s_namespace(working_dir)
     resolved_backup_dir = (
         Path(backup_dir).expanduser()
         if backup_dir
         else Path.home() / "Backups" / project_name
     )
+    # k8s_namespace is deliberately not passed here. Ansible resolves it from
+    # `group_vars/`, and an --extra-vars copy would outrank that - so a project
+    # that sets the namespace anywhere but the top of `all.yml` would deploy
+    # into one namespace and back up from another.
     backup_extra_vars = (
-        f"project_name={project_name} k8s_namespace={k8s_namespace} "
+        f"project_name={project_name} "
         f"backup_environment={environment} "
         f"local_backup_root={resolved_backup_dir}"
     )
@@ -1460,7 +1465,6 @@ def run_restore(
 
     playbook_path = _resolve_playbook_path(working_dir, playbook, "Restore", shared_dir)
     project_name = _resolve_project_name(working_dir)
-    k8s_namespace = _resolve_k8s_namespace(working_dir)
     search_root = (
         Path(backup_dir).expanduser().resolve()
         if backup_dir
@@ -1487,9 +1491,10 @@ def run_restore(
             label="Media",
         )
 
+    # See the note in the backup command: the namespace comes from group_vars,
+    # not from an --extra-vars copy that would outrank it.
     extra_vars = {
         "project_name": project_name,
-        "k8s_namespace": k8s_namespace,
         "restore_environment": environment,
         "restore_db": restore_db,
         "restore_media": restore_media,
