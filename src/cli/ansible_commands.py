@@ -665,6 +665,20 @@ def _resolve_project_name(working_dir: Path) -> str:
     )
 
 
+def _resolve_k8s_namespace(working_dir: Path) -> str:
+    """Read the project's non-secret namespace without loading vaulted YAML."""
+    all_vars = working_dir / "group_vars" / "all.yml"
+    if not all_vars.exists():
+        return "default"
+
+    namespace_line = re.compile(r"^k8s_namespace:\s*(['\"]?)([^\s#'\"]+)\1\s*(?:#.*)?$")
+    for line in all_vars.read_text(encoding="utf-8").splitlines():
+        match = namespace_line.match(line.strip())
+        if match:
+            return match.group(2)
+    return "default"
+
+
 def _resolve_playbook_path(
     working_dir: Path, playbook: str, label: str, shared_dir: str = DEFAULT_SHARED_DIR
 ) -> Path:
@@ -988,6 +1002,30 @@ def _derive_context_name(remote_name: str, environment: str, env_suffix: bool) -
     return context
 
 
+def _configure_kubeconfig_context(
+    kubeconfig: dict, context: str, namespace: str
+) -> None:
+    """Rename k3s' default identities and select the project's namespace."""
+    for item in kubeconfig.get("clusters", []):
+        if item.get("name") == "default":
+            item["name"] = context
+    for item in kubeconfig.get("users", []):
+        if item.get("name") == "default":
+            item["name"] = context
+    for item in kubeconfig.get("contexts", []):
+        if item.get("name") == "default":
+            item["name"] = context
+        context_config = item.setdefault("context", {})
+        if context_config.get("cluster") == "default":
+            context_config["cluster"] = context
+        if context_config.get("user") == "default":
+            context_config["user"] = context
+        if namespace != "default":
+            context_config["namespace"] = namespace
+    if kubeconfig.get("current-context") == "default":
+        kubeconfig["current-context"] = context
+
+
 def run_kubeconfig(
     vault_password: str,
     environment: str,
@@ -1014,6 +1052,8 @@ def run_kubeconfig(
         refresh=refresh,
     )
     byos = _is_byos(working_dir)
+    project_name = _resolve_project_name(working_dir)
+    k8s_namespace = _resolve_k8s_namespace(working_dir)
     env = _ansible_env(working_dir, shared_dir)
     if byos:
         # No Hetzner API; read the cluster's kubeconfig over SSH from the VPS.
@@ -1067,7 +1107,13 @@ def run_kubeconfig(
     output_path = (
         Path(out).expanduser()
         if out
-        else Path.home() / ".kube" / f"k3s-{environment}.yaml"
+        else Path.home()
+        / ".kube"
+        / (
+            f"k3s-{project_name}-{environment}.yaml"
+            if byos
+            else f"k3s-{environment}.yaml"
+        )
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -1105,6 +1151,8 @@ def run_kubeconfig(
 
         if context_name:
             context = context_name
+        elif byos:
+            context = f"{project_name}-{environment}" if env_suffix else project_name
         else:
             remote_name = (
                 _run_command(
@@ -1124,21 +1172,7 @@ def run_kubeconfig(
             )
             context = _derive_context_name(remote_name, environment, env_suffix)
 
-        for item in kubeconfig.get("clusters", []):
-            if item.get("name") == "default":
-                item["name"] = context
-        for item in kubeconfig.get("users", []):
-            if item.get("name") == "default":
-                item["name"] = context
-        for item in kubeconfig.get("contexts", []):
-            if item.get("name") == "default":
-                item["name"] = context
-            if item.get("context", {}).get("cluster") == "default":
-                item["context"]["cluster"] = context
-            if item.get("context", {}).get("user") == "default":
-                item["context"]["user"] = context
-        if kubeconfig.get("current-context") == "default":
-            kubeconfig["current-context"] = context
+        _configure_kubeconfig_context(kubeconfig, context, k8s_namespace)
 
         output_path.write_text(
             yaml.safe_dump(kubeconfig, sort_keys=False), encoding="utf-8"
@@ -1207,13 +1241,15 @@ def run_backup(
 
     playbook_path = _resolve_playbook_path(working_dir, playbook, "Backup", shared_dir)
     project_name = _resolve_project_name(working_dir)
+    k8s_namespace = _resolve_k8s_namespace(working_dir)
     resolved_backup_dir = (
         Path(backup_dir).expanduser()
         if backup_dir
         else Path.home() / "Backups" / project_name
     )
     backup_extra_vars = (
-        f"project_name={project_name} backup_environment={environment} "
+        f"project_name={project_name} k8s_namespace={k8s_namespace} "
+        f"backup_environment={environment} "
         f"local_backup_root={resolved_backup_dir}"
     )
     if _is_byos(working_dir):
@@ -1424,6 +1460,7 @@ def run_restore(
 
     playbook_path = _resolve_playbook_path(working_dir, playbook, "Restore", shared_dir)
     project_name = _resolve_project_name(working_dir)
+    k8s_namespace = _resolve_k8s_namespace(working_dir)
     search_root = (
         Path(backup_dir).expanduser().resolve()
         if backup_dir
@@ -1452,6 +1489,7 @@ def run_restore(
 
     extra_vars = {
         "project_name": project_name,
+        "k8s_namespace": k8s_namespace,
         "restore_environment": environment,
         "restore_db": restore_db,
         "restore_media": restore_media,

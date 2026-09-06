@@ -155,12 +155,15 @@ def bootstrap(
 
     # Project name (kebab-case validated — including one passed as an option,
     # since it becomes a repo name, a k8s namespace and a Keychain entry).
-    while not project_name or not re.match(r"^[a-z][a-z0-9-]*$", project_name):
+    while not project_name or not re.fullmatch(
+        r"[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?", project_name
+    ):
         if project_name:
             ui.error("Bitte kebab-case verwenden (z.B. mein-startup).")
             if assume_yes:
                 raise click.ClickException(
-                    f"--project-name '{project_name}' is not kebab-case."
+                    f"--project-name '{project_name}' must be kebab-case, end in an "
+                    "alphanumeric character, and contain at most 63 characters."
                 )
         _require(project_name, "--project-name")
         project_name = ui.text_input("Projektname (kebab-case)")

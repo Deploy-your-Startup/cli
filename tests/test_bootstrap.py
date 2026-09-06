@@ -1,6 +1,9 @@
 from types import SimpleNamespace
 
+from click.testing import CliRunner
+
 from cli import bootstrap
+from cli.startup import cli
 from cli.sync_commands import _replace_placeholders
 from cli.wizard.base import has_placeholders
 
@@ -82,3 +85,25 @@ def test_bootstrap_renders_reusable_workflow_references(tmp_path):
             "    uses: philipp-lein/deploy-your-startup/.github/workflows/"
             f"{reusable_workflow}@main\n"
         )
+
+
+def test_bootstrap_rejects_project_names_that_are_invalid_namespaces():
+    runner = CliRunner()
+
+    for project_name in ("my-shop-", "a" * 64):
+        result = runner.invoke(
+            cli,
+            [
+                "bootstrap",
+                "--yes",
+                "--kind",
+                "fullstack",
+                "--provider",
+                "byos",
+                "--project-name",
+                project_name,
+            ],
+        )
+
+        assert result.exit_code != 0
+        assert "at most 63 characters" in result.output

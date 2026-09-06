@@ -62,6 +62,7 @@ def test_run_restore_uses_latest_backup_files(tmp_path, monkeypatch):
     assert extra_vars["media_backup_file"] == str(new_media.resolve())
     assert extra_vars["restore_db"] is True
     assert extra_vars["restore_media"] is True
+    assert extra_vars["k8s_namespace"] == "default"
     assert captured["kwargs"]["env"]["HCLOUD_TOKEN"] == "token"
 
 
