@@ -68,8 +68,8 @@ def _gh_token_has_scope(scope: str) -> bool:
 
 
 def _ensure_ghcr_scopes() -> None:
-    """Ensure gh CLI token has read:packages — needed for ghcr.io pulls from K8s."""
-    if _gh_token_has_scope("read:packages"):
+    """Ensure the gh CLI token can pull private images from ghcr.io."""
+    if _gh_token_has_scope("read:packages") or _gh_token_has_scope("write:packages"):
         return
     click.echo(
         "  gh CLI Token fehlt 'read:packages' Scope (für ghcr.io Image-Pulls). "
