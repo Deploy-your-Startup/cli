@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import shlex
 import shutil
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -62,6 +63,49 @@ def ensure_byos_deploy_public_key_ignored(project_dir: Path) -> None:
             if existing and existing[-1].strip():
                 gitignore.write("\n")
             gitignore.write(BYOS_DEPLOY_PUBLIC_KEY_IGNORE + "\n")
+
+
+# Appends only when the key is not already there, so a re-run of the wizard does
+# not grow authorized_keys. The key travels on stdin: it never lands in the
+# remote argv, and there is no quoting to get wrong.
+_BYOS_INSTALL_DEPLOY_KEY = """
+set -e
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+touch ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+key=$(cat)
+if ! grep -qxF "$key" ~/.ssh/authorized_keys; then
+  printf '%s\\n' "$key" >> ~/.ssh/authorized_keys
+fi
+"""
+
+
+def install_byos_deploy_key(ctx: BootstrapContext, public_key: str) -> bool:
+    """Put the CI deploy key on the VPS using the operator's own SSH access.
+
+    Whoever runs the wizard set that server up, so they can almost always reach
+    it already. Returns False when they cannot - the caller then falls back to
+    printing the command for them to run from wherever they do have access.
+    """
+    result = subprocess.run(
+        [
+            "ssh",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "StrictHostKeyChecking=accept-new",
+            "-o",
+            "ConnectTimeout=10",
+            f"{ctx.byos_ssh_user}@{ctx.byos_host}",
+            _BYOS_INSTALL_DEPLOY_KEY,
+        ],
+        input=public_key.strip(),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0
 
 
 def byos_deploy_key_install_command(ctx: BootstrapContext, public_key: str) -> str:
