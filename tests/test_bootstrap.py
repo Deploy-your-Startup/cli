@@ -107,3 +107,43 @@ def test_bootstrap_rejects_project_names_that_are_invalid_namespaces():
 
         assert result.exit_code != 0
         assert "at most 63 characters" in result.output
+
+
+def test_bootstrap_makes_a_relative_output_dir_absolute(tmp_path, monkeypatch):
+    """The wizard's git steps run with cwd=output_dir and pass project_dir as the
+    destination. A relative output_dir would therefore be applied twice and the
+    template would land in <output_dir>/<output_dir>/<name>."""
+    captured = {}
+
+    monkeypatch.setattr(
+        "cli.bootstrap_wizard.run_wizard", lambda ctx: captured.update(ctx=ctx)
+    )
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "projects" / "startups").mkdir(parents=True)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "bootstrap",
+            "--yes",
+            "--kind",
+            "fullstack",
+            "--provider",
+            "byos",
+            "--project-name",
+            "my-shop-2",
+            "--base-domain",
+            "my-shop-2.example.com",
+            "--github-username",
+            "philipp-lein",
+            "--byos-host",
+            "203.0.113.10",
+            "--output-dir",
+            "projects/startups",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    ctx = captured["ctx"]
+    assert ctx.output_dir.is_absolute()
+    assert ctx.project_dir == tmp_path / "projects" / "startups" / "my-shop-2"

@@ -245,7 +245,10 @@ def bootstrap(
         github_username=github_username,
         postgres_version="17",
         sentry_dsn=sentry_dsn,
-        output_dir=Path(output_dir),
+        # Absolute: steps run git with cwd=output_dir and pass project_dir as
+        # the destination, so a relative path would be resolved twice and the
+        # clone would land in <output_dir>/<output_dir>/<name>.
+        output_dir=Path(output_dir).expanduser().resolve(),
         kind=kind,
         provider=provider,
         byos_host=byos_host,
