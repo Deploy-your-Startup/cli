@@ -45,7 +45,7 @@ def test_configure_kubeconfig_context_sets_project_namespace():
     assert kubeconfig["current-context"] == "my-shop-production"
 
 
-def test_byos_backup_passes_namespace_to_shared_playbook(tmp_path, monkeypatch):
+def test_byos_backup_leaves_the_namespace_to_group_vars(tmp_path, monkeypatch):
     project_root = tmp_path / "my-shop"
     deployment = project_root / "deployment"
     shared = deployment / ".shared-roles"
@@ -70,10 +70,13 @@ def test_byos_backup_passes_namespace_to_shared_playbook(tmp_path, monkeypatch):
         working_directory=str(deployment),
     )
 
-    assert "k8s_namespace=my-shop" in captured["extra_vars"]
+    # --extra-vars outranks every other source, so passing the namespace here
+    # would silently win over group_vars. The playbook resolves it itself.
+    assert "k8s_namespace" not in captured["extra_vars"]
+    assert "project_name=my-shop" in captured["extra_vars"]
 
 
-def test_byos_restore_passes_namespace_to_shared_playbook(tmp_path, monkeypatch):
+def test_byos_restore_leaves_the_namespace_to_group_vars(tmp_path, monkeypatch):
     project_root = tmp_path / "my-shop"
     deployment = project_root / "deployment"
     shared = deployment / ".shared-roles"
@@ -105,4 +108,18 @@ def test_byos_restore_passes_namespace_to_shared_playbook(tmp_path, monkeypatch)
         confirm=True,
     )
 
-    assert json.loads(captured["extra_vars"])["k8s_namespace"] == "my-shop"
+    extra_vars = json.loads(captured["extra_vars"])
+    assert "k8s_namespace" not in extra_vars
+    assert extra_vars["project_name"] == "my-shop"
+
+
+def test_resolve_k8s_namespace_ignores_a_nested_key(tmp_path):
+    deployment = tmp_path / "deployment"
+    group_vars = deployment / "group_vars"
+    group_vars.mkdir(parents=True)
+    (group_vars / "all.yml").write_text(
+        "some_chart_values:\n  k8s_namespace: not-the-project\n",
+        encoding="utf-8",
+    )
+
+    assert ansible_commands._resolve_k8s_namespace(deployment) == "default"
