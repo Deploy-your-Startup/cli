@@ -297,7 +297,7 @@ def deploy_github_repo(
     # 3. Wait until the token has been received
     server_thread.join()
 
-    if ACCESS_TOKEN:
+    if ACCESS_TOKEN is not None:
         success = run_ansible_deploy(
             ACCESS_TOKEN,
             repo_name,
