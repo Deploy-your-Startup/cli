@@ -15,14 +15,17 @@ def _status(*names, state="Running", tailnet_name="philipp-lein.github"):
     }
 
 
-def _check(hosts, *, binary="/usr/bin/tailscale", status=None, strict=True):
-    tailnet.ensure_tailnet_access(
-        "my-shop",
-        hosts,
-        strict=strict,
-        binary_finder=lambda: binary,
-        status_reader=lambda _: status,
-    )
+@pytest.fixture
+def local_tailscale(monkeypatch):
+    """Stand in for this machine's Tailscale: set .binary and .status per test."""
+
+    class Local:
+        binary = "/usr/bin/tailscale"
+        status = None
+
+    monkeypatch.setattr(tailnet, "tailscale_binary", lambda: Local.binary)
+    monkeypatch.setattr(tailnet, "read_status", lambda _: Local.status)
+    return Local
 
 
 def test_network_mode_defaults_to_public(tmp_path):
@@ -67,34 +70,44 @@ def test_private_hosts_accept_labels_as_ansible_inventory_prints_them():
     assert tailnet.private_hosts(hostvars) == ["my-shop-master-0"]
 
 
-def test_missing_tailscale_explains_how_to_install():
+def test_missing_tailscale_explains_how_to_install(local_tailscale):
+    local_tailscale.binary = None
+
     with pytest.raises(click.ClickException, match="not installed") as error:
-        _check(["my-shop-master-0"], binary=None)
+        tailnet.ensure_tailnet_access("my-shop", ["my-shop-master-0"])
 
     assert "tailscale.com/download" in error.value.message
 
 
-def test_stopped_daemon_is_reported():
+def test_stopped_daemon_is_reported(local_tailscale):
     with pytest.raises(click.ClickException, match="daemon is not running"):
-        _check(["my-shop-master-0"], status=None)
+        tailnet.ensure_tailnet_access("my-shop", ["my-shop-master-0"])
 
 
-def test_logged_out_client_is_reported():
+def test_logged_out_client_is_reported(local_tailscale):
+    local_tailscale.status = _status(state="NeedsLogin")
+
     with pytest.raises(click.ClickException, match="state: NeedsLogin"):
-        _check(["my-shop-master-0"], status=_status(state="NeedsLogin"))
+        tailnet.ensure_tailnet_access("my-shop", ["my-shop-master-0"])
 
 
-def test_reachable_hosts_pass():
-    _check(["my-shop-master-0"], status=_status("my-shop-master-0"))
+def test_reachable_hosts_pass(local_tailscale):
+    local_tailscale.status = _status("my-shop-master-0")
+
+    tailnet.ensure_tailnet_access("my-shop", ["my-shop-master-0"])
 
 
-def test_host_outside_the_tailnet_names_the_tailnet():
+def test_host_outside_the_tailnet_names_the_tailnet(local_tailscale):
+    local_tailscale.status = _status("somebody-else")
+
     with pytest.raises(click.ClickException, match=r"philipp-lein\.github"):
-        _check(["my-shop-master-0"], status=_status("somebody-else"))
+        tailnet.ensure_tailnet_access("my-shop", ["my-shop-master-0"])
 
 
-def test_non_strict_only_warns_about_missing_hosts(capsys):
-    _check(["my-shop-master-0"], status=_status(), strict=False)
+def test_non_strict_only_warns_about_missing_hosts(local_tailscale, capsys):
+    local_tailscale.status = _status()
+
+    tailnet.ensure_tailnet_access("my-shop", ["my-shop-master-0"], strict=False)
 
     assert "Not found in" in capsys.readouterr().err
 

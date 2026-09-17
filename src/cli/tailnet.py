@@ -13,7 +13,6 @@ import json
 import re
 import shutil
 import subprocess
-from collections.abc import Callable
 from pathlib import Path
 
 import click
@@ -124,8 +123,6 @@ def ensure_tailnet_access(
     hosts: list[str],
     *,
     strict: bool = True,
-    binary_finder: Callable[[], str | None] = tailscale_binary,
-    status_reader: Callable[[str], dict | None] = read_status,
 ) -> None:
     """Fail with instructions unless this machine can reach ``hosts``.
 
@@ -136,13 +133,13 @@ def ensure_tailnet_access(
         f"{project} runs in private network mode: its servers are only "
         "reachable over Tailscale."
     )
-    binary = binary_finder()
+    binary = tailscale_binary()
     if binary is None:
         raise click.ClickException(
             f"{intro}\nTailscale is not installed on this machine.\n\n{INSTALL_HINT}"
         )
 
-    status = status_reader(binary)
+    status = read_status(binary)
     if status is None:
         raise click.ClickException(
             f"{intro}\nThe Tailscale daemon is not running.\n\n"
