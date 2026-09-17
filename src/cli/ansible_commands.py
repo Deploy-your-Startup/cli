@@ -1033,26 +1033,6 @@ def _derive_context_name(remote_name: str, environment: str, env_suffix: bool) -
     return context
 
 
-def _point_kubeconfig_at(kubeconfig: dict, host: str, *, private: bool) -> None:
-    """Aim every cluster entry at ``host`` and make its certificate verify.
-
-    In private network mode ``host`` is the node's MagicDNS name, which k3s'
-    serving certificate does not list. Adding it would mean rewriting the k3s
-    unit on every existing node, so the client verifies against ``kubernetes``
-    instead — a name k3s always includes. The connection still goes to
-    ``host``; only the name checked in the certificate changes.
-    """
-    for cluster in kubeconfig.get("clusters", []):
-        config = cluster.get("cluster", {})
-        if not config.get("server"):
-            continue
-        config["server"] = f"https://{host}:6443"
-        if private:
-            config["tls-server-name"] = "kubernetes"
-        else:
-            config.pop("tls-server-name", None)
-
-
 def _configure_kubeconfig_context(
     kubeconfig: dict, context: str, namespace: str
 ) -> None:
@@ -1199,9 +1179,12 @@ def run_kubeconfig(
         )
 
         kubeconfig = yaml.safe_load(tmp_path.read_text(encoding="utf-8"))
-        _point_kubeconfig_at(
-            kubeconfig, master_ip, private=tailnet.is_private_network_host(hostvars)
-        )
+        # In private network mode master_ip is the node's MagicDNS name. That is
+        # also its k3s node name, which k3s always puts into the API
+        # certificate, so the name verifies without any extra SAN.
+        for cluster in kubeconfig.get("clusters", []):
+            if cluster.get("cluster", {}).get("server"):
+                cluster["cluster"]["server"] = f"https://{master_ip}:6443"
 
         if context_name:
             context = context_name
