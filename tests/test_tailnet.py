@@ -51,6 +51,22 @@ def test_private_hosts_are_read_from_the_hetzner_label():
     assert tailnet.private_hosts(hostvars) == ["my-shop-master-0"]
 
 
+def test_private_hosts_accept_labels_as_ansible_inventory_prints_them():
+    # Verbatim shape of `ansible-inventory --list` for a private Hetzner server.
+    hostvars = {
+        "my-shop-master-0": {
+            "hcloud_labels": {
+                "ingress": {"__ansible_unsafe": "true"},
+                "network": {"__ansible_unsafe": "private"},
+                "type": {"__ansible_unsafe": "master"},
+            }
+        },
+        "other-master-0": {"hcloud_labels": {"type": {"__ansible_unsafe": "master"}}},
+    }
+
+    assert tailnet.private_hosts(hostvars) == ["my-shop-master-0"]
+
+
 def test_missing_tailscale_explains_how_to_install():
     with pytest.raises(click.ClickException, match="not installed") as error:
         _check(["my-shop-master-0"], binary=None)

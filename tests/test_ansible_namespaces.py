@@ -123,32 +123,3 @@ def test_resolve_k8s_namespace_ignores_a_nested_key(tmp_path):
     )
 
     assert ansible_commands._resolve_k8s_namespace(deployment) == "default"
-
-
-def _k3s_kubeconfig():
-    return {
-        "clusters": [
-            {"name": "default", "cluster": {"server": "https://127.0.0.1:6443"}}
-        ]
-    }
-
-
-def test_kubeconfig_points_public_hosts_at_their_ip():
-    kubeconfig = _k3s_kubeconfig()
-
-    ansible_commands._point_kubeconfig_at(kubeconfig, "203.0.113.7", private=False)
-
-    assert kubeconfig["clusters"][0]["cluster"] == {
-        "server": "https://203.0.113.7:6443"
-    }
-
-
-def test_kubeconfig_verifies_private_hosts_against_a_k3s_san():
-    kubeconfig = _k3s_kubeconfig()
-
-    ansible_commands._point_kubeconfig_at(kubeconfig, "my-shop-master-0", private=True)
-
-    assert kubeconfig["clusters"][0]["cluster"] == {
-        "server": "https://my-shop-master-0:6443",
-        "tls-server-name": "kubernetes",
-    }

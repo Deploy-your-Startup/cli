@@ -58,7 +58,19 @@ def is_private_network_host(hostvars: dict) -> bool:
     mode, and the inventory then sets ``ansible_host`` to the MagicDNS name.
     """
     labels = hostvars.get("hcloud_labels") or {}
-    return isinstance(labels, dict) and labels.get("network") == "private"
+    return isinstance(labels, dict) and _plain(labels.get("network")) == "private"
+
+
+def _plain(value: object) -> object:
+    """Unwrap a value ``ansible-inventory --list`` marked as unsafe.
+
+    Hetzner labels come from an API, so Ansible tags them as untrusted and the
+    JSON output carries them as ``{"__ansible_unsafe": "private"}`` rather than
+    the bare string.
+    """
+    if isinstance(value, dict) and set(value) == {"__ansible_unsafe"}:
+        return value["__ansible_unsafe"]
+    return value
 
 
 def private_hosts(hostvars_by_host: dict[str, dict]) -> list[str]:
