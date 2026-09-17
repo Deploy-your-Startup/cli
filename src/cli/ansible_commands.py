@@ -14,6 +14,7 @@ from pathlib import Path
 import click
 import yaml
 
+from . import tailnet
 from .ansible_bin import ansible_bin
 from .vault_backends import (
     DEFAULT_VAULT_BACKEND,
@@ -826,15 +827,15 @@ def _run_byos_playbook(
         _run_command(command, cwd=working_dir, env=env, input_text=vault_password)
 
 
-def _dynamic_inventory_hosts(
+def _dynamic_inventory_hostvars(
     working_dir: Path, shared_dir: str, env: dict[str, str]
-) -> list[str]:
-    """Return the hosts the Hetzner dynamic inventory currently resolves to."""
+) -> dict[str, dict]:
+    """Return the hostvars of every host the Hetzner dynamic inventory resolves."""
     inventory_path = working_dir / "inventory.hcloud.yml"
     if not inventory_path.exists():
         inventory_path = working_dir / shared_dir / "inventory.hcloud.yml"
     if not inventory_path.exists():
-        return []
+        return {}
     result = _run_command(
         [
             _find_uv(),
@@ -851,7 +852,32 @@ def _dynamic_inventory_hosts(
         capture_output=True,
     )
     data = json.loads(result.stdout or "{}")
-    return sorted((data.get("_meta", {}).get("hostvars") or {}).keys())
+    return data.get("_meta", {}).get("hostvars") or {}
+
+
+def _ensure_tailnet(
+    working_dir: Path,
+    environment: str,
+    shared_dir: str,
+    env: dict[str, str],
+    *,
+    hostvars: dict[str, dict] | None = None,
+    strict: bool = True,
+) -> None:
+    """Check the tailnet before a run that reaches the servers of a private project.
+
+    Public projects return before the inventory is even queried, so this costs
+    them nothing.
+    """
+    if tailnet.resolve_network_mode(working_dir, environment) != "private":
+        return
+    if hostvars is None:
+        hostvars = _dynamic_inventory_hostvars(working_dir, shared_dir, env)
+    tailnet.ensure_tailnet_access(
+        _resolve_project_name(working_dir),
+        tailnet.private_hosts(hostvars),
+        strict=strict,
+    )
 
 
 def run_deploy(
@@ -891,12 +917,14 @@ def run_deploy(
     # prints an empty PLAY RECAP and exits 0, so a deploy that overtakes the
     # infrastructure provisioning (both are triggered by the initial push)
     # reports green while having deployed nothing at all.
-    if not _dynamic_inventory_hosts(working_dir, shared_dir, env):
+    hostvars = _dynamic_inventory_hostvars(working_dir, shared_dir, env)
+    if not hostvars:
         raise click.ClickException(
             "The Hetzner inventory resolved to zero hosts — there is nothing to "
             "deploy to. Provision the servers first with "
             "`startup ansible infrastructure`, then run the deploy again."
         )
+    _ensure_tailnet(working_dir, environment, shared_dir, env, hostvars=hostvars)
     _run_command(
         [
             _find_uv(),
@@ -954,6 +982,7 @@ def run_infrastructure(
     )
     env = _ansible_env(working_dir, shared_dir)
     env["HCLOUD_TOKEN"] = hcloud_token
+    _ensure_tailnet(working_dir, environment, shared_dir, env, strict=False)
     _run_command(
         [
             _find_uv(),
@@ -1002,16 +1031,6 @@ def _derive_context_name(remote_name: str, environment: str, env_suffix: bool) -
     if env_suffix and environment:
         context = f"{context}-{environment}"
     return context
-
-
-def _is_private_network_host(hostvars: dict) -> bool:
-    """Whether the inventory reaches this host over the tailnet.
-
-    The hetzner-server role labels servers ``network=private`` in private network
-    mode, and the inventory then sets ``ansible_host`` to the MagicDNS name.
-    """
-    labels = hostvars.get("hcloud_labels") or {}
-    return isinstance(labels, dict) and labels.get("network") == "private"
 
 
 def _point_kubeconfig_at(kubeconfig: dict, host: str, *, private: bool) -> None:
@@ -1126,6 +1145,9 @@ def run_kubeconfig(
         .get("hostvars", {})
         .get(resolved_master_host, {})
     )
+    if tailnet.is_private_network_host(hostvars):
+        tailnet.ensure_tailnet_access(project_name, [resolved_master_host])
+
     master_ip = (
         _normalize_inventory_value(hostvars.get("ansible_host"))
         or _normalize_inventory_value(hostvars.get("public_ipv4"))
@@ -1178,7 +1200,7 @@ def run_kubeconfig(
 
         kubeconfig = yaml.safe_load(tmp_path.read_text(encoding="utf-8"))
         _point_kubeconfig_at(
-            kubeconfig, master_ip, private=_is_private_network_host(hostvars)
+            kubeconfig, master_ip, private=tailnet.is_private_network_host(hostvars)
         )
 
         if context_name:
@@ -1301,6 +1323,7 @@ def run_backup(
     )
     env = _ansible_env(working_dir, shared_dir)
     env["HCLOUD_TOKEN"] = hcloud_token
+    _ensure_tailnet(working_dir, environment, shared_dir, env)
 
     _run_command(
         [
@@ -1368,6 +1391,7 @@ def run_update_vms(
     )
     env = _ansible_env(working_dir, shared_dir)
     env["HCLOUD_TOKEN"] = hcloud_token
+    _ensure_tailnet(working_dir, environment, shared_dir, env)
 
     _run_command(
         [
@@ -1437,6 +1461,7 @@ def run_k3s_upgrade(
     )
     env = _ansible_env(working_dir, shared_dir)
     env["HCLOUD_TOKEN"] = hcloud_token
+    _ensure_tailnet(working_dir, environment, shared_dir, env)
 
     _run_command(
         [
@@ -1546,6 +1571,7 @@ def run_restore(
     )
     env = _ansible_env(working_dir, shared_dir)
     env["HCLOUD_TOKEN"] = hcloud_token
+    _ensure_tailnet(working_dir, environment, shared_dir, env)
 
     _run_command(
         [

@@ -152,13 +152,3 @@ def test_kubeconfig_verifies_private_hosts_against_a_k3s_san():
         "server": "https://my-shop-master-0:6443",
         "tls-server-name": "kubernetes",
     }
-
-
-def test_private_network_host_is_read_from_the_hetzner_label():
-    assert ansible_commands._is_private_network_host(
-        {"hcloud_labels": {"type": "master", "network": "private"}}
-    )
-    assert not ansible_commands._is_private_network_host(
-        {"hcloud_labels": {"type": "master"}}
-    )
-    assert not ansible_commands._is_private_network_host({})
