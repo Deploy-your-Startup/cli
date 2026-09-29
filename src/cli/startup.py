@@ -63,6 +63,11 @@ def cli():
     help="Whether the domain already belongs to you (skips that question).",
 )
 @click.option("--hetzner-token", help="Use this token instead of creating one.")
+@click.option(
+    "--hetzner-token-stdin",
+    is_flag=True,
+    help="Read a Hetzner token from stdin instead of a process argument.",
+)
 @click.option("--byos-host", help="Existing server's IP or hostname (provider byos).")
 @click.option("--byos-ssh-user", help="SSH user on that server (default: root).")
 @click.option("--cloudflare-token", help="Cloudflare API token (pitch only).")
@@ -89,6 +94,7 @@ def bootstrap(
     output_dir,
     domain_owned,
     hetzner_token,
+    hetzner_token_stdin,
     byos_host,
     byos_ssh_user,
     cloudflare_token,
@@ -108,8 +114,18 @@ def bootstrap(
     instead of driving the prompts with a tool like `expect`.
     """
     import re
+    import sys
 
     from cli import wizard_output as ui
+
+    if hetzner_token_stdin:
+        if hetzner_token:
+            raise click.ClickException(
+                "Use either --hetzner-token or --hetzner-token-stdin, not both."
+            )
+        hetzner_token = sys.stdin.read().strip()
+        if not hetzner_token:
+            raise click.ClickException("No Hetzner token was provided on stdin.")
     from cli.bootstrap_wizard import BootstrapContext, run_wizard
     from cli.sync_commands import _github_owner
 
