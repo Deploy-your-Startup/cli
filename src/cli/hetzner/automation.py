@@ -122,7 +122,9 @@ class HetznerAutomation:
             await self.page.goto(
                 config.HETZNER_PROJECTS_URL, wait_until="domcontentloaded"
             )
-            if "/projects" in self.page.url and "accounts.hetzner" not in self.page.url:
+            # An expired session can render the login form at /projects without
+            # changing the URL. Only the rendered projects UI proves login.
+            if await self._projects_page_ready(timeout=10_000):
                 ui.success("Already logged in (saved session).")
                 return True
         except playwright_error():
@@ -138,9 +140,8 @@ class HetznerAutomation:
         )
 
         try:
-            await self.page.wait_for_url(
-                f"{config.HETZNER_BASE_URL}/**",
-                timeout=config.LOGIN_WAIT_TIMEOUT,
+            await self.page.locator(config.SELECTORS_PROJECTS_READY).first.wait_for(
+                state="visible", timeout=config.LOGIN_WAIT_TIMEOUT
             )
             return True
         except playwright_error():
@@ -164,25 +165,33 @@ class HetznerAutomation:
         waiting.
         """
         for attempt in (1, 2):
-            try:
-                await self.page.locator(config.SELECTORS_PROJECTS_READY).first.wait_for(
-                    state="visible", timeout=config.NAVIGATION_TIMEOUT
-                )
+            if await self._projects_page_ready(timeout=config.NAVIGATION_TIMEOUT):
                 return True
-            except playwright_error():
-                if attempt == 1:
-                    await self.page.goto(
-                        config.HETZNER_PROJECTS_URL, wait_until="domcontentloaded"
-                    )
+            if attempt == 1:
+                await self.page.goto(
+                    config.HETZNER_PROJECTS_URL, wait_until="domcontentloaded"
+                )
         ui.warning("Projects page did not render in time.")
         return False
+
+    async def _projects_page_ready(self, *, timeout: int) -> bool:
+        """Check the rendered app, since /projects can still show a login form."""
+        try:
+            await self.page.locator(config.SELECTORS_PROJECTS_READY).first.wait_for(
+                state="visible", timeout=timeout
+            )
+            return True
+        except playwright_error():
+            return False
 
     async def create_project(self, project_name: str) -> bool:
         """Create or navigate to a project in Hetzner Cloud Console."""
         ui.info(f'Creating project "{project_name}"...')
 
         await self.page.goto(config.HETZNER_PROJECTS_URL, wait_until="domcontentloaded")
-        await self._await_projects_page()
+        if not await self._await_projects_page():
+            ui.error("Projects page is unavailable or requires login.")
+            return False
 
         # Fast path: project already exists → navigate into it
         try:
