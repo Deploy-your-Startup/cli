@@ -149,6 +149,53 @@ def test_bootstrap_makes_a_relative_output_dir_absolute(tmp_path, monkeypatch):
     assert ctx.project_dir == tmp_path / "projects" / "startups" / "my-shop-2"
 
 
+def test_bootstrap_reads_hetzner_token_from_stdin_without_printing_it(
+    tmp_path, monkeypatch
+):
+    captured = {}
+    monkeypatch.setattr(
+        "cli.bootstrap_wizard.run_wizard", lambda ctx: captured.update(ctx=ctx)
+    )
+    token = "test-token-from-stdin"
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "bootstrap",
+            "--yes",
+            "--kind",
+            "fullstack",
+            "--provider",
+            "hetzner",
+            "--project-name",
+            "my-shop-2",
+            "--base-domain",
+            "my-shop-2.example.com",
+            "--github-username",
+            "philipp-lein",
+            "--output-dir",
+            str(tmp_path),
+            "--hetzner-token-stdin",
+        ],
+        input=token,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["ctx"].hetzner_token == token
+    assert token not in result.output
+
+
+def test_bootstrap_rejects_two_hetzner_token_sources():
+    result = CliRunner().invoke(
+        cli,
+        ["bootstrap", "--hetzner-token", "from-arg", "--hetzner-token-stdin"],
+        input="from-stdin",
+    )
+
+    assert result.exit_code != 0
+    assert "not both" in result.output
+
+
 def _byos_ctx(tmp_path):
     from cli.bootstrap_wizard import BootstrapContext
 
