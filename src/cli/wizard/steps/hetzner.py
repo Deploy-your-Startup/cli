@@ -12,11 +12,12 @@ from ..context import BootstrapContext
 
 
 def validate_hetzner_token(token: str) -> bool:
-    """Validate a Hetzner API token via GET /v1/projects."""
+    """Validate a project-scoped Hetzner API token with a lightweight read."""
     try:
         resp = httpx.get(
-            "https://api.hetzner.cloud/v1/projects",
+            "https://api.hetzner.cloud/v1/servers",
             headers={"Authorization": f"Bearer {token}"},
+            params={"per_page": 1},
             timeout=10,
         )
         return resp.status_code == 200
