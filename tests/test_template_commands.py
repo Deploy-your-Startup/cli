@@ -6,7 +6,13 @@ from click import BadParameter
 from click.testing import CliRunner
 
 from cli.startup import cli
-from cli.template_commands import adopt_project, git, parse_data, render_project
+from cli.template_commands import (
+    adopt_project,
+    git,
+    parse_data,
+    render_project,
+    template_authentication,
+)
 from cli.wizard.context import BootstrapContext
 from cli.wizard.steps import project as project_step
 
@@ -56,6 +62,14 @@ def repos(tmp_path):
     )
     commit(project, "existing project")
     return template, project
+
+
+def test_authentication_metadata_honors_selected_template_version(repos):
+    template, _ = repos
+    (template / "startup-template.yml").write_text("authentication: auth0\n")
+    commit(template, "declare auth0")
+    assert template_authentication(str(template), "HEAD") == "auth0"
+    assert template_authentication(str(template), "v1.0.0") is None
 
 
 def test_adopt_preserves_existing_and_deleted_files(repos):

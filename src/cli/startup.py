@@ -84,6 +84,9 @@ cli.add_command(auth0)
     "--auth0-tenant",
     help="Create a dedicated Auth0 app/API for a template with oauth2-proxy.",
 )
+@click.option(
+    "--without-auth", is_flag=True, help="Explicitly skip optional template login."
+)
 @click.option("--hetzner-token", help="Use this token instead of creating one.")
 @click.option(
     "--hetzner-token-stdin",
@@ -117,6 +120,7 @@ def bootstrap(
     template_source,
     template_version,
     auth0_tenant,
+    without_auth,
     domain_owned,
     hetzner_token,
     hetzner_token_stdin,
@@ -293,6 +297,7 @@ def bootstrap(
         template_source=template_source,
         template_version=template_version,
         auth0_tenant=auth0_tenant,
+        without_auth=without_auth,
         kind=kind,
         provider=provider,
         byos_host=byos_host,

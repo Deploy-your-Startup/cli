@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 import click
 
@@ -34,6 +35,96 @@ def check_auth0_login(tenant: str) -> None:
             "Auth0 CLI fehlt: `brew install auth0/auth0-cli/auth0`, dann `auth0 login`."
         )
     auth0_json("apps", "list", "--tenant", tenant)
+    auth0_json("apis", "list", "--tenant", tenant)
+
+
+def validate_browser_session(context, origin: str) -> None:
+    """Check the session without emitting cookies, tokens or identity data."""
+    identity = context.request.get(f"{origin}/oauth2/userinfo", max_redirects=0)
+    private = context.request.get(f"{origin}/private_api/session", max_redirects=0)
+    if identity.status != 200 or private.status != 200:
+        raise click.ClickException(
+            "Login zurückgekehrt, aber die geschützte API ist nicht erreichbar."
+        )
+    session_cookies = [
+        cookie
+        for cookie in context.cookies([origin])
+        if cookie["name"].startswith("_oauth2_proxy")
+    ]
+    if not session_cookies or not all(
+        cookie["httpOnly"] and cookie["secure"] for cookie in session_cookies
+    ):
+        raise click.ClickException(
+            "Die Login-Session braucht ein sicheres HttpOnly-Cookie."
+        )
+
+
+def validate_live_login(origin: str, tenant: str, timeout: int) -> None:
+    """Human completes login in an ephemeral browser; never persist auth state."""
+    from cli.cloudflare import _require_playwright
+    from cli.playwright_errors import playwright_error
+
+    _require_playwright()
+    from playwright.sync_api import sync_playwright
+
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(channel="chrome", headless=False)
+            try:
+                context = browser.new_context()
+                try:
+                    # Check protection and provider before asking the user to sign in.
+                    for headers in ({}, {"Authorization": "Bearer invalid-test-token"}):
+                        response = context.request.get(
+                            f"{origin}/private_api/session",
+                            headers=headers,
+                            max_redirects=0,
+                        )
+                        if response.status not in (302, 401, 403):
+                            raise click.ClickException(
+                                "Die private API weist ungültige Zugänge nicht korrekt ab."
+                            )
+                    response = context.request.get(
+                        f"{origin}/oauth2/start", max_redirects=0
+                    )
+                    redirect = urlsplit(response.headers.get("location", ""))
+                    if (
+                        response.status != 302
+                        or redirect.scheme != "https"
+                        or redirect.netloc != tenant
+                        or parse_qs(redirect.query).get("redirect_uri")
+                        != [f"{origin}/oauth2/callback"]
+                    ):
+                        raise click.ClickException(
+                            "Der Login leitet nicht zum gewählten Auth0-Tenant weiter."
+                        )
+                    page = context.new_page()
+                    click.echo(
+                        "Bitte im geöffneten Browser bei der neuen Website anmelden. Der Check wartet auf den Rückweg und prüft die private API."
+                    )
+                    page.goto(
+                        f"{origin}/oauth2/start?{urlencode({'rd': origin + '/'})}",
+                        wait_until="domcontentloaded",
+                    )
+                    page.wait_for_url(
+                        lambda url: (
+                            url.startswith(origin + "/") and "/oauth2/" not in url
+                        ),
+                        timeout=timeout * 1000,
+                    )
+                    validate_browser_session(context, origin)
+                finally:
+                    context.close()
+            finally:
+                browser.close()
+    except playwright_error():
+        raise click.ClickException(
+            "Browser-Login nicht abgeschlossen. Deploy/Chrome prüfen und erneut versuchen; "
+            "Browserdetails wurden zum Schutz von Zugangsdaten zurückgehalten."
+        ) from None
+    click.echo(
+        "Login validiert: richtiger Tenant, geschützte API, sichere HttpOnly-Session."
+    )
 
 
 def configure_auth0(
@@ -176,6 +267,37 @@ def configure_auth0(
 @click.group(name="auth0")
 def auth0():
     """Configure project login with the official Auth0 CLI."""
+
+
+@auth0.command("check")
+@click.option("--tenant", required=True)
+def check(tenant):
+    """Validate Auth0 CLI access before creating cloud resources."""
+    check_auth0_login(tenant)
+    click.echo(f"Auth0-Zugang zu {tenant} geprüft.")
+
+
+@auth0.command("validate")
+@click.option("--tenant", required=True)
+@click.option("--base-domain", required=True)
+@click.option("--timeout", type=click.IntRange(1, 900), default=300, show_default=True)
+def validate(tenant, base_domain, timeout):
+    """Validate a real website login after deployment; user signs in in browser."""
+    for name, host in (("tenant", tenant), ("base-domain", base_domain)):
+        parsed = urlsplit(f"https://{host}")
+        if (
+            not parsed.hostname
+            or parsed.netloc != host
+            or parsed.path
+            or parsed.query
+            or parsed.fragment
+            or parsed.username
+            or ":" in parsed.netloc
+        ):
+            raise click.BadParameter(
+                "Enter a hostname without scheme, path or port.", param_hint=f"--{name}"
+            )
+    validate_live_login(f"https://{base_domain}", tenant, timeout)
 
 
 @auth0.command("setup")
