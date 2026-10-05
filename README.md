@@ -2,6 +2,8 @@
 
 A command-line tool for managing Deploy Your Startup operations, including secrets management, GitHub repository deployment, and more.
 
+Source of truth for the product vision: [Deploy Your Startup](https://deploy-your-startup.com).
+
 ## Features
 
 - **Secrets Management**: Manage Ansible Vault secrets with easy commands
