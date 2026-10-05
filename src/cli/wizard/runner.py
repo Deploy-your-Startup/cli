@@ -53,6 +53,28 @@ def steps_for(ctx: BootstrapContext) -> list[type[WizardStep]]:
 
 def check_prerequisites(ctx: BootstrapContext) -> None:
     """Fail fast if required external tools are missing."""
+    if ctx.auth0_tenant and ctx.without_auth:
+        raise click.ClickException("Use either --auth0-tenant or --without-auth.")
+    if ctx.kind != "pitch" and not ctx.auth0_tenant and not ctx.without_auth:
+        from cli.template_commands import template_authentication
+
+        if (
+            template_authentication(ctx.template_source, ctx.template_version)
+            == "auth0"
+        ):
+            if ctx.non_interactive:
+                raise click.ClickException(
+                    "This template supports Auth0: pass --auth0-tenant <tenant> "
+                    "or --without-auth before bootstrap."
+                )
+            if click.confirm(
+                "Auth0-Login für dieses Template einrichten?", default=True
+            ):
+                ctx.auth0_tenant = click.prompt(
+                    "Auth0-Tenant (z. B. example.eu.auth0.com)"
+                )
+            else:
+                ctx.without_auth = True
     if ctx.auth0_tenant:
         if ctx.kind == "pitch":
             raise click.ClickException("--auth0-tenant benötigt --kind fullstack.")
@@ -155,3 +177,9 @@ def run_wizard(ctx: BootstrapContext) -> None:
         provider=ctx.provider,
         byos_deploy_key_command=byos_deploy_key_command,
     )
+    if ctx.auth0_tenant:
+        ui.info(
+            "Nach erfolgreichem Deploy den echten Website-Login prüfen:\n"
+            f"  startup auth0 validate --tenant {ctx.auth0_tenant} "
+            f"--base-domain {ctx.base_domain}"
+        )

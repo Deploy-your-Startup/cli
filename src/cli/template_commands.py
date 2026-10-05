@@ -11,6 +11,7 @@ from pathlib import Path
 import click
 import yaml
 from copier import run_copy, run_update
+from copier.main import Worker
 
 DEFAULT_TEMPLATE = "https://github.com/Deploy-your-Startup/django-backend-template.git"
 ANSWERS_FILE = ".copier-answers.yml"
@@ -27,6 +28,21 @@ PUBLIC_FIELDS = {
     "user_key",
 }
 PROTECTED = ("deployment/group_vars/**",)
+
+
+def template_authentication(source: str, version: str) -> str | None:
+    """Inspect public template capabilities without rendering or running tasks."""
+    with Worker(
+        src_path=source, vcs_ref=version, skip_tasks=True, quiet=True
+    ) as worker:
+        manifest = worker.template.local_abspath / "startup-template.yml"
+        if not manifest.is_file():
+            return None
+        values = yaml.safe_load(manifest.read_text())
+        provider = values.get("authentication") if isinstance(values, dict) else None
+        if provider not in (None, "auth0"):
+            raise click.ClickException("Unsupported template authentication provider.")
+        return provider
 
 
 def git(project: Path, *args: str) -> str:
