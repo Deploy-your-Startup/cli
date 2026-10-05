@@ -7,6 +7,7 @@ import json
 import secrets
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import click
@@ -152,13 +153,17 @@ def configure_auth0(
             str(target),
         ]
         for dry_run in (True, False):
-            result = subprocess.run(
-                command + (["--dry-run"] if dry_run else []),
-                input=value,
-                text=True,
-                capture_output=True,
-                check=False,
-            )
+            with tempfile.TemporaryDirectory(
+                prefix="startup-auth0-preview-"
+            ) as preview:
+                result = subprocess.run(
+                    command + (["--dry-run"] if dry_run else []),
+                    cwd=preview if dry_run else project_dir,
+                    input=value,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
             if result.returncode:
                 raise click.ClickException(
                     "Auth0-Konfiguration konnte nicht im Vault gespeichert werden."
