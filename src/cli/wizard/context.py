@@ -26,6 +26,7 @@ class BootstrapContext:
     template_source: str = DEFAULT_TEMPLATE
     template_version: str = "HEAD"
     auth0_tenant: str | None = None
+    without_auth: bool = False
 
     # Bring-your-own-server inputs (provider == "byos")
     byos_host: str | None = None  # VPS IP or hostname Ansible connects to
