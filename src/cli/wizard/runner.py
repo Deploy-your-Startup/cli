@@ -11,6 +11,7 @@ from cli import wizard_output as ui
 
 from .base import WizardStep
 from .context import BootstrapContext
+from .steps.auth0 import Auth0Step
 from .steps.byos import ByosStep
 from .steps.cloudflare import CloudflareStep
 from .steps.domain import DomainStep
@@ -44,11 +45,20 @@ PITCH_STEPS: list[type[WizardStep]] = [
 def steps_for(ctx: BootstrapContext) -> list[type[WizardStep]]:
     if ctx.kind == "pitch":
         return PITCH_STEPS
-    return BYOS_STEPS if ctx.provider == "byos" else FULLSTACK_STEPS
+    steps = list(BYOS_STEPS if ctx.provider == "byos" else FULLSTACK_STEPS)
+    if ctx.auth0_tenant:
+        steps.insert(-1, Auth0Step)
+    return steps
 
 
 def check_prerequisites(ctx: BootstrapContext) -> None:
     """Fail fast if required external tools are missing."""
+    if ctx.auth0_tenant:
+        if ctx.kind == "pitch":
+            raise click.ClickException("--auth0-tenant benötigt --kind fullstack.")
+        from cli.auth0_commands import check_auth0_login
+
+        check_auth0_login(ctx.auth0_tenant)
     required = [("git", "Git: https://git-scm.com/downloads")]
     if ctx.kind != "pitch":
         required.append(

@@ -9,6 +9,7 @@ from pathlib import Path
 
 import click
 
+from cli.auth0_commands import auth0
 from cli.template_commands import DEFAULT_TEMPLATE, template
 
 
@@ -41,6 +42,7 @@ def cli():
 
 
 cli.add_command(template)
+cli.add_command(auth0)
 
 
 # === BOOTSTRAP COMMAND ===
@@ -78,6 +80,10 @@ cli.add_command(template)
     default=None,
     help="Whether the domain already belongs to you (skips that question).",
 )
+@click.option(
+    "--auth0-tenant",
+    help="Create a dedicated Auth0 app/API for a template with oauth2-proxy.",
+)
 @click.option("--hetzner-token", help="Use this token instead of creating one.")
 @click.option(
     "--hetzner-token-stdin",
@@ -110,6 +116,7 @@ def bootstrap(
     output_dir,
     template_source,
     template_version,
+    auth0_tenant,
     domain_owned,
     hetzner_token,
     hetzner_token_stdin,
@@ -285,6 +292,7 @@ def bootstrap(
         output_dir=Path(output_dir).expanduser().resolve(),
         template_source=template_source,
         template_version=template_version,
+        auth0_tenant=auth0_tenant,
         kind=kind,
         provider=provider,
         byos_host=byos_host,

@@ -15,6 +15,20 @@ from ..context import BootstrapContext
 from ..vault_guard import store_keychain_password
 
 
+def set_github_vault_secret(project_dir, password: str) -> None:
+    """Send the password through stdin; never expose it in argv or errors."""
+    result = subprocess.run(
+        ["gh", "secret", "set", "VAULT_PASSWORD"],
+        cwd=project_dir,
+        input=password,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode:
+        raise click.ClickException("GitHub Vault-Secret konnte nicht gesetzt werden.")
+
+
 class FinalizeStep(WizardStep):
     number = 4
     name = "Abschluss"
@@ -23,6 +37,15 @@ class FinalizeStep(WizardStep):
         if ctx.mode != "github":
             return False
         if not ctx.project_dir.exists():
+            return False
+        dirty = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=ctx.project_dir,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if dirty.stdout.strip():
             return False
         if is_pushed(ctx.project_dir) and repo_exists(ctx.full_repo):
             ui.skip_indicator("Code bereits gepusht")
@@ -116,11 +139,7 @@ class FinalizeStep(WizardStep):
                 "ausführen oder das Passwort in der Keychain prüfen."
             )
         ui.action_start("Vault-Passwort als GitHub Secret...")
-        _run_command(
-            ["gh", "secret", "set", "VAULT_PASSWORD", "--body", ctx.vault_password],
-            cwd=ctx.project_dir,
-            capture_output=True,
-        )
+        set_github_vault_secret(ctx.project_dir, ctx.vault_password)
         ui.action_done("GitHub Secret gesetzt")
 
         # 4e. Deploy key onto the VPS. Before the push on purpose: pushing starts
@@ -192,7 +211,12 @@ class FinalizeStep(WizardStep):
             last_err = (proc.stderr or proc.stdout or "").strip()
 
         if triggered:
-            ui.action_done("Infrastructure-Workflow läuft (siehe Actions-Tab)")
+            ui.action_done("Infrastructure-Workflow angefordert")
+            ui.info(
+                "GitHub weist den Runner zu; bei einer Actions-Störung kann "
+                "der Start verzögert sein. Status:\n"
+                f"  https://github.com/{ctx.full_repo}/actions"
+            )
         else:
             ui.action_fail("Workflow-Start fehlgeschlagen")
             ui.warning(
@@ -209,4 +233,6 @@ class FinalizeStep(WizardStep):
             ui.action_done("Vault-Passwort in Keychain gespeichert")
         except subprocess.CalledProcessError:
             ui.action_fail("Keychain-Speicherung fehlgeschlagen")
-            ui.warning(f"Vault-Passwort manuell speichern: {ctx.vault_password}")
+            ui.warning(
+                "Vault-Passwort konnte nicht erneut in Keychain gespeichert werden."
+            )
