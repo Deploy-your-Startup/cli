@@ -209,6 +209,13 @@ class ProjectStep(WizardStep):
         docker_config_b64 = _generate_docker_config_b64(ctx.github_username)
 
         field_random = ["k3s_token", "backend_db_password", "postgres_admin_password"]
+        # Templates can opt into a stable Django signing key without putting
+        # a secret into Copier answers or changing existing template schemas.
+        if any(
+            "backend_secret_key:" in path.read_text()
+            for path in (ctx.deployment_dir / "group_vars").glob("*.yml")
+        ):
+            field_random.append("backend_secret_key")
         field_set = [
             ("postgres_admin_username", "admin"),
             ("docker_config_json_b64", docker_config_b64),

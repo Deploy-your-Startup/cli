@@ -15,6 +15,20 @@ from ..context import BootstrapContext
 from ..vault_guard import store_keychain_password
 
 
+def set_github_vault_secret(project_dir, password: str) -> None:
+    """Send the password through stdin; never expose it in argv or errors."""
+    result = subprocess.run(
+        ["gh", "secret", "set", "VAULT_PASSWORD"],
+        cwd=project_dir,
+        input=password,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode:
+        raise click.ClickException("GitHub Vault-Secret konnte nicht gesetzt werden.")
+
+
 class FinalizeStep(WizardStep):
     number = 4
     name = "Abschluss"
@@ -116,11 +130,7 @@ class FinalizeStep(WizardStep):
                 "ausführen oder das Passwort in der Keychain prüfen."
             )
         ui.action_start("Vault-Passwort als GitHub Secret...")
-        _run_command(
-            ["gh", "secret", "set", "VAULT_PASSWORD", "--body", ctx.vault_password],
-            cwd=ctx.project_dir,
-            capture_output=True,
-        )
+        set_github_vault_secret(ctx.project_dir, ctx.vault_password)
         ui.action_done("GitHub Secret gesetzt")
 
         # 4e. Deploy key onto the VPS. Before the push on purpose: pushing starts
@@ -209,4 +219,6 @@ class FinalizeStep(WizardStep):
             ui.action_done("Vault-Passwort in Keychain gespeichert")
         except subprocess.CalledProcessError:
             ui.action_fail("Keychain-Speicherung fehlgeschlagen")
-            ui.warning(f"Vault-Passwort manuell speichern: {ctx.vault_password}")
+            ui.warning(
+                "Vault-Passwort konnte nicht erneut in Keychain gespeichert werden."
+            )
