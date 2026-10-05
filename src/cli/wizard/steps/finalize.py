@@ -38,6 +38,15 @@ class FinalizeStep(WizardStep):
             return False
         if not ctx.project_dir.exists():
             return False
+        dirty = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=ctx.project_dir,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if dirty.stdout.strip():
+            return False
         if is_pushed(ctx.project_dir) and repo_exists(ctx.full_repo):
             ui.skip_indicator("Code bereits gepusht")
             return True
