@@ -1338,6 +1338,77 @@ def ansible_k3s_upgrade(
     )
 
 
+@ansible.command("cert-manager-upgrade")
+@click.option(
+    "--vault-password",
+    "--vault_password",
+    "vault_password",
+    help="Vault password",
+)
+@click.option("--environment", required=True, help="Target environment")
+@click.option(
+    "--working-directory",
+    "--working_directory",
+    "working_directory",
+    default=".",
+    show_default=True,
+)
+@click.option(
+    "--cert-manager-version",
+    "--cert_manager_version",
+    "cert_manager_version",
+    default=None,
+    help=(
+        "Target chart version, e.g. v1.21.2. Defaults to cert_manager_chart_version "
+        "from the shared cert-manager role."
+    ),
+)
+@click.option(
+    "--shared-dir", "--shared_dir", default=".shared-roles", show_default=True
+)
+@click.option("--version", default="main", show_default=True)
+@click.option(
+    "--refresh/--no-refresh",
+    default=True,
+    show_default=True,
+    help="Refresh `.shared-roles` from git instead of reusing an existing exported copy",
+)
+@click.option(
+    "--repo-url",
+    "--repo_url",
+    default=None,
+    help="Override shared roles repository URL",
+)
+def ansible_cert_manager_upgrade(
+    vault_password,
+    environment,
+    working_directory,
+    cert_manager_version,
+    shared_dir,
+    version,
+    refresh,
+    repo_url,
+):
+    """Upgrade cert-manager cluster-wide to the pinned chart version."""
+    from cli.ansible_commands import resolve_vault_password, run_cert_manager_upgrade
+
+    resolved_vault_password = resolve_vault_password(
+        vault_password=vault_password,
+        working_directory=working_directory,
+    )
+
+    run_cert_manager_upgrade(
+        vault_password=resolved_vault_password,
+        environment=environment,
+        working_directory=working_directory,
+        cert_manager_version=cert_manager_version,
+        shared_dir=shared_dir,
+        version=version,
+        refresh=refresh,
+        repo_url=repo_url,
+    )
+
+
 @ansible.command("restore")
 @click.option(
     "--vault-password",
