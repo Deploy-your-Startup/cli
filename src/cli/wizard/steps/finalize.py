@@ -202,7 +202,12 @@ class FinalizeStep(WizardStep):
             last_err = (proc.stderr or proc.stdout or "").strip()
 
         if triggered:
-            ui.action_done("Infrastructure-Workflow läuft (siehe Actions-Tab)")
+            ui.action_done("Infrastructure-Workflow angefordert")
+            ui.info(
+                "GitHub weist den Runner zu; bei einer Actions-Störung kann "
+                "der Start verzögert sein. Status:\n"
+                f"  https://github.com/{ctx.full_repo}/actions"
+            )
         else:
             ui.action_fail("Workflow-Start fehlgeschlagen")
             ui.warning(
