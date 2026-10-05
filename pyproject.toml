@@ -13,6 +13,7 @@ authors = [
     {name = "Deploy Your Startup", email = "contact@deployyourstartup.com"}
 ]
 dependencies = [
+    "copier==9.18.2",
     "ansible==14.4.0",
     "click>=8.4.2",
     # Runtime requirement of the hetzner.hcloud Ansible collection (the deploy
