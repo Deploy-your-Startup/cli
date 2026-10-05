@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from cli.template_commands import DEFAULT_TEMPLATE
+
 
 @dataclass
 class BootstrapContext:
@@ -21,6 +23,8 @@ class BootstrapContext:
     kind: str = "fullstack"  # "fullstack" | "pitch"
     provider: str = "hetzner"  # "hetzner" | "byos" (bring your own server)
     docker_registry_host: str = "ghcr.io"
+    template_source: str = DEFAULT_TEMPLATE
+    template_version: str = "HEAD"
 
     # Bring-your-own-server inputs (provider == "byos")
     byos_host: str | None = None  # VPS IP or hostname Ansible connects to
