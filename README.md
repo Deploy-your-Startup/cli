@@ -370,3 +370,7 @@ are preserved. Run the affected project's checks before committing an update.
 The default update target is the template's HEAD. For repeatable rollouts across
 multiple projects, explicitly pass a tested tag or commit. Copier is pinned in
 the CLI's runtime dependencies.
+
+Optional login for templates with OAuth2 Proxy: install the official `auth0` CLI,
+run `auth0 login` for your tenant, then pass `--auth0-tenant <tenant>` to bootstrap.
+For an existing project: `startup auth0 setup --tenant <tenant> --project-name <name> --base-domain <domain>`.
