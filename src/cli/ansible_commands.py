@@ -890,6 +890,7 @@ def run_deploy(
     version: str = DEFAULT_VERSION,
     repo_url: str | None = None,
     refresh: bool = True,
+    extra_vars: dict[str, object] | None = None,
 ) -> None:
     working_dir = _resolve_working_dir(working_directory)
     setup_ansible(
@@ -899,6 +900,7 @@ def run_deploy(
         repo_url=repo_url,
         refresh=refresh,
     )
+    extra_vars_args = ["--extra-vars", json.dumps(extra_vars)] if extra_vars else []
     if _is_byos(working_dir):
         _run_byos_playbook(
             working_directory,
@@ -906,6 +908,7 @@ def run_deploy(
             shared_dir,
             tags=[service or "all"],
             skip_tags=["infrastructure"],
+            extra_vars=json.dumps(extra_vars) if extra_vars else None,
         )
         return
     hcloud_token = get_hcloud_token(
@@ -939,10 +942,47 @@ def run_deploy(
             service or "all",
             "--skip-tags",
             "infrastructure",
+            *extra_vars_args,
         ],
         cwd=working_dir,
         env=env,
         input_text=vault_password,
+    )
+
+
+def run_cert_manager_upgrade(
+    vault_password: str,
+    environment: str,
+    *,
+    working_directory: str = ".",
+    cert_manager_version: str | None = None,
+    shared_dir: str = DEFAULT_SHARED_DIR,
+    version: str = DEFAULT_VERSION,
+    repo_url: str | None = None,
+    refresh: bool = True,
+) -> None:
+    """Move the cluster's cert-manager to the pinned (or given) chart version.
+
+    Unlike k3s-upgrade this runs the project's own playbook, not a shared one:
+    the issuers depend on project settings such as cert_manager_solver, which
+    live in group_vars and are invisible to a playbook in .shared-roles. A
+    shared playbook would re-apply the issuers with the role defaults and
+    silently switch a DNS-01 project back to HTTP-01.
+    """
+    _validated_environment(environment)
+    extra_vars: dict[str, object] = {"cert_manager_upgrade": True}
+    if cert_manager_version:
+        extra_vars["cert_manager_chart_version"] = cert_manager_version
+    run_deploy(
+        vault_password,
+        environment,
+        "cert-manager",
+        working_directory=working_directory,
+        shared_dir=shared_dir,
+        version=version,
+        repo_url=repo_url,
+        refresh=refresh,
+        extra_vars=extra_vars,
     )
 
 
