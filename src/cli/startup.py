@@ -576,9 +576,9 @@ def update_secrets(
 
     # Return appropriate exit code based on the result
     if password_verification_failed:
-        return 1
+        raise click.exceptions.Exit(1)
     elif not success:
-        return 2
+        raise click.exceptions.Exit(2)
     return 0
 
 
@@ -614,7 +614,7 @@ def rotate_vault_password(
 
     if rotated_files:
         return 0
-    return 1
+    raise click.exceptions.Exit(1)
 
 
 @secrets.command("list-vaults")
@@ -630,7 +630,7 @@ def list_vault_files(repo, file, verbose):
 
     if vaulted_files:
         return 0
-    return 1
+    raise click.exceptions.Exit(1)
 
 
 @secrets.command("get-field")
@@ -656,7 +656,7 @@ def get_vault_field(file, field, vault_password, verbose):
     file_path = Path(file)
     if not file_path.exists():
         click.echo(f"Error: File {file} does not exist", err=True)
-        return 1
+        raise click.exceptions.Exit(1)
 
     vault_password = resolve_vault_password(vault_password, _password_scope(file))
 
@@ -666,7 +666,7 @@ def get_vault_field(file, field, vault_password, verbose):
     value = get_inline_vault_value(file_path, field, vault_password, verbose)
     if value is None:
         click.echo(f"Error: Could not retrieve value for field {field}", err=True)
-        return 1
+        raise click.exceptions.Exit(1)
 
     click.echo(value)
     return 0
@@ -696,7 +696,7 @@ def update_inline_vault_field_cmd(file, field, value, vault_password, verbose):
     file_path = Path(file)
     if not file_path.exists():
         click.echo(f"Error: File {file} does not exist", err=True)
-        return 1
+        raise click.exceptions.Exit(1)
 
     vault_password = resolve_vault_password(vault_password, _password_scope(file))
 
@@ -706,7 +706,7 @@ def update_inline_vault_field_cmd(file, field, value, vault_password, verbose):
     success = update_inline_vault_field(file_path, field, value, vault_password)
     if not success:
         click.echo(f"Error: Could not update value for field {field}", err=True)
-        return 1
+        raise click.exceptions.Exit(1)
 
     click.echo(f"Successfully updated value for {field}")
     return 0
@@ -790,13 +790,15 @@ def create_deployment(
     """Deploy an application from a GitHub template"""
     from cli.deploy import deploy_github_repo
 
-    return deploy_github_repo(
-        repo_name=repo_name,
-        repo_description=repo_description,
-        repo_private=repo_private,
-        template_owner=template_owner,
-        template_repo=template_repo,
-        verbose=verbose,
+    raise click.exceptions.Exit(
+        deploy_github_repo(
+            repo_name=repo_name,
+            repo_description=repo_description,
+            repo_private=repo_private,
+            template_owner=template_owner,
+            template_repo=template_repo,
+            verbose=verbose,
+        )
     )
 
 
@@ -829,13 +831,15 @@ def github_deploy(
     """Deploy a GitHub repository from a template"""
     from cli.deploy import deploy_github_repo
 
-    return deploy_github_repo(
-        repo_name=repo_name,
-        repo_description=repo_description,
-        repo_private=repo_private,
-        template_owner=template_owner,
-        template_repo=template_repo,
-        verbose=verbose,
+    raise click.exceptions.Exit(
+        deploy_github_repo(
+            repo_name=repo_name,
+            repo_description=repo_description,
+            repo_private=repo_private,
+            template_owner=template_owner,
+            template_repo=template_repo,
+            verbose=verbose,
+        )
     )
 
 

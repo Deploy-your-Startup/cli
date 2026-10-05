@@ -1,3 +1,4 @@
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -104,11 +105,12 @@ def test_oauth_flow_and_deployment():
                         call_args = mock_subprocess.call_args[0][0]
 
                         # Check that ansible-playbook was called
-                        assert "ansible-playbook" in call_args
+                        assert Path(call_args[0]).name == "ansible-playbook"
 
                         # Check that the repo name was passed correctly
                         extra_vars = mock_subprocess.call_args[0][0][-1]
-                        assert "repo_name=test-repo" in extra_vars
+                        assert json.loads(extra_vars)["repo_name"] == "test-repo"
+                        assert mock_token not in " ".join(call_args)
 
                         # Check that GitHub token was added to environment
                         env = mock_subprocess.call_args[1]["env"]

@@ -3,6 +3,7 @@ GitHub repository deployment module for creating repositories from templates.
 """
 
 import http.server
+import json
 import os
 import socketserver
 import subprocess
@@ -12,6 +13,8 @@ import webbrowser
 from pathlib import Path
 
 import httpx
+
+from cli.ansible_bin import ansible_bin
 
 REDIRECT_URI = "http://localhost:8080/callback"
 ACCESS_TOKEN = None
@@ -128,7 +131,7 @@ def run_ansible_deploy(
     Returns:
         bool: True if deployment was successful, False otherwise
     """
-    print("🚀 Running Ansible deployment via uv...")
+    print("🚀 Running Ansible deployment...")
     env = os.environ.copy()
     env["GITHUB_USER_TOKEN"] = token
 
@@ -165,19 +168,21 @@ def run_ansible_deploy(
     playbook_dir = playbook_path.parent
 
     try:
+        # The token travels only through the child environment. JSON keeps
+        # descriptions and other public values intact regardless of quoting.
         cmd = [
-            "uv",
-            "run",
-            "ansible-playbook",
-            str(playbook_path),
+            ansible_bin("ansible-playbook"),
+            str(playbook_path.resolve()),
             "--extra-vars",
-            (
-                f"github_token={token} "
-                f"repo_name={repo_name} "
-                f"repo_description='{repo_description}' "
-                f"repo_private={str(repo_private).lower()} "
-                f"template_owner={template_owner} "
-                f"template_repo={template_repo}"
+            json.dumps(
+                {
+                    "github_token": "{{ lookup('ansible.builtin.env', 'GITHUB_USER_TOKEN') }}",
+                    "repo_name": repo_name,
+                    "repo_description": repo_description,
+                    "repo_private": repo_private,
+                    "template_owner": template_owner,
+                    "template_repo": template_repo,
+                }
             ),
         ]
 
@@ -216,7 +221,7 @@ def generate_default_playbook(path, verbose=False):
   gather_facts: no
 
   vars:
-    github_token: "{{ github_token }}"
+    github_token: "{{ lookup('ansible.builtin.env', 'GITHUB_USER_TOKEN') }}"
     repo_name: "{{ repo_name }}"
     repo_description: "{{ repo_description | default('Created by DeployYourStartup.com') }}"
     repo_private: "{{ repo_private | default('true') }}"
@@ -237,11 +242,7 @@ def generate_default_playbook(path, verbose=False):
           description: "{{ repo_description }}"
           private: "{{ repo_private }}"
         status_code: [201]
-      register: repo_creation
-
-    - name: Show repository creation result
-      debug:
-        var: repo_creation
+      no_log: true
 
     - name: Success message
       debug:
