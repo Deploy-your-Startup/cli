@@ -9,6 +9,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+import yaml
+
 # ansible ships no type information, so ty cannot see this constant. Suppressed
 # at the import rather than by disabling `unresolved-import` globally — a real
 # typo in any other import must still fail the lint gate.
@@ -51,9 +53,6 @@ def rotate_full_vault_file(
 
     if new_content is not None:
         # We're replacing the content
-        with tempfile.NamedTemporaryFile(mode="w+", delete=False) as tf:
-            tf.write(new_content)
-
         # Encrypt the new content
         vault = VaultLib([(DEFAULT_VAULT_IDENTITY, vault_secret)])
         encrypted = vault.encrypt(new_content.encode())
@@ -306,420 +305,430 @@ def update_secrets(
         tf.write(vault_password)
         vault_file = tf.name
 
-    updated = []
-    password_verification_failed = False
+    try:
+        updated = []
+        password_verification_failed = False
 
-    # Ensure at least one action is specified
-    if (
-        not updates
-        and not vault_fields
-        and not vault_files
-        and not set_field
-        and not set_file_content
-    ):
-        error_msg = """
-Error: No update operation specified.
+        # Ensure at least one action is specified
+        if (
+            not updates
+            and not vault_fields
+            and not vault_files
+            and not set_field
+            and not set_file_content
+        ):
+            error_msg = """
+    Error: No update operation specified.
 
-Please specify at least one operation:
+    Please specify at least one operation:
 
-INLINE FIELD OPERATIONS (for YAML files with vault blocks):
-  --field-random <name>        Generate random value for field
-  --field-set <name> <value>   Set specific value for field
+    INLINE FIELD OPERATIONS (for YAML files with vault blocks):
+      --field-random <name>        Generate random value for field
+      --field-set <name> <value>   Set specific value for field
 
-FULL FILE OPERATIONS (for encrypted files):
-  --file-rotate <path>         Re-encrypt file with same password
-  --file-content <path> <content>  Replace file content
+    FULL FILE OPERATIONS (for encrypted files):
+      --file-rotate <path>         Re-encrypt file with same password
+      --file-content <path> <content>  Replace file content
 
-Examples:
-  # Update a single field with random value
-  startup secrets update --repo . --vault-password PASSWORD --field-random backend_db_password
+    Examples:
+      # Update a single field with random value
+      startup secrets update --repo . --vault-password PASSWORD --field-random backend_db_password
 
-  # Set specific field value
-  startup secrets update --repo . --vault-password PASSWORD --field-set api_key "my-secret-key"
+      # Set specific field value
+      startup secrets update --repo . --vault-password PASSWORD --field-set api_key "my-secret-key"
 
-  # Rotate an encrypted file
-  startup secrets update --repo . --vault-password PASSWORD --file-rotate secrets.yml
+      # Rotate an encrypted file
+      startup secrets update --repo . --vault-password PASSWORD --file-rotate secrets.yml
 
-For more help: startup secrets update --help
-"""
-        print(error_msg.strip())
-        return False, [], False
+    For more help: startup secrets update --help
+    """
+            print(error_msg.strip())
+            return False, [], False
 
-    # If a direct file path was provided, only process that file
-    yaml_files_to_process = []
-    if is_file:
-        if verbose:
-            print(f"Processing a single YAML file: {repo_path}")
-        yaml_files_to_process = [repo_path]
-    else:
-        # Find all YAML files in the workspace
-        yaml_files_to_process = find_yaml_files(work_dir)
+        # If a direct file path was provided, only process that file
+        yaml_files_to_process = []
+        if is_file:
+            if verbose:
+                print(f"Processing a single YAML file: {repo_path}")
+            yaml_files_to_process = [repo_path]
+        else:
+            # Find all YAML files in the workspace
+            yaml_files_to_process = find_yaml_files(work_dir)
 
-    # Process full vault files if specified
-    if vault_files:
-        print(f"Processing vault files: {vault_files}")
-        for vault_file_path in vault_files:
-            # Find the file in the workspace
-            matches = list(work_dir.glob(f"**/{vault_file_path}"))
-            if not matches:
-                print(f"Warning: Vault file {vault_file_path} not found in {work_dir}")
-                continue
-
-            for path in matches:
-                rel = path.relative_to(work_dir)
-
-                # Verify it's a vault file
-                if not is_full_vault_file(path):
-                    print(f"Warning: {rel} is not a vault file, skipping")
+        # Process full vault files if specified
+        if vault_files:
+            print(f"Processing vault files: {vault_files}")
+            for vault_file_path in vault_files:
+                # Find the file in the workspace
+                matches = list(work_dir.glob(f"**/{vault_file_path}"))
+                if not matches:
+                    print(
+                        f"Warning: Vault file {vault_file_path} not found in {work_dir}"
+                    )
                     continue
 
-                # If verify-password is enabled, check if we can decrypt the vault file
-                if verify_password:
-                    try:
-                        # Try to decrypt to verify the password
-                        vault_secret = VaultSecret(vault_password.encode())
-                        vault = VaultLib([(DEFAULT_VAULT_IDENTITY, vault_secret)])
-                        vault.decrypt(path.read_bytes())
-                    # Ansible reports a wrong vault password as any of several exception
-                    # types (AnsibleError, ValueError, binascii.Error, UnicodeDecodeError, ...),
-                    # so this stays broad on purpose.
-                    except Exception:  # noqa: BLE001
-                        print(
-                            f"Error: Cannot decrypt vault file {rel} with provided password."
-                        )
-                        password_verification_failed = True
+                for path in matches:
+                    rel = path.relative_to(work_dir)
+
+                    # Verify it's a vault file
+                    if not is_full_vault_file(path):
+                        print(f"Warning: {rel} is not a vault file, skipping")
                         continue
 
-                # Use the rotate_full_vault_file function for both dry run and normal mode
-                success = rotate_full_vault_file(
-                    path,
-                    vault_password,
-                    work_dir=work_dir,
-                    dry_run=dry_run,
-                    dry_dir=dry_dir,
-                    verify_password=verify_password,
-                )
-
-                if success:
-                    updated.append(rel)
-                    if verbose:
-                        print(f"Rotated vault file: {rel}")
-                else:
-                    print(f"Error rotating vault file {rel}")
-                    if not verify_password:
-                        print(
-                            "Consider using --verify-password to check if the password is correct"
-                        )
-
-    # Process inline vault blocks
-    if updates or vault_fields or set_field:
-        # Build updates mapping
-        updates_dict = {}
-        if updates:
-            # If updates is a string, try to load it as a JSON file
-            if isinstance(updates, str):
-                try:
-                    updates_dict.update(json.loads(Path(updates).read_text()))
-                except (json.JSONDecodeError, FileNotFoundError) as e:
-                    print(f"Error loading updates JSON: {e}", file=sys.stderr)
-                    return False, [], False
-            elif isinstance(updates, dict):
-                updates_dict.update(updates)
-
-        if vault_fields:
-            updates_dict.update(
-                {f: generate_random_secret(secret_length) for f in vault_fields}
-            )
-
-        if set_field:
-            # Add specific field/value pairs
-            for field, value in set_field:
-                updates_dict[field] = value
-                if verbose:
-                    print(f"Setting {field} to explicitly provided value")
-
-        # Which fields actually reached a file. A field whose vault block does
-        # not exist anywhere matches nothing and used to fall through here
-        # without a word, so `--field-set api_key ...` could report success
-        # having written nothing at all.
-        written_fields = set()
-
-        for yml in yaml_files_to_process:
-            # Skip full vault files when processing inline blocks
-            if is_full_vault_file(yml):
-                rel = yml.relative_to(work_dir) if not is_file else yml.name
-                if verbose:
-                    print(f"Skip {rel}, it's a full vault file (not inline blocks)")
-                continue
-
-            text = load_text(yml)
-            if text is None:
-                continue
-            modified = False
-            rel = yml.relative_to(work_dir) if not is_file else yml.name
-
-            for var, plain in updates_dict.items():
-                # Check if the variable exists with a vault block
-                if not re.search(
-                    rf"^[ \t]*{re.escape(var)}:\s*!vault \|", text, re.MULTILINE
-                ):
-                    if only_existing:
-                        if verbose:
-                            print(f"Skip {var} in {rel}, no existing block.")
-                        continue
-                else:
-                    # If verify-password is enabled, check if we can decrypt the existing vault
+                    # If verify-password is enabled, check if we can decrypt the vault file
                     if verify_password:
-                        vault_block = extract_vault_block(text, var)
-                        if vault_block and not verify_vault_password(
-                            vault_block, vault_password
-                        ):
+                        try:
+                            # Try to decrypt to verify the password
+                            vault_secret = VaultSecret(vault_password.encode())
+                            vault = VaultLib([(DEFAULT_VAULT_IDENTITY, vault_secret)])
+                            vault.decrypt(path.read_bytes())
+                        # Ansible reports a wrong vault password as any of several exception
+                        # types (AnsibleError, ValueError, binascii.Error, UnicodeDecodeError, ...),
+                        # so this stays broad on purpose.
+                        except Exception:  # noqa: BLE001
                             print(
-                                f"Error: Cannot decrypt existing vault for {var} in {rel}. Incorrect password."
+                                f"Error: Cannot decrypt vault file {rel} with provided password."
                             )
                             password_verification_failed = True
                             continue
 
-                new_block = regen_vault_string(var, plain, vault_file)
-                new_text, count = replace_block(text, var, new_block)
-                if count:
-                    modified = True
-                    text = new_text
-                    written_fields.add(var)
-                    if verbose:
-                        print(f"Replaced {var} ({count}) in {rel}")
-            if modified:
-                updated.append(rel)
-                if dry_run:
-                    # Create the output file in the dry run directory with the same structure
-                    out = dry_dir / rel
-                    out.parent.mkdir(parents=True, exist_ok=True)
-                    out.write_text(text)
-                    if verbose:
-                        print(f"Dry-run: wrote {out}")
-                else:
-                    backup_and_write(yml, text)
-                    if verbose:
-                        print(f"Updated {yml}")
-
-        # Fields that matched no vault block anywhere. Either create them in the
-        # file the caller named, or say so - never pretend they were stored.
-        missing = [v for v in updates_dict if v not in written_fields]
-        if missing and not only_existing:
-            if create_in:
-                target = Path(create_in)
-                if not target.is_absolute():
-                    target = work_dir / create_in
-                if not target.exists():
-                    print(f"Error: --create-in file does not exist: {target}")
-                    return False, updated, password_verification_failed
-
-                text = load_text(target) or ""
-                if text and not text.endswith("\n"):
-                    text += "\n"
-                for var in missing:
-                    block = regen_vault_string(var, updates_dict[var], vault_file)
-                    # Same indentation the replace path produces, so a created
-                    # field is indistinguishable from one that was already there.
-                    text += "\n" + normalize_vault_block(block)
-                    written_fields.add(var)
-
-                rel = (
-                    target.relative_to(work_dir)
-                    if work_dir in target.parents
-                    else target.name
-                )
-                if dry_run:
-                    out = dry_dir / rel
-                    out.parent.mkdir(parents=True, exist_ok=True)
-                    out.write_text(text)
-                    print(f"Dry-run: would create {', '.join(missing)} in {rel}")
-                else:
-                    backup_and_write(target, text)
-                    print(f"Created {', '.join(missing)} in {rel}")
-                if rel not in updated:
-                    updated.append(rel)
-            else:
-                print(
-                    "Error: no vault block exists for: "
-                    + ", ".join(sorted(missing))
-                    + "\nNothing was written for these. Pass --create-in <file.yml> "
-                    "to add them, or --only-existing to skip them on purpose."
-                )
-                return False, updated, password_verification_failed
-
-    # Process fully encrypted YAML files for field updates
-    if updates or vault_fields or set_field:
-        # Process only YAML files
-        yaml_extensions = {".yml", ".yaml"}
-        # If a direct file path is provided and it's a fully encrypted YAML file, process only that file
-        if (
-            is_file
-            and is_full_vault_file(repo_path)
-            and repo_path.suffix.lower() in yaml_extensions
-        ):
-            yaml_files_for_encryption = [repo_path]
-            print("Processing field updates in fully encrypted YAML files")
-        else:
-            # Otherwise process all fully encrypted YAML files found in the workspace
-            yaml_files_for_encryption = [
-                yml
-                for yml in yaml_files_to_process
-                if is_full_vault_file(yml) and yml.suffix.lower() in yaml_extensions
-            ]
-            if yaml_files_for_encryption:
-                print("Processing field updates in fully encrypted YAML files")
-
-        for yml in yaml_files_for_encryption:
-            rel = yml.relative_to(work_dir) if not is_file else yml.name
-
-            try:
-                # Decrypt the file
-                vault_secret = VaultSecret(vault_password.encode())
-                vault = VaultLib([(DEFAULT_VAULT_IDENTITY, vault_secret)])
-                decrypted_content = vault.decrypt(yml.read_bytes()).decode("utf-8")
-
-                # Update the YAML content
-                new_content = update_fields_in_yaml(
-                    decrypted_content, updates_dict, vault_file
-                )
-                if new_content is not None:
-                    # Re-encrypt the updated content
-                    if verbose:
-                        print(f"Updating fields in encrypted YAML file: {rel}")
-
+                    # Use the rotate_full_vault_file function for both dry run and normal mode
                     success = rotate_full_vault_file(
-                        yml,
+                        path,
                         vault_password,
                         work_dir=work_dir,
-                        new_content=new_content,
                         dry_run=dry_run,
                         dry_dir=dry_dir,
-                        verify_password=False,  # Already verified by decrypting
+                        verify_password=verify_password,
                     )
 
                     if success:
                         updated.append(rel)
+                        if verbose:
+                            print(f"Rotated vault file: {rel}")
                     else:
-                        print(f"Error updating encrypted YAML file: {rel}")
-                else:
-                    if verbose:
-                        print(f"No fields to update in: {rel}")
+                        print(f"Error rotating vault file {rel}")
+                        if not verify_password:
+                            print(
+                                "Consider using --verify-password to check if the password is correct"
+                            )
 
-            # Top-level boundary: any failure here is reported to the user and
-            # handled, never surfaced as a traceback.
-            except Exception as e:  # noqa: BLE001
-                print(
-                    f"Error processing encrypted YAML file {rel}: {e}", file=sys.stderr
+        # Process inline vault blocks
+        if updates or vault_fields or set_field:
+            # Build updates mapping
+            updates_dict = {}
+            if updates:
+                # If updates is a string, try to load it as a JSON file
+                if isinstance(updates, str):
+                    try:
+                        updates_dict.update(json.loads(Path(updates).read_text()))
+                    except (json.JSONDecodeError, FileNotFoundError) as e:
+                        print(f"Error loading updates JSON: {e}", file=sys.stderr)
+                        return False, [], False
+                elif isinstance(updates, dict):
+                    updates_dict.update(updates)
+
+            if vault_fields:
+                updates_dict.update(
+                    {f: generate_random_secret(secret_length) for f in vault_fields}
                 )
-                if verify_password:
-                    password_verification_failed = True
 
-    # Process file content replacements if specified
-    if set_file_content:
-        print("Processing file content replacements")
-        for file_path, new_content in set_file_content:
-            # Find the file in the workspace
-            matches = list(work_dir.glob(f"**/{file_path}"))
-            if not matches:
-                matches = [work_dir / file_path]
-                if verbose:
+            if set_field:
+                # Add specific field/value pairs
+                for field, value in set_field:
+                    updates_dict[field] = value
+                    if verbose:
+                        print(f"Setting {field} to explicitly provided value")
+
+            # Which fields actually reached a file. A field whose vault block does
+            # not exist anywhere matches nothing and used to fall through here
+            # without a word, so `--field-set api_key ...` could report success
+            # having written nothing at all.
+            written_fields = set()
+
+            for yml in yaml_files_to_process:
+                # Skip full vault files when processing inline blocks
+                if is_full_vault_file(yml):
+                    rel = yml.relative_to(work_dir) if not is_file else yml.name
+                    if verbose:
+                        print(f"Skip {rel}, it's a full vault file (not inline blocks)")
+                    continue
+
+                text = load_text(yml)
+                if text is None:
+                    continue
+                modified = False
+                rel = yml.relative_to(work_dir) if not is_file else yml.name
+
+                for var, plain in updates_dict.items():
+                    # Check if the variable exists with a vault block
+                    if not re.search(
+                        rf"^[ \t]*{re.escape(var)}:\s*!vault \|", text, re.MULTILINE
+                    ):
+                        if only_existing:
+                            if verbose:
+                                print(f"Skip {var} in {rel}, no existing block.")
+                            continue
+                    else:
+                        # If verify-password is enabled, check if we can decrypt the existing vault
+                        if verify_password:
+                            vault_block = extract_vault_block(text, var)
+                            if vault_block and not verify_vault_password(
+                                vault_block, vault_password
+                            ):
+                                print(
+                                    f"Error: Cannot decrypt existing vault for {var} in {rel}. Incorrect password."
+                                )
+                                password_verification_failed = True
+                                continue
+
+                    new_block = regen_vault_string(var, plain, vault_file)
+                    new_text, count = replace_block(text, var, new_block)
+                    if count:
+                        modified = True
+                        text = new_text
+                        written_fields.add(var)
+                        if verbose:
+                            print(f"Replaced {var} ({count}) in {rel}")
+                if modified:
+                    updated.append(rel)
+                    if dry_run:
+                        # Create the output file in the dry run directory with the same structure
+                        out = dry_dir / rel
+                        out.parent.mkdir(parents=True, exist_ok=True)
+                        out.write_text(text)
+                        if verbose:
+                            print(f"Dry-run: wrote {out}")
+                    else:
+                        backup_and_write(yml, text)
+                        if verbose:
+                            print(f"Updated {yml}")
+
+        # Process fully encrypted YAML files for field updates
+        if updates or vault_fields or set_field:
+            # Process only YAML files
+            yaml_extensions = {".yml", ".yaml"}
+            # If a direct file path is provided and it's a fully encrypted YAML file, process only that file
+            if (
+                is_file
+                and is_full_vault_file(repo_path)
+                and repo_path.suffix.lower() in yaml_extensions
+            ):
+                yaml_files_for_encryption = [repo_path]
+                print("Processing field updates in fully encrypted YAML files")
+            else:
+                # Otherwise process all fully encrypted YAML files found in the workspace
+                yaml_files_for_encryption = [
+                    yml
+                    for yml in yaml_files_to_process
+                    if is_full_vault_file(yml) and yml.suffix.lower() in yaml_extensions
+                ]
+                if yaml_files_for_encryption:
+                    print("Processing field updates in fully encrypted YAML files")
+
+            for yml in yaml_files_for_encryption:
+                rel = yml.relative_to(work_dir) if not is_file else yml.name
+
+                try:
+                    # Decrypt the file
+                    vault_secret = VaultSecret(vault_password.encode())
+                    vault = VaultLib([(DEFAULT_VAULT_IDENTITY, vault_secret)])
+                    decrypted_content = vault.decrypt(yml.read_bytes()).decode("utf-8")
+
+                    # Update the YAML content
+                    new_content = update_fields_in_yaml(
+                        decrypted_content, updates_dict, vault_file
+                    )
+                    if new_content is not None:
+                        # Re-encrypt the updated content
+                        if verbose:
+                            print(f"Updating fields in encrypted YAML file: {rel}")
+
+                        success = rotate_full_vault_file(
+                            yml,
+                            vault_password,
+                            work_dir=work_dir,
+                            new_content=new_content,
+                            dry_run=dry_run,
+                            dry_dir=dry_dir,
+                            verify_password=False,  # Already verified by decrypting
+                        )
+
+                        if success:
+                            updated.append(rel)
+                            written_fields.update(
+                                updates_dict.keys() & yaml.safe_load(new_content).keys()
+                            )
+                        else:
+                            print(f"Error updating encrypted YAML file: {rel}")
+                    else:
+                        if verbose:
+                            print(f"No fields to update in: {rel}")
+
+                # Top-level boundary: any failure here is reported to the user and
+                # handled, never surfaced as a traceback.
+                except Exception as e:  # noqa: BLE001
                     print(
-                        f"File {file_path} not found in {work_dir}; creating it before encrypting"
+                        f"Error processing encrypted YAML file {rel}: {e}",
+                        file=sys.stderr,
+                    )
+                    if verify_password:
+                        password_verification_failed = True
+
+            # Fields that matched no vault block anywhere. Either create them in the
+            # file the caller named, or say so - never pretend they were stored.
+            missing = [v for v in updates_dict if v not in written_fields]
+            if missing and not only_existing:
+                if create_in:
+                    target = Path(create_in)
+                    if not target.is_absolute():
+                        target = work_dir / create_in
+                    if not target.exists():
+                        print(f"Error: --create-in file does not exist: {target}")
+                        return False, updated, password_verification_failed
+
+                    text = load_text(target) or ""
+                    if text and not text.endswith("\n"):
+                        text += "\n"
+                    for var in missing:
+                        block = regen_vault_string(var, updates_dict[var], vault_file)
+                        # Same indentation the replace path produces, so a created
+                        # field is indistinguishable from one that was already there.
+                        text += "\n" + normalize_vault_block(block)
+                        written_fields.add(var)
+
+                    rel = (
+                        target.relative_to(work_dir)
+                        if work_dir in target.parents
+                        else target.name
+                    )
+                    if dry_run:
+                        out = dry_dir / rel
+                        out.parent.mkdir(parents=True, exist_ok=True)
+                        out.write_text(text)
+                        print(f"Dry-run: would create {', '.join(missing)} in {rel}")
+                    else:
+                        backup_and_write(target, text)
+                        print(f"Created {', '.join(missing)} in {rel}")
+                    if rel not in updated:
+                        updated.append(rel)
+                else:
+                    print(
+                        "Error: no vault block exists for: "
+                        + ", ".join(sorted(missing))
+                        + "\nNothing was written for these. Pass --create-in <file.yml> "
+                        "to add them, or --only-existing to skip them on purpose."
+                    )
+                    return False, updated, password_verification_failed
+
+        # Process file content replacements if specified
+        if set_file_content:
+            print("Processing file content replacements")
+            for file_path, new_content in set_file_content:
+                # Find the file in the workspace
+                matches = list(work_dir.glob(f"**/{file_path}"))
+                if not matches:
+                    matches = [work_dir / file_path]
+                    if verbose:
+                        print(
+                            f"File {file_path} not found in {work_dir}; creating it before encrypting"
+                        )
+
+                for path in matches:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    rel = path.relative_to(work_dir)
+
+                    # If verify-password is enabled and it's a vault file, check if we can decrypt it
+                    if verify_password and is_full_vault_file(path):
+                        try:
+                            vault_secret = VaultSecret(vault_password.encode())
+                            vault = VaultLib([(DEFAULT_VAULT_IDENTITY, vault_secret)])
+                            vault.decrypt(path.read_bytes())
+                        # Ansible reports a wrong vault password as any of several exception
+                        # types (AnsibleError, ValueError, binascii.Error, UnicodeDecodeError, ...),
+                        # so this stays broad on purpose.
+                        except Exception:  # noqa: BLE001
+                            print(
+                                f"Error: Cannot decrypt vault file {rel} with provided password."
+                            )
+                            password_verification_failed = True
+                            continue
+
+                    # Use the rotate_full_vault_file function with new content
+                    success = rotate_full_vault_file(
+                        path,
+                        vault_password,
+                        work_dir=work_dir,
+                        new_content=new_content,  # Pass the new content here
+                        dry_run=dry_run,
+                        dry_dir=dry_dir,
+                        verify_password=verify_password,
                     )
 
-            for path in matches:
-                path.parent.mkdir(parents=True, exist_ok=True)
-                rel = path.relative_to(work_dir)
+                    if success:
+                        updated.append(rel)
+                        if verbose:
+                            print(f"Updated content of file: {rel}")
+                    else:
+                        print(f"Error updating content of file {rel}")
+                        if not verify_password:
+                            print(
+                                "Consider using --verify-password to check if the password is correct"
+                            )
 
-                # If verify-password is enabled and it's a vault file, check if we can decrypt it
-                if verify_password and is_full_vault_file(path):
-                    try:
-                        vault_secret = VaultSecret(vault_password.encode())
-                        vault = VaultLib([(DEFAULT_VAULT_IDENTITY, vault_secret)])
-                        vault.decrypt(path.read_bytes())
-                    # Ansible reports a wrong vault password as any of several exception
-                    # types (AnsibleError, ValueError, binascii.Error, UnicodeDecodeError, ...),
-                    # so this stays broad on purpose.
-                    except Exception:  # noqa: BLE001
-                        print(
-                            f"Error: Cannot decrypt vault file {rel} with provided password."
-                        )
-                        password_verification_failed = True
-                        continue
-
-                # Use the rotate_full_vault_file function with new content
-                success = rotate_full_vault_file(
-                    path,
-                    vault_password,
-                    work_dir=work_dir,
-                    new_content=new_content,  # Pass the new content here
-                    dry_run=dry_run,
-                    dry_dir=dry_dir,
-                    verify_password=verify_password,
-                )
-
-                if success:
-                    updated.append(rel)
-                    if verbose:
-                        print(f"Updated content of file: {rel}")
-                else:
-                    print(f"Error updating content of file {rel}")
-                    if not verify_password:
-                        print(
-                            "Consider using --verify-password to check if the password is correct"
-                        )
-
-    # Cleanup
-    Path(vault_file).unlink()
-    if not Path(repo).exists():
-        shutil.rmtree(work_dir)
-
-    # Summary
-    if password_verification_failed:
-        print(
-            "⚠️ Some updates were skipped due to vault password verification failures."
-        )
-        if dry_run:
+        # Summary
+        if password_verification_failed:
             print(
-                "Note: In dry-run mode, only files that could be successfully processed were written to dry-run-output/"
+                "⚠️ Some updates were skipped due to vault password verification failures."
             )
-        return False, updated, True
-    elif updated:
-        prefix = "dry-run-output/" if dry_run else ""
+            if dry_run:
+                print(
+                    "Note: In dry-run mode, only files that could be successfully processed were written to dry-run-output/"
+                )
+            return False, updated, True
+        elif updated:
+            prefix = "dry-run-output/" if dry_run else ""
 
-        # Add a clear dry-run indicator to the output
-        dry_run_prefix = "DRY RUN: " if dry_run else ""
+            # Add a clear dry-run indicator to the output
+            dry_run_prefix = "DRY RUN: " if dry_run else ""
 
-        # Different summary messages based on what was updated
-        if set_file_content and not (
-            updates or vault_fields or set_field or vault_files
-        ):
-            print(f"{dry_run_prefix}Updated file content:")
-        elif vault_files and not (updates or vault_fields or set_field):
-            print(f"{dry_run_prefix}Rotated vault files:")
-        elif updates or vault_fields or set_field:
-            field_names = []
-            if updates and isinstance(updates, dict):
-                field_names.extend(updates.keys())
-            elif updates and isinstance(updates, str):
-                # Not a readable JSON object — field names stay unset.
-                with contextlib.suppress(
-                    OSError, UnicodeDecodeError, json.JSONDecodeError, AttributeError
-                ):
-                    field_names.extend(json.loads(Path(updates).read_text()).keys())
-            if vault_fields:
-                field_names.extend(vault_fields)
-            if set_field:
-                field_names.extend([field for field, _ in set_field])
+            # Different summary messages based on what was updated
+            if set_file_content and not (
+                updates or vault_fields or set_field or vault_files
+            ):
+                print(f"{dry_run_prefix}Updated file content:")
+            elif vault_files and not (updates or vault_fields or set_field):
+                print(f"{dry_run_prefix}Rotated vault files:")
+            elif updates or vault_fields or set_field:
+                field_names = []
+                if updates and isinstance(updates, dict):
+                    field_names.extend(updates.keys())
+                elif updates and isinstance(updates, str):
+                    # Not a readable JSON object — field names stay unset.
+                    with contextlib.suppress(
+                        OSError,
+                        UnicodeDecodeError,
+                        json.JSONDecodeError,
+                        AttributeError,
+                    ):
+                        field_names.extend(json.loads(Path(updates).read_text()).keys())
+                if vault_fields:
+                    field_names.extend(vault_fields)
+                if set_field:
+                    field_names.extend([field for field, _ in set_field])
 
-            print(f"{dry_run_prefix}Updated fields {', '.join(field_names)} in:")
+                print(f"{dry_run_prefix}Updated fields {', '.join(field_names)} in:")
 
-        for f in updated:
-            print(f"  - {prefix}{f}")
-        return True, updated, False
-    else:
-        # Also add dry-run indicator here
-        dry_run_prefix = "DRY RUN: " if dry_run else ""
-        print(f"{dry_run_prefix}No updates applied.")
-        return True, [], False
+            for f in updated:
+                print(f"  - {prefix}{f}")
+            return True, updated, False
+        else:
+            # Also add dry-run indicator here
+            dry_run_prefix = "DRY RUN: " if dry_run else ""
+            print(f"{dry_run_prefix}No updates applied.")
+            return True, [], False
+
+    finally:
+        Path(vault_file).unlink(missing_ok=True)
+        if not repo_path.exists():
+            shutil.rmtree(work_dir)

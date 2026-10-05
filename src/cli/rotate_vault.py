@@ -105,6 +105,7 @@ def rotate_vault_password(
             return False
 
     rotated_files = []
+    failed = False
     for path in walk_files(base_path, specific_path):
         try:
             if is_full_vault_file(path):
@@ -120,10 +121,18 @@ def rotate_vault_password(
                     rotated_files.append(str(path.relative_to(base_path)))
                     if not dry_run:
                         logger.info(f"Rotated vault file: {path}")
+                else:
+                    failed = True
             else:
                 # Check for inline vault blocks
                 text = path.read_text(encoding="utf-8", errors="ignore")
                 if "$ANSIBLE_VAULT" in text or "!vault" in text:
+                    # Do not partially rotate a file containing blocks sealed
+                    # with different passwords.
+                    if not check_can_decrypt_with_password(path, old_password):
+                        logger.error(f"Cannot decrypt vault blocks in {path}")
+                        failed = True
+                        continue
                     # Use the modular rotate_inline_blocks function
                     new_text, modified = rotate_inline_blocks(
                         text, old_password, new_password, dry_run
@@ -136,10 +145,16 @@ def rotate_vault_password(
                             success = safe_write(path, new_text)
                             if success:
                                 logger.info(f"Updated inline vault blocks: {path}")
+                            else:
+                                failed = True
+                                continue
                         rotated_files.append(str(path.relative_to(base_path)))
+                    else:
+                        failed = True
         # Top-level boundary: any failure here is reported to the user and
         # handled, never surfaced as a traceback.
         except Exception as e:  # noqa: BLE001
             logger.error(f"Error processing {path}: {e}")
+            failed = True
 
-    return rotated_files
+    return False if failed else rotated_files
