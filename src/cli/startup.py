@@ -9,6 +9,8 @@ from pathlib import Path
 
 import click
 
+from cli.template_commands import DEFAULT_TEMPLATE, template
+
 
 def run_command(cmd, verbose=False):
     """Run a command with proper error handling"""
@@ -38,6 +40,9 @@ def cli():
     """Startup CLI - Command line tool for Deploy Your Startup operations"""
 
 
+cli.add_command(template)
+
+
 # === BOOTSTRAP COMMAND ===
 @cli.command("bootstrap")
 @click.option("--verbose", "-V", is_flag=True, help="Verbose output")
@@ -57,6 +62,17 @@ def cli():
 @click.option("--sentry-dsn", help="Sentry DSN (full-stack only).")
 @click.option("--github-username", help="GitHub user or org (default: gh user).")
 @click.option("--output-dir", help="Directory the project is created in.")
+@click.option(
+    "--template",
+    "template_source",
+    default=DEFAULT_TEMPLATE,
+    help="Full-stack Copier template Git URL or local repository.",
+)
+@click.option(
+    "--template-version",
+    default="HEAD",
+    help="Full-stack template tag, branch or commit.",
+)
 @click.option(
     "--domain-owned/--buy-domain",
     default=None,
@@ -92,6 +108,8 @@ def bootstrap(
     sentry_dsn,
     github_username,
     output_dir,
+    template_source,
+    template_version,
     domain_owned,
     hetzner_token,
     hetzner_token_stdin,
@@ -265,6 +283,8 @@ def bootstrap(
         # the destination, so a relative path would be resolved twice and the
         # clone would land in <output_dir>/<output_dir>/<name>.
         output_dir=Path(output_dir).expanduser().resolve(),
+        template_source=template_source,
+        template_version=template_version,
         kind=kind,
         provider=provider,
         byos_host=byos_host,

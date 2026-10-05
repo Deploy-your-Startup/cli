@@ -332,3 +332,39 @@ cli/
 ## License
 
 MIT
+
+## Application template updates (Copier)
+
+Full-stack `startup bootstrap` renders the Django template with Copier. Select
+an explicit template using `--template <git-url-or-local-repo>` and
+`--template-version <tag-or-commit>` when reviewing a release. Pitch templates
+and `startup sync` retain their existing workflows.
+
+Existing projects can record a baseline without changing their files:
+
+```bash
+startup template adopt --project-dir ./my-startup --version <template-tag-or-commit>
+```
+
+The command reads public project parameters from group_vars and the Git remote.
+Override a public field with `--data base_domain=example.com`. Private keys,
+tokens and other secret fields are not accepted. Review and commit the generated
+`.copier-answers.yml`. Adoption treats existing differences and deleted template
+files as project customizations; it does not apply historical template changes.
+
+Then preview and apply the same target version:
+
+```bash
+startup template update --project-dir ./my-startup --version <template-tag-or-commit> --dry-run
+startup template update --project-dir ./my-startup --version <template-tag-or-commit>
+```
+
+`--dry-run` performs a real update in a temporary Git clone and displays tracked
+diffs and newly added file names. Both commands require a clean repository.
+Conflicts produce a failing exit status and remain visible for manual resolution.
+The commands do not commit, push, deploy or decrypt Vault; existing group_vars
+are preserved. Run the affected project's checks before committing an update.
+
+The default update target is the template's HEAD. For repeatable rollouts across
+multiple projects, explicitly pass a tested tag or commit. Copier is pinned in
+the CLI's runtime dependencies.

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import contextlib
 import shlex
-import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -13,14 +12,13 @@ import click
 
 from cli import wizard_output as ui
 from cli.bootstrap import (
-    TEMPLATE_OWNER,
-    TEMPLATE_REPO,
     TEMPLATE_VAULT_PASSWORD,
     _generate_docker_config_b64,
     _generate_ssh_keypair,
     template_replacements,
 )
-from cli.sync_commands import _replace_placeholders, _run_command
+from cli.sync_commands import _run_command
+from cli.template_commands import ANSWERS_FILE, render_project
 
 from ..base import WizardStep, has_placeholders, prompt_user_public_key, repo_exists
 from ..context import BootstrapContext
@@ -162,23 +160,12 @@ class ProjectStep(WizardStep):
     def run(self, ctx: BootstrapContext) -> None:
         need_clone = not ctx.project_dir.exists()
 
-        # 3a. Clone template locally as a fresh repo
+        # 3a. Create a fresh application repository.
         if need_clone:
-            ui.action_start("Template klonen...")
-            _run_command(
-                [
-                    "git",
-                    "clone",
-                    "--depth",
-                    "1",
-                    f"https://github.com/{TEMPLATE_OWNER}/{TEMPLATE_REPO}.git",
-                    str(ctx.project_dir),
-                ],
-                cwd=ctx.output_dir,
-            )
-            shutil.rmtree(ctx.project_dir / ".git")
+            ui.action_start("Projektverzeichnis erstellen...")
+            ctx.project_dir.mkdir(parents=True)
             _run_command(["git", "init", "-b", "main"], cwd=ctx.project_dir)
-            ui.action_done("Template geklont")
+            ui.action_done("Projektverzeichnis erstellt")
 
         # 3b. SSH Keys
         user_public_key = prompt_user_public_key(non_interactive=ctx.non_interactive)
@@ -202,7 +189,15 @@ class ProjectStep(WizardStep):
             ci_public_key=ci_public_key,
             user_public_key=user_public_key,
         )
-        _replace_placeholders(ctx.project_dir, replacements)
+        # Resuming a partly completed bootstrap must never overwrite application
+        # edits or advance its recorded baseline. Updates have their own command.
+        if not (ctx.project_dir / ANSWERS_FILE).exists():
+            render_project(
+                ctx.project_dir,
+                replacements,
+                source=ctx.template_source,
+                version=ctx.template_version,
+            )
         ui.action_done("Projekt konfiguriert")
 
         # 3d. Vault secrets
