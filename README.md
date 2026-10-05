@@ -374,3 +374,9 @@ the CLI's runtime dependencies.
 Optional login for templates with OAuth2 Proxy: install the official `auth0` CLI,
 run `auth0 login` for your tenant, then pass `--auth0-tenant <tenant>` to bootstrap.
 For an existing project: `startup auth0 setup --tenant <tenant> --project-name <name> --base-domain <domain>`.
+Templates declare optional Auth0 support in `startup-template.yml`; bootstrap asks
+for the tenant and validates CLI access before provisioning. With `--yes`, pass
+`--auth0-tenant <tenant>` or explicitly `--without-auth`.
+After deployment: `startup auth0 validate --tenant <tenant> --base-domain <domain>`
+opens a temporary browser for a real login and checks the protected API and secure
+HttpOnly session. No passwords, tokens or browser state are printed or saved.
