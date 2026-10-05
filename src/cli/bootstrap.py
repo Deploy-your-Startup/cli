@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 import json
 import os
-import shutil
 import subprocess
 import tempfile
 import webbrowser
@@ -15,9 +14,9 @@ import click
 
 from cli.ansible_commands import DEFAULT_SHARED_REPO_NAME
 from cli.sync_commands import (
-    _replace_placeholders,
     _run_command,
 )
+from cli.template_commands import render_project
 
 TEMPLATE_OWNER = "Deploy-your-Startup"
 TEMPLATE_REPO = "django-backend-template"
@@ -204,29 +203,14 @@ def bootstrap_project(
                 "repo",
                 "create",
                 full_repo,
-                "--template",
-                f"{TEMPLATE_OWNER}/{TEMPLATE_REPO}",
                 "--private",
                 "--clone",
             ],
             cwd=output_dir,
         )
     else:
-        click.echo(f"Cloning template to {project_dir} ...")
-        _run_command(
-            [
-                "git",
-                "clone",
-                "--depth",
-                "1",
-                f"https://github.com/{TEMPLATE_OWNER}/{TEMPLATE_REPO}.git",
-                str(project_dir),
-            ],
-            cwd=output_dir,
-        )
-        # Remove template git history and init fresh
-        shutil.rmtree(project_dir / ".git")
-        _run_command(["git", "init"], cwd=project_dir)
+        project_dir.mkdir(parents=True)
+        _run_command(["git", "init", "-b", "main"], cwd=project_dir)
 
     # Step 2: Generate SSH keys
     click.echo("\n--- Step 2/7: Generating SSH keys ---")
@@ -254,7 +238,7 @@ def bootstrap_project(
         user_public_key=user_public_key,
     )
 
-    _replace_placeholders(project_dir, replacements)
+    render_project(project_dir, replacements)
     click.echo(f"  Replaced {len(replacements)} placeholders.")
 
     # Step 4: Generate vault password and encrypt secrets
