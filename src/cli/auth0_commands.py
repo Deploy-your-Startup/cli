@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import secrets
 import shutil
@@ -115,8 +116,13 @@ def configure_auth0(
         check=False,
     )
     cookie_secret = (
-        cookie.stdout.strip() if cookie.returncode == 0 else secrets.token_urlsafe(32)
+        cookie.stdout.strip()
+        if cookie.returncode == 0
+        else base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
     )
+    if len(cookie_secret) == 43:
+        # Padding preserves the key; Ansible's decoder requires it.
+        cookie_secret += "="
     values = {
         "oauth2_proxy_client_id": app["client_id"],
         "oauth2_proxy_client_secret": app["client_secret"],
