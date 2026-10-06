@@ -429,5 +429,4 @@ HttpOnly session. No passwords, tokens or browser state are printed or saved.
 
 ## Maintainer releases
 
-See [CLI releases](docs/releases.md) for tags, verification, installer updates
-and optional PyPI publishing.
+See [CLI releases](docs/releases.md) for tags, verification and installer updates.

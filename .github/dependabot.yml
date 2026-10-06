@@ -12,7 +12,7 @@ updates:
       python-deps:
         patterns:
           - "*"
-  # Keep the publish workflow's actions (checkout, setup-uv, pypi-publish, …) current.
+  # Keep the CI workflow's actions (checkout, setup-uv, …) current.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
