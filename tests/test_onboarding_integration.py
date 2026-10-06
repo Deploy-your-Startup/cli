@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def launch(tmp_path, answers, *options):
+def launch(tmp_path, answers, *options, domain_option=("--domain-owned",)):
     return subprocess.run(
         [
             sys.executable,
@@ -19,7 +19,7 @@ def launch(tmp_path, answers, *options):
             "fullstack",
             "--provider",
             "hetzner",
-            "--domain-owned",
+            *domain_option,
             "--github-username",
             "example-owner",
             "--output-dir",
@@ -82,3 +82,32 @@ def test_interrupted_onboarding_does_not_create_resources(tmp_path):
     assert result.returncode != 0
     assert "Aborted" in result.stderr
     assert not (tmp_path / "projects").exists()
+
+
+def test_user_without_a_domain_is_offered_registration(tmp_path):
+    # GIVEN a new user who has no domain yet and first types something invalid.
+    # WHEN they choose to register one and then decline creation.
+    result = launch(
+        tmp_path, "my-startup\n2\nkeine\nmy-startup.de\n\n\n", domain_option=()
+    )
+    # THEN the CLI asks before assuming ownership, rejects the non-domain and
+    # plans the registration instead of treating the domain as owned.
+    assert result.returncode == 0, result.stderr
+    assert "Do you already have a domain?" in result.stdout
+    assert "register a new one through Hetzner" in result.stdout
+    assert "Domain to register (for example, example.com)" in result.stdout
+    assert "Enter a domain like example.com" in result.stdout
+    assert "my-startup.de (register through Hetzner)" in result.stdout
+    assert "Cancelled. No resources were created." in result.stdout
+    assert not (tmp_path / "projects").exists()
+
+
+def test_user_with_a_domain_is_asked_for_it(tmp_path):
+    # GIVEN a new user who already owns a domain.
+    # WHEN they say so and enter it, then decline creation.
+    result = launch(tmp_path, "my-startup\n1\nexample.com\n\n\n", domain_option=())
+    # THEN the plan uses that domain without a registration.
+    assert result.returncode == 0, result.stderr
+    assert "Your domain (for example, example.com)" in result.stdout
+    assert "register through Hetzner" not in result.stdout.split("Your launch plan")[1]
+    assert "Cancelled. No resources were created." in result.stdout
