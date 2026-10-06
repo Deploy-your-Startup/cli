@@ -274,7 +274,7 @@ def bootstrap(
             "Hetzner" if provider == "hetzner" else "Bring your own server"
         )
         summary["Registry"] = f"ghcr.io/{github_username}"
-        summary["Postgres"] = "17"
+        summary["Postgres"] = "18.6"
     ui.input_summary(summary)
 
     if not assume_yes and not ui.confirm("Passt das?", default=True):
@@ -290,7 +290,7 @@ def bootstrap(
         base_domain=base_domain,
         additional_domains=additional_domains,
         github_username=github_username,
-        postgres_version="17",
+        postgres_version="18.6",
         sentry_dsn=sentry_dsn,
         # Absolute: steps run git with cwd=output_dir and pass project_dir as
         # the destination, so a relative path would be resolved twice and the
@@ -646,6 +646,35 @@ def list_vault_files(repo, file, verbose):
     if vaulted_files:
         return 0
     raise click.exceptions.Exit(1)
+
+
+@secrets.command("get-file")
+@click.option(
+    "--file",
+    "-f",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+def get_vault_file(file):
+    """Write a vaulted file to stdout for piping, using Keychain or the CI environment."""
+    from ansible.errors import AnsibleError
+    from ansible.parsing.vault import VaultLib, VaultSecret, is_encrypted
+
+    from cli.ansible_commands import resolve_vault_password
+
+    encrypted = file.read_bytes()
+    if not is_encrypted(encrypted):
+        raise click.ClickException("The requested file is not an Ansible Vault file.")
+    password = resolve_vault_password(None, _password_scope(str(file)))
+    try:
+        value = VaultLib([("default", VaultSecret(password.encode()))]).decrypt(
+            encrypted
+        )
+    except (AnsibleError, ValueError):
+        raise click.ClickException(
+            "Could not decrypt the requested Vault file."
+        ) from None
+    sys.stdout.buffer.write(value)
 
 
 @secrets.command("get-field")
