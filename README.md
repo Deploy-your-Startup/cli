@@ -21,13 +21,12 @@ Install uv and the GitHub CLI, for example with Homebrew:
 
 ```bash
 brew install uv gh
-uv tool install --python 3.12 'git+https://github.com/Deploy-your-Startup/cli.git@main'
+uv tool install --python 3.12 'git+https://github.com/Deploy-your-Startup/cli.git@v0.1.0'
 uv tool update-shell
 ```
 
 Open a new terminal if `startup` is not on your PATH. No PyPI account or package
-publication is required. The landing page pins the tested CLI commit; `main`
-here follows the latest changes.
+publication is required. The GitHub tag pins the tested release.
 
 ```bash
 gh auth login --hostname github.com --git-protocol https --scopes repo,workflow,read:packages,write:packages
