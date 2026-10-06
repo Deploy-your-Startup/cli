@@ -48,7 +48,7 @@ HTTPS. For local development, follow the generated project's README.
 Validate an idea before building the application: the pitch template creates a
 static [Astro](https://astro.build) landing page that deploys to Cloudflare Pages
 on every push to `main`. It needs a GitHub account, a free Cloudflare account and
-a domain; no server is created.
+a domain; no server is created. This flow requires CLI `v0.1.4` or later.
 
 ```bash
 startup bootstrap --kind pitch --template-version v0.1.0
