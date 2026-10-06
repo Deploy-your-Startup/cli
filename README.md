@@ -21,7 +21,7 @@ Install uv and the GitHub CLI, for example with Homebrew:
 
 ```bash
 brew install uv gh
-uv tool install --python 3.12 'git+https://github.com/Deploy-your-Startup/cli.git@v0.1.0'
+uv tool install --python 3.14 'git+https://github.com/Deploy-your-Startup/cli.git@v0.1.0'
 uv tool update-shell
 ```
 
