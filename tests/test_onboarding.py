@@ -5,7 +5,7 @@ from click.testing import CliRunner
 
 from cli import preflight, sync_commands
 from cli.startup import cli
-from cli.wizard.runner import FULLSTACK_STEPS
+from cli.wizard.runner import FULLSTACK_STEPS, PITCH_STEPS
 from cli.wizard.steps import shared_deployment
 
 
@@ -40,6 +40,7 @@ def test_sync_keeps_https_remote(monkeypatch, tmp_path):
 
 def test_bootstrap_syncs_before_creating_cloud_resources(monkeypatch):
     assert FULLSTACK_STEPS[0] is shared_deployment.SharedDeploymentStep
+    assert PITCH_STEPS[0] is shared_deployment.SharedDeploymentStep
     step = shared_deployment.SharedDeploymentStep()
     ctx = SimpleNamespace(github_username="new-user")
     monkeypatch.setattr(shared_deployment, "repo_exists", lambda name: False)
