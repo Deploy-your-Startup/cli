@@ -19,18 +19,18 @@ CF_SIGNUP_URL = "https://dash.cloudflare.com/sign-up"
 def guide_cloudflare_signup() -> None:
     """Guide the user through Cloudflare sign-up in the browser."""
     ui.info(
-        "Ich führe dich jetzt durch den Cloudflare Sign-up im Browser.\n"
-        "  Empfohlen: 'Continue with GitHub' verwenden."
+        "Set up your Cloudflare account in the browser.\n"
+        "  You can choose 'Continue with GitHub'."
     )
     open_browser(CF_SIGNUP_URL, "Cloudflare Sign-up")
     ui.info(
-        "Bitte im Browser abschließen:\n"
-        "  1. Sign up / Login abschließen\n"
-        "  2. Mail bestätigen, falls Cloudflare danach fragt\n"
-        "  3. Im Dashboard landen"
+        "Complete these steps in your browser:\n"
+        "  1. Sign up or sign in\n"
+        "  2. Verify your email if Cloudflare asks\n"
+        "  3. Open the dashboard"
     )
     ui.text_input(
-        "Enter drücken, sobald dein Cloudflare-Account bereit ist",
+        "Press Enter when your Cloudflare account is ready",
         default="",
         show_default=False,
     )
@@ -38,19 +38,19 @@ def guide_cloudflare_signup() -> None:
 
 def guide_cloudflare_token_creation() -> None:
     """Guide the user through Cloudflare token creation in the browser."""
-    ui.info("Als nächstes erstellen wir den API-Token interaktiv im Browser.")
-    open_browser(CF_TOKEN_URL, "Cloudflare API-Token-Seite")
+    ui.info("Next, create your API token in the browser.")
+    open_browser(CF_TOKEN_URL, "Cloudflare API token page")
     ui.info(
-        "Bitte im Browser ausführen:\n"
+        "In your browser:\n"
         "  1. 'Create Token' → 'Create Custom Token'\n"
-        "  2. Permissions setzen:\n"
+        "  2. Set permissions:\n"
         "       Account → Cloudflare Pages → Edit\n"
         "       Account → Account Settings → Read\n"
         "       Account → Zone → Edit\n"
         "       Zone    → DNS → Edit\n"
         "       User    → User Details → Read\n"
         "  3. 'Continue to summary' → 'Create Token'\n"
-        "  4. Den Token kopieren und hier einfügen"
+        "  4. Copy the token and paste it here"
     )
 
 
@@ -91,27 +91,27 @@ class CloudflareStep(WizardStep):
         # A token passed on the command line answers both questions below; the
         # account/zone handling afterwards stays exactly the same.
         if ctx.cloudflare_api_token:
-            ui.action_start("Token validieren...")
+            ui.action_start("Checking token...")
             ok, auto_account_id = validate_cf_token(ctx.cloudflare_api_token)
             if not ok:
                 raise click.ClickException("The given Cloudflare token is not valid.")
-            ui.action_done("Token validiert")
+            ui.action_done("Token verified")
             return self._resolve_account_and_zone(ctx, auto_account_id)
 
         has_account = (
             True
             if ctx.non_interactive
-            else ui.confirm("Cloudflare-Account schon vorhanden?", default=True)
+            else ui.confirm("Do you have a Cloudflare account?", default=True)
         )
         # Unattended, only the browser path gets by without further input.
         choice = (
             1
             if ctx.non_interactive
             else ui.numbered_choice(
-                "Wie soll der Cloudflare API Token bereitgestellt werden?",
+                "How would you like to connect Cloudflare?",
                 [
-                    "Im Browser erstellen (empfohlen)",
-                    "Ich habe schon einen Token (einfügen)",
+                    "Create a token in the browser (recommended)",
+                    "Paste an existing token",
                 ],
             )
         )
@@ -124,7 +124,7 @@ class CloudflareStep(WizardStep):
                 )
                 if not token:
                     raise click.ClickException(
-                        "Cloudflare API-Token konnte nicht erstellt werden."
+                        "Could not create a Cloudflare API token."
                     )
             else:
                 if not has_account:
@@ -132,18 +132,18 @@ class CloudflareStep(WizardStep):
                 guide_cloudflare_token_creation()
                 token = ui.text_input("Cloudflare API Token", hide_input=True)
 
-            ui.action_start("Token validieren...")
+            ui.action_start("Checking token...")
             ok, auto_account_id = validate_cf_token(token)
             if ok:
-                ui.action_done("Token validiert")
+                ui.action_done("Token verified")
                 ctx.cloudflare_api_token = token
                 break
-            ui.action_fail("Token ungültig")
+            ui.action_fail("Invalid token")
             if choice == 1:
                 raise click.ClickException(
-                    "Der browser-erstellte Cloudflare Token ist ungültig."
+                    "The Cloudflare token created in the browser is invalid."
                 )
-            ui.error("Bitte erneut versuchen.")
+            ui.error("Please try again.")
 
         return self._resolve_account_and_zone(ctx, auto_account_id)
 
@@ -153,7 +153,7 @@ class CloudflareStep(WizardStep):
         """Pin down the account, then create or find the zone."""
         if auto_account_id:
             ctx.cloudflare_account_id = auto_account_id
-            ui.info(f"Account-ID automatisch ermittelt: {auto_account_id}")
+            ui.info(f"Account ID detected: {auto_account_id}")
         elif ctx.non_interactive:
             raise click.ClickException(
                 "Several Cloudflare accounts found and no way to ask which one "
@@ -161,19 +161,19 @@ class CloudflareStep(WizardStep):
             )
         else:
             ui.info(
-                "Mehrere Accounts gefunden — finde deine Account-ID rechts "
-                "in der Sidebar auf https://dash.cloudflare.com"
+                "Multiple accounts found — find your account ID in the "
+                "sidebar at https://dash.cloudflare.com"
             )
-            ctx.cloudflare_account_id = ui.text_input("Cloudflare Account-ID")
+            ctx.cloudflare_account_id = ui.text_input("Cloudflare account ID")
 
-        ui.action_start(f"Cloudflare-Zone für {ctx.base_domain} sicherstellen...")
+        ui.action_start(f"Cloudflare zone for {ctx.base_domain}: checking...")
         try:
             token, account_id = ctx.require_cloudflare()
             zone = ensure_zone(token, account_id, ctx.base_domain)
         except (RuntimeError, httpx.HTTPError) as exc:
             raise click.ClickException(
-                f"Cloudflare-Zone konnte nicht angelegt werden: {exc}\n"
-                "Hat der Token die Permissions 'Zone → Zone → Edit' und "
+                f"Could not create Cloudflare zone: {exc}\n"
+                "Does the token have 'Zone → Zone → Edit' and "
                 "'Zone → DNS → Edit'?"
             ) from exc
         ctx.cloudflare_zone_id = zone.zone_id
@@ -183,19 +183,19 @@ class CloudflareStep(WizardStep):
         )
 
         if ctx.cloudflare_zone_is_subdomain:
-            ui.action_done(f"Bestehende Root-Zone {zone.name} wird verwendet")
+            ui.action_done(f"Existing root zone {zone.name} selected")
             ui.info(
-                f"{ctx.base_domain} ist eine Subdomain von {zone.name} — keine "
-                "Nameserver-Umstellung nötig, die Subdomain wird als DNS-Record "
-                "in der bestehenden Zone angelegt."
+                f"{ctx.base_domain} is a subdomain of {zone.name} — no "
+                "nameserver changes needed; the subdomain will be added as a DNS record "
+                "in the existing zone."
             )
             return
 
         if zone.created:
-            ui.action_done("Cloudflare-Zone erstellt")
+            ui.action_done("Cloudflare zone created")
         else:
-            ui.action_done("Cloudflare-Zone bereits vorhanden")
+            ui.action_done("Cloudflare zone already exists")
         ui.info(
-            "Cloudflare-Nameserver für diese Domain:\n"
+            "Cloudflare nameservers for this domain:\n"
             + "\n".join(f"  • {ns}" for ns in zone.nameservers)
         )

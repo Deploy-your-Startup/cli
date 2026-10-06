@@ -13,45 +13,33 @@ Source of truth for the product vision: [Deploy Your Startup](https://deploy-you
 
 ## Installation and first project (early access)
 
-The supported first-deploy path is macOS + Hetzner Cloud. You need Git, Google
-Chrome, a GitHub account, a Hetzner Cloud account, and a domain whose DNS you can
-edit. Servers and domains are billed directly to your own accounts.
-
-Install the CLI with the website installer, then add GitHub CLI if needed:
+Start on macOS with Git, Chrome, a GitHub account, a Hetzner Cloud account and a
+domain you own. Servers and domains are billed by your providers.
 
 ```bash
-curl -fsSL https://deploy-your-startup.com/install.sh | bash
-brew install gh
+curl -fsSL https://deploy-your-startup.com/install.sh | bash -s -- --onboard
 ```
 
-The installer provides Python 3.14 and the pinned CLI release (`v0.1.0`). Open a
-new terminal after installing. If Git is missing, run `xcode-select --install`
-first. No PyPI publication is required.
+The installer provides Python 3.14 and CLI `v0.1.1`, connects GitHub and checks
+your setup. The wizard asks for your project name and domain, then shows a launch
+plan before creating anything. Extra domains and error tracking are optional.
+The default application template is pinned to `v0.1.0` independently of the CLI.
+
+If Git is missing, run `xcode-select --install` first. The terminal explains any
+missing prerequisites. To resume the wizard after installation:
 
 ```bash
-gh auth login --hostname github.com --git-protocol https --scopes repo,workflow,read:packages,write:packages
-gh auth setup-git
 startup doctor
 startup bootstrap --kind fullstack --provider hetzner --domain-owned --template-version v0.1.0
 ```
 
-Configure your Git name/email and create an SSH key with `ssh-keygen -t ed25519`
-if doctor reports they are missing. The SSH key is for access to your server;
-you do not need to upload it to GitHub when using HTTPS.
+The first-deploy path creates Django/FastAPI, Postgres and HTTPS on k3s in your
+own accounts. An existing shared deployment repository is preserved. Advanced
+options, including Vue templates, are available through `startup bootstrap --help`.
 
-Bootstrap asks for your project name, domain, and other settings. It creates the
-shared private `<your-user>/deploy-your-startup` workflow repository if missing,
-creates a private application repository, encrypts project secrets, and requests
-the first infrastructure deployment. An existing shared repository is preserved;
-run `startup sync` explicitly when you want to update it.
-
-Bootstrap completion is not proof that deployment succeeded. Check the Actions
-link printed at the end, point your domain's DNS at the server when needed, and
-verify the site over HTTPS. Authentication with Auth0 is optional for templates
-that support it. Pitch mode is not part of the initial public quickstart.
-
-For local development install mise and Docker and follow the generated project's
-README. Installing the CLI alone does not install every application runtime.
+Bootstrap requests a deployment; it does not prove the site is live. Follow the
+Actions link, point DNS at your server when needed, then verify your site over
+HTTPS. For local development, follow the generated project's README.
 
 ## Update or remove the CLI
 

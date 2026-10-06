@@ -173,10 +173,10 @@ def bootstrap(
     if kind is None:
         _require(kind, "--kind")
         choice = ui.numbered_choice(
-            "Welcher Bootstrap-Modus?",
+            "What are you building?",
             [
-                "Full-Stack — Django + k3s (Hetzner oder eigener VPS)",
-                "Pitch     — Astro Landing → Cloudflare Pages (für Coming-Soon/Marketing)",
+                "Application — Django/FastAPI on your infrastructure",
+                "Landing page — Astro on Cloudflare Pages",
             ],
         )
         kind = "fullstack" if choice == 1 else "pitch"
@@ -190,10 +190,10 @@ def bootstrap(
             provider = "hetzner"
         else:
             provider_choice = ui.numbered_choice(
-                "Wo soll deployed werden?",
+                "Where should it run?",
                 [
-                    "Hetzner — VMs automatisch provisionieren (Cloud-Account nötig)",
-                    "Bring your own server — eigener VPS (z.B. IONOS) per SSH, günstiger",
+                    "Hetzner Cloud — provision servers in your account",
+                    "Your existing server — connect over SSH",
                 ],
             )
             provider = "hetzner" if provider_choice == 1 else "byos"
@@ -206,45 +206,48 @@ def bootstrap(
         r"[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?", project_name
     ):
         if project_name:
-            ui.error("Bitte kebab-case verwenden (z.B. mein-startup).")
+            ui.error(
+                "Use lowercase letters, numbers and hyphens (for example, my-startup)."
+            )
             if assume_yes:
                 raise click.ClickException(
                     f"--project-name '{project_name}' must be kebab-case, end in an "
                     "alphanumeric character, and contain at most 63 characters."
                 )
         _require(project_name, "--project-name")
-        project_name = ui.text_input("Projektname (kebab-case)")
+        project_name = ui.text_input("Project name (for example, my-startup)")
 
     # Domain
     if not base_domain:
         _require(base_domain, "--base-domain")
-        base_domain = ui.text_input("Domain (z.B. mein-startup.de)")
+        base_domain = ui.text_input("Domain you own (for example, example.com)")
 
-    # Full-stack-only inputs
+    # Keep optional configuration out of the first-deploy path.
+    import os
+
     additional_domains = additional_domains or ""
-    sentry_dsn = sentry_dsn or ""
-    if kind == "fullstack":
-        if not additional_domains and not assume_yes:
+    sentry_dsn = sentry_dsn or os.environ.get("SENTRY_DSN", "")
+    if (
+        kind == "fullstack"
+        and not assume_yes
+        and ui.confirm("Configure extra domains or error tracking?", default=False)
+    ):
+        if not additional_domains:
             additional_domains = ui.text_input(
-                "Weitere Domains (komma-getrennt, Enter zum Überspringen)",
+                "Extra domains (comma-separated, Enter to skip)",
                 default="",
                 show_default=False,
             )
-        import os
-
-        sentry_dsn = sentry_dsn or os.environ.get("SENTRY_DSN", "")
-        if not sentry_dsn and not assume_yes:
+        if not sentry_dsn:
             sentry_dsn = ui.text_input(
-                "Sentry DSN (optional, Enter zum Überspringen)",
-                default="",
-                show_default=False,
+                "Sentry DSN (Enter to skip)", default="", show_default=False
             )
 
     # Auto-detect GitHub username
     if not github_username:
         try:
             github_username = _github_owner(None)
-            ui.info(f"GitHub User: {github_username}")
+            ui.info(f"GitHub account: {github_username}")
         except (click.ClickException, subprocess.SubprocessError, OSError):
             # gh missing, logged out, or offline — fall back to asking.
             _require(github_username, "--github-username")
@@ -256,7 +259,7 @@ def bootstrap(
             str(Path.home() / "Projects")
             if assume_yes
             else ui.text_input(
-                "Output-Verzeichnis",
+                "Project folder",
                 default=str(Path.home() / "Projects"),
             )
         )
@@ -264,8 +267,8 @@ def bootstrap(
     # ── Summary + confirmation ───────────────────────────────────
 
     summary = {
-        "Modus": "Full-Stack" if kind == "fullstack" else "Pitch (Cloudflare Pages)",
-        "Projekt": project_name,
+        "Type": "Full-Stack" if kind == "fullstack" else "Pitch (Cloudflare Pages)",
+        "Project": project_name,
         "Domain": base_domain,
         "GitHub": f"{github_username}/{project_name}",
     }
@@ -277,8 +280,12 @@ def bootstrap(
         summary["Postgres"] = "17"
     ui.input_summary(summary)
 
-    if not assume_yes and not ui.confirm("Passt das?", default=True):
-        raise SystemExit(0)
+    if not assume_yes:
+        ui.info("Code and infrastructure stay in your accounts.")
+        ui.warning("Creating cloud resources incurs provider charges.")
+        if not ui.confirm("Create this project and start setup?", default=False):
+            ui.info("Cancelled. No resources were created.")
+            raise SystemExit(0)
 
     if assume_yes and provider == "byos" and not byos_host:
         raise click.ClickException("--provider byos needs --byos-host as well.")

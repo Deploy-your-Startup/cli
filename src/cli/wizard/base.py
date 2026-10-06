@@ -105,29 +105,29 @@ def prompt_user_public_key(*, non_interactive: bool = False) -> str:
         return Path(default).read_text().strip()
     while True:
         path_str = ui.text_input(
-            "Pfad zu deinem Public SSH Key (für SSH-Zugriff auf den Server)",
+            "Path to your public SSH key (for server access)",
             default=default,
         )
         path = Path(path_str).expanduser()
         if not path.is_file():
-            ui.error(f"Datei nicht gefunden: {path}")
+            ui.error(f"File not found: {path}")
             continue
         content = path.read_text().strip()
         if not content.startswith(("ssh-", "ecdsa-")):
-            ui.error("Das sieht nicht nach einem OpenSSH Public Key aus.")
+            ui.error("This does not look like an OpenSSH public key.")
             continue
         return content
 
 
 def open_browser(url: str, label: str) -> None:
     """Open a URL in the user's browser and report the outcome."""
-    ui.action_start(f"{label} im Browser öffnen...")
+    ui.action_start(f"{label}: opening in your browser...")
     try:
         opened = webbrowser.open(url)
     except (webbrowser.Error, OSError):
         opened = False
     if opened:
-        ui.action_done("Browser geöffnet")
+        ui.action_done("Browser opened")
     else:
-        ui.action_fail("Browser konnte nicht automatisch geöffnet werden")
-        ui.info(f"Bitte manuell öffnen: {url}")
+        ui.action_fail("Could not open the browser automatically")
+        ui.info(f"Open this link: {url}")

@@ -14,19 +14,19 @@ from ..context import BootstrapContext
 
 class PitchProjectStep(WizardStep):
     number = 3
-    name = "Projekt erstellen"
+    name = "Create project"
 
     def check(self, ctx: BootstrapContext) -> bool:
         if not ctx.project_dir.exists():
             return False
         if has_placeholders(ctx.project_dir):
             return False
-        ui.skip_indicator(f"Projekt {ctx.project_name} bereits konfiguriert")
+        ui.skip_indicator(f"Project {ctx.project_name} already configured")
         return True
 
     def run(self, ctx: BootstrapContext) -> None:
         if not ctx.project_dir.exists():
-            ui.action_start("Pitch-Template klonen...")
+            ui.action_start("Cloning landing-page template...")
             _run_command(
                 [
                     "git",
@@ -40,9 +40,9 @@ class PitchProjectStep(WizardStep):
             )
             shutil.rmtree(ctx.project_dir / ".git")
             _run_command(["git", "init", "-b", "main"], cwd=ctx.project_dir)
-            ui.action_done("Template geklont")
+            ui.action_done("Template cloned")
 
-        ui.action_start("Placeholders ersetzen...")
+        ui.action_start("Applying project settings...")
         _replace_placeholders(
             ctx.project_dir,
             {
@@ -51,4 +51,4 @@ class PitchProjectStep(WizardStep):
                 "§§deploy_your_startup.github_username§§": ctx.github_username,
             },
         )
-        ui.action_done("Projekt konfiguriert")
+        ui.action_done("Project configured")

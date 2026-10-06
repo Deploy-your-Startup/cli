@@ -133,3 +133,8 @@ This will:
 - `--dry-run` - Preview changes without applying them
 - `--only-existing` - Only update existing vault entries
 - `--verify-password` - Verify vault password can decrypt existing secrets
+## Guided onboarding integration checks
+
+`uv run --extra dev pytest tests/test_onboarding_integration.py tests/test_vault_guard.py`
+exercises the actual CLI prompts, optional settings, cancellation and real vault
+files. Cloud accounts and paid infrastructure are not created by these checks.

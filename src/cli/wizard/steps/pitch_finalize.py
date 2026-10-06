@@ -30,13 +30,11 @@ def ensure_pages_project(ctx: BootstrapContext) -> None:
         timeout=20,
     )
     if get_resp.status_code == 200 and get_resp.json().get("success"):
-        ui.action_done("Cloudflare Pages Projekt bereits vorhanden")
+        ui.action_done("Cloudflare Pages project already exists")
         return
 
     if get_resp.status_code not in {404, 400}:
-        raise RuntimeError(
-            f"Cloudflare Pages Projekt konnte nicht geprüft werden: {get_resp.text}"
-        )
+        raise RuntimeError(f"Could not check Cloudflare Pages project: {get_resp.text}")
 
     payload = {
         "name": ctx.project_name,
@@ -50,10 +48,10 @@ def ensure_pages_project(ctx: BootstrapContext) -> None:
     )
     data = create_resp.json()
     if create_resp.status_code in {200, 201} and data.get("success"):
-        ui.action_done("Cloudflare Pages Projekt erstellt")
+        ui.action_done("Cloudflare Pages project created")
         return
 
-    raise RuntimeError(f"Cloudflare Pages Projekt konnte nicht erstellt werden: {data}")
+    raise RuntimeError(f"Could not create Cloudflare Pages project: {data}")
 
 
 def pages_project_exists(ctx: BootstrapContext) -> bool:
@@ -142,12 +140,12 @@ class PitchFinalizeStep(WizardStep):
             and pages_project_exists(ctx)
             and custom_domain_linked(ctx)
         ):
-            ui.skip_indicator("Code gepusht & Custom Domain verknüpft")
+            ui.skip_indicator("Code pushed and custom domain connected")
             return True
         return False
 
     def run(self, ctx: BootstrapContext) -> None:
-        ui.action_start("Code committen...")
+        ui.action_start("Committing project...")
         _run_command(["git", "add", "-A"], cwd=ctx.project_dir)
         status = subprocess.run(
             ["git", "status", "--porcelain"],
@@ -163,7 +161,7 @@ class PitchFinalizeStep(WizardStep):
             )
             ui.action_done("Committed")
         else:
-            ui.action_done("Nichts zu committen")
+            ui.action_done("Nothing to commit")
 
         subprocess.run(
             ["git", "remote", "remove", "origin"],
@@ -172,12 +170,12 @@ class PitchFinalizeStep(WizardStep):
             check=False,
         )
         if not repo_exists(ctx.full_repo):
-            ui.action_start("GitHub-Repository erstellen...")
+            ui.action_start("Creating GitHub repository...")
             _run_command(
                 ["gh", "repo", "create", ctx.full_repo, "--private", "--source", "."],
                 cwd=ctx.project_dir,
             )
-            ui.action_done("Repository erstellt")
+            ui.action_done("Repository created")
         else:
             _run_command(
                 [
@@ -190,7 +188,7 @@ class PitchFinalizeStep(WizardStep):
                 cwd=ctx.project_dir,
             )
 
-        ui.action_start("Cloudflare Secrets setzen...")
+        ui.action_start("Saving Cloudflare secrets...")
         token, account_id = ctx.require_cloudflare()
         _run_command(
             [
@@ -216,18 +214,18 @@ class PitchFinalizeStep(WizardStep):
             cwd=ctx.project_dir,
             capture_output=True,
         )
-        ui.action_done("Secrets gesetzt")
+        ui.action_done("Secrets saved")
 
-        ui.action_start("Cloudflare Pages Projekt sicherstellen...")
+        ui.action_start("Checking Cloudflare Pages project...")
         ensure_pages_project(ctx)
 
-        ui.action_start("Push nach GitHub...")
+        ui.action_start("Pushing to GitHub...")
         _run_command(
             ["git", "push", "-u", "origin", "main"],
             cwd=ctx.project_dir,
             capture_output=True,
         )
-        ui.action_done("Gepusht")
+        ui.action_done("Pushed")
 
         self._link_custom_domain(ctx)
 
@@ -249,7 +247,7 @@ class PitchFinalizeStep(WizardStep):
         www = f"www.{apex}"
         target = _pages_target(ctx)
 
-        ui.action_start(f"Custom Domain {apex} mit Pages verknüpfen...")
+        ui.action_start(f"Custom Domain {apex}: connecting to Pages...")
         try:
             # Cloudflare auto-imports existing records on zone creation; remove
             # any apex/www A/AAAA/CNAME so the Pages domain can own those hosts.
@@ -258,7 +256,7 @@ class PitchFinalizeStep(WizardStep):
                     token, ctx.cloudflare_zone_id, [apex, www]
                 )
                 if removed:
-                    ui.info(f"{removed} kollidierende DNS-Records entfernt")
+                    ui.info(f"{removed} conflicting DNS records removed")
 
             for host in (apex, www):
                 add_pages_custom_domain(
@@ -274,16 +272,16 @@ class PitchFinalizeStep(WizardStep):
                         host,
                         target,
                     )
-            ui.action_done(f"Custom Domains verknüpft ({apex}, {www})")
+            ui.action_done(f"Custom domains connected ({apex}, {www})")
             ui.info(
                 f"CNAME → {target} gesetzt; Cloudflare aktiviert DNS + TLS "
-                "automatisch (kann nach NS-Propagation ein paar Minuten dauern)."
+                "automatisch (kann nach a few minutes after nameserver propagation)."
             )
         except (RuntimeError, httpx.HTTPError) as exc:
-            ui.action_fail("Custom Domain konnte nicht automatisch verknüpft werden")
+            ui.action_fail("Could not connect the custom domain automatically")
             ui.warning(str(exc))
             ui.info(
-                f"Bitte manuell verknüpfen:\n"
+                f"Connect it manually:\n"
                 f"  https://dash.cloudflare.com → Workers & Pages → {ctx.project_name} "
                 "→ Custom domains → Set up a custom domain"
             )

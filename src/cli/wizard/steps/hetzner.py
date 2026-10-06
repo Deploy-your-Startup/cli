@@ -37,20 +37,20 @@ class HetznerStep(WizardStep):
 
         token = load_token()
         if token and validate_hetzner_token(token):
-            ui.skip_indicator("Token gefunden und validiert")
+            ui.skip_indicator("Saved token verified")
             ctx.hetzner_token = token
             return True
 
-        ui.warning("Gespeicherter Token ist ungültig.")
+        ui.warning("The saved token is invalid.")
         return False
 
     def run(self, ctx: BootstrapContext) -> None:
         # A token handed in on the command line answers this question already.
         if ctx.hetzner_token:
-            ui.action_start("Token validieren...")
+            ui.action_start("Checking token...")
             if not validate_hetzner_token(ctx.hetzner_token):
                 raise click.ClickException("The given Hetzner token is not valid.")
-            ui.action_done("Token validiert")
+            ui.action_done("Token verified")
             from cli.hetzner.credentials import save_token
 
             save_token(ctx.hetzner_token, ctx.project_name)
@@ -62,10 +62,10 @@ class HetznerStep(WizardStep):
             2
             if ctx.non_interactive
             else ui.numbered_choice(
-                "Wie soll der Hetzner API Token bereitgestellt werden?",
+                "How would you like to connect Hetzner?",
                 [
-                    "Ich habe schon einen Token (einfügen)",
-                    "Projekt + Token im Browser erstellen",
+                    "Paste an existing token",
+                    "Create a project and token in the browser",
                 ],
             )
         )
@@ -73,28 +73,28 @@ class HetznerStep(WizardStep):
         if choice == 1:
             while True:
                 token = ui.text_input("Hetzner Cloud API Token", hide_input=True)
-                ui.action_start("Token validieren...")
+                ui.action_start("Checking token...")
                 if validate_hetzner_token(token):
-                    ui.action_done("Token validiert")
+                    ui.action_done("Token verified")
                     from cli.hetzner.credentials import save_token
 
                     save_token(token, ctx.project_name)
                     ctx.hetzner_token = token
                     return
                 else:
-                    ui.error("Token ungültig. Bitte erneut versuchen.")
+                    ui.error("Invalid token. Please try again.")
         else:
             ui.info(
-                "Ich öffne den Browser für die Hetzner Cloud Console. "
-                "Du musst dich einloggen und ein Projekt + Token erstellen."
+                "Opening Hetzner Cloud Console in your browser. "
+                "Sign in and create a project and token."
             )
             from cli.hetzner import get_or_create_token
 
             token = get_or_create_token(project_name=ctx.project_name)
             if not token:
                 raise click.ClickException(
-                    "Konnte keinen Hetzner Token erhalten. "
+                    "Could not reach keinen Hetzner Token erhalten. "
                     "Versuche es erneut oder nutze --hetzner-token."
                 )
             ctx.hetzner_token = token
-            ui.action_done("Token erstellt und gespeichert")
+            ui.action_done("Token created and saved")

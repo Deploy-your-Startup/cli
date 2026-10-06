@@ -108,7 +108,7 @@ def ensure_zone(token: str, account_id: str, domain: str) -> ZoneInfo:
     if create_resp.status_code in {200, 201} and cdata.get("success"):
         return _zone_from_result(cdata["result"], created=True)
 
-    raise RuntimeError(f"Cloudflare-Zone konnte nicht angelegt werden: {cdata}")
+    raise RuntimeError(f"Could not create Cloudflare zone: {cdata}")
 
 
 def ensure_cname_record(
@@ -152,9 +152,7 @@ def ensure_cname_record(
     if create.status_code in {200, 201} and cdata.get("success"):
         return True
 
-    raise RuntimeError(
-        f"CNAME-Record konnte nicht angelegt werden ({name} → {target}): {cdata}"
-    )
+    raise RuntimeError(f"Could not create CNAME record ({name} → {target}): {cdata}")
 
 
 def add_pages_custom_domain(
@@ -180,7 +178,7 @@ def add_pages_custom_domain(
     ):
         return True
 
-    raise RuntimeError(f"Custom Domain konnte nicht mit Pages verknüpft werden: {data}")
+    raise RuntimeError(f"Could not connect custom domain to Pages: {data}")
 
 
 def _already_exists(status_code: int, data: dict) -> bool:
