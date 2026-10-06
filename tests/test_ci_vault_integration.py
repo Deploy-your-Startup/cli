@@ -6,7 +6,8 @@ import sys
 from pathlib import Path
 
 import pytest
-from ansible.parsing.vault import VaultLib, VaultSecret
+
+from tests.vault_support import RealVault
 
 SOURCE = Path(__file__).resolve().parents[1] / "src"
 PASSWORD = "integration-ci-password-only"
@@ -17,9 +18,7 @@ def test_vault_file_streams_through_the_cli_without_password_arguments(tmp_path,
     # GIVEN a real encrypted Vault file and a password only in the environment.
     value = b"integration-private-key-content\n"
     path = tmp_path / "ci_ssh_key"
-    path.write_bytes(
-        VaultLib([("default", VaultSecret(PASSWORD.encode()))]).encrypt(value)
-    )
+    path.write_bytes(RealVault(PASSWORD).encrypt(value))
     env = {
         **os.environ,
         "PYTHONPATH": str(SOURCE),
