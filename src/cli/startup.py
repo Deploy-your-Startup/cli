@@ -11,7 +11,7 @@ import click
 
 from cli.auth0_commands import auth0
 from cli.preflight import doctor
-from cli.template_commands import DEFAULT_TEMPLATE, template
+from cli.template_commands import DEFAULT_TEMPLATE, PITCH_TEMPLATE, template
 
 
 def run_command(cmd, verbose=False):
@@ -69,13 +69,13 @@ cli.add_command(doctor)
 @click.option(
     "--template",
     "template_source",
-    default=DEFAULT_TEMPLATE,
-    help="Full-stack Copier template Git URL or local repository.",
+    help="Copier template Git URL or local repository "
+    "(default: the Django template, or the pitch template with --kind pitch).",
 )
 @click.option(
     "--template-version",
     default="HEAD",
-    help="Full-stack template tag, branch or commit.",
+    help="Template tag, branch or commit.",
 )
 @click.option(
     "--domain-owned/--buy-domain",
@@ -180,6 +180,9 @@ def bootstrap(
             ],
         )
         kind = "fullstack" if choice == 1 else "pitch"
+
+    if template_source is None:
+        template_source = PITCH_TEMPLATE if kind == "pitch" else DEFAULT_TEMPLATE
 
     # ── Provider selection (full-stack only) ─────────────────────
 

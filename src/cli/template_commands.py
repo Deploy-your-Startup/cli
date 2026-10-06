@@ -14,6 +14,7 @@ from copier import run_copy, run_update
 from copier.main import Worker
 
 DEFAULT_TEMPLATE = "https://github.com/Deploy-your-Startup/django-backend-template.git"
+PITCH_TEMPLATE = "https://github.com/Deploy-your-Startup/pitch-template.git"
 ANSWERS_FILE = ".copier-answers.yml"
 PUBLIC_FIELDS = {
     "project_name",
