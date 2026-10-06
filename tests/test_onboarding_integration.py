@@ -82,3 +82,29 @@ def test_interrupted_onboarding_does_not_create_resources(tmp_path):
     assert result.returncode != 0
     assert "Aborted" in result.stderr
     assert not (tmp_path / "projects").exists()
+
+
+def test_launch_plan_shows_the_pinned_default_template(tmp_path):
+    # GIVEN a new user who does not choose a template version.
+    # WHEN they review the launch plan and cancel.
+    result = launch(tmp_path, "my-startup\nexample.com\n\n\n")
+    # THEN the plan names the tested template release this CLI pins.
+    assert result.returncode == 0, result.stderr
+    assert "Template  Django/FastAPI v0.1.0" in result.stdout
+
+
+def test_explicit_or_custom_templates_keep_their_version(tmp_path):
+    # GIVEN a user who picks a template version, or a custom template.
+    # WHEN they review the launch plan and cancel.
+    pinned = launch(
+        tmp_path, "my-startup\nexample.com\n\n\n", "--template-version", "main"
+    )
+    custom = launch(
+        tmp_path,
+        "my-startup\nexample.com\n\n\n",
+        "--template",
+        "https://example.com/acme/vue-template.git",
+    )
+    # THEN their choice wins, and a custom template follows its HEAD.
+    assert "Template  Django/FastAPI main" in pinned.stdout, pinned.stderr
+    assert "Template  vue-template HEAD" in custom.stdout, custom.stderr

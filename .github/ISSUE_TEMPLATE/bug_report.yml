@@ -16,7 +16,7 @@ body:
     id: version
     attributes:
       label: CLI release and installation method
-      placeholder: "v0.1.0, website installer"
+      placeholder: "vX.Y.Z, website installer"
     validations:
       required: true
   - type: textarea
