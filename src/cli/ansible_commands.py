@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import re
@@ -92,6 +93,8 @@ def resolve_vault_password(
     """
     if vault_password:
         return vault_password
+    if environment_password := os.environ.get("STARTUP_VAULT_PASSWORD"):
+        return environment_password
 
     project_name = _resolve_project_name(_resolve_working_dir(working_directory))
 
@@ -389,6 +392,18 @@ def clone_or_update_shared_roles(
     refresh: bool = True,
 ) -> Path:
     working_dir = _resolve_working_dir(working_directory)
+    pin_file = working_dir / "shared-roles.ref"
+    if pin_file.exists():
+        pinned = pin_file.read_text().strip()
+        if not re.fullmatch(r"[0-9a-f]{40}", pinned):
+            raise click.ClickException(
+                "shared-roles.ref must contain a full Git commit SHA."
+            )
+        if version not in {DEFAULT_VERSION, pinned}:
+            raise click.ClickException(
+                "Requested roles differ from shared-roles.ref. Update the reviewed pin first."
+            )
+        version = pinned
     target_dir = working_dir / shared_dir
     candidates = _candidate_repo_urls(working_dir, repo_url)
     last_error: Exception | None = None
@@ -583,6 +598,51 @@ def install_collections(
             )
 
 
+def _shared_roles_fingerprint(root: Path) -> str:
+    """Hash role files and the runtime configuration, independent of Git metadata."""
+    digest = hashlib.sha256()
+    paths = [
+        path
+        for path in (root / "roles").rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc"
+    ]
+    paths += [root / name for name in ROOT_SHARED_FILES if (root / name).is_file()]
+    for path in sorted(paths, key=lambda item: item.relative_to(root).as_posix()):
+        digest.update(path.relative_to(root).as_posix().encode() + b"\0")
+        digest.update(path.read_bytes() + b"\0")
+    return digest.hexdigest()
+
+
+def run_pin(
+    working_directory: str = ".",
+    version: str = DEFAULT_VERSION,
+    repo_url: str | None = None,
+) -> None:
+    """Record a resolved owner-repository commit and its runtime contents."""
+    working_dir = _resolve_working_dir(working_directory)
+    with tempfile.TemporaryDirectory(
+        prefix=".startup-pin-", dir=working_dir
+    ) as temporary:
+        root = clone_or_update_shared_roles(
+            working_directory=temporary,
+            version=version,
+            repo_url=repo_url,
+        )
+        if not (root / ".git").exists():
+            raise click.ClickException(
+                "Pinning requires a Git repository, not a local directory export."
+            )
+        revision = _run_command(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            cwd=working_dir,
+            capture_output=True,
+        ).stdout.strip()
+        fingerprint = _shared_roles_fingerprint(root)
+    (working_dir / "shared-roles.sha256").write_text(fingerprint + "\n")
+    (working_dir / "shared-roles.ref").write_text(revision + "\n")
+    click.echo(f"Pinned shared roles to {revision}. Review and commit both pin files.")
+
+
 def setup_ansible(
     working_directory: str = ".",
     shared_dir: str = DEFAULT_SHARED_DIR,
@@ -597,6 +657,30 @@ def setup_ansible(
         repo_url=repo_url,
         refresh=refresh,
     )
+    working_dir = _resolve_working_dir(working_directory)
+    fingerprint = _shared_roles_fingerprint(shared_roles_dir)
+    fingerprint_file = working_dir / "shared-roles.sha256"
+    pin_file = working_dir / "shared-roles.ref"
+    if pin_file.exists():
+        if (
+            not fingerprint_file.exists()
+            or fingerprint_file.read_text().strip() != fingerprint
+        ):
+            raise click.ClickException(
+                "Shared role contents do not match shared-roles.sha256. "
+                "Refusing to run modified or differently exported roles; update the reviewed pin and checksum together."
+            )
+    elif (shared_roles_dir / ".git").exists():
+        revision = _run_command(
+            ["git", "-C", str(shared_roles_dir), "rev-parse", "HEAD"],
+            cwd=working_dir,
+            capture_output=True,
+        ).stdout.strip()
+        pin_file.write_text(revision + "\n")
+        fingerprint_file.write_text(fingerprint + "\n")
+        click.echo(
+            f"Pinned shared roles to {revision}. Commit shared-roles.ref and shared-roles.sha256."
+        )
     install_collections(working_directory=working_directory, shared_dir=shared_dir)
     return shared_roles_dir
 
@@ -880,6 +964,41 @@ def _ensure_tailnet(
     )
 
 
+def run_validate(
+    playbook: str,
+    inventory: str,
+    *,
+    working_directory: str = ".",
+    roles_path: str | None = None,
+) -> None:
+    """Check a local playbook without refreshing roles or resolving secrets."""
+    working_dir = _resolve_working_dir(working_directory)
+    for label, value in (("Playbook", playbook), ("Inventory", inventory)):
+        if not (working_dir / value).is_file():
+            raise click.ClickException(f"{label} file not found: {working_dir / value}")
+    env = _ansible_env(working_dir)
+    if roles_path:
+        resolved_roles = (working_dir / roles_path).resolve()
+        if not resolved_roles.is_dir():
+            raise click.ClickException(f"Roles directory not found: {resolved_roles}")
+        env["ANSIBLE_ROLES_PATH"] = str(resolved_roles)
+    _run_command(
+        [
+            _find_uv(),
+            "run",
+            "--project",
+            str(working_dir),
+            ansible_bin("ansible-playbook"),
+            playbook,
+            "--inventory",
+            inventory,
+            "--syntax-check",
+        ],
+        cwd=working_dir,
+        env=env,
+    )
+
+
 def run_deploy(
     vault_password: str,
     environment: str,
@@ -995,9 +1114,12 @@ def run_infrastructure(
     version: str = DEFAULT_VERSION,
     repo_url: str | None = None,
     refresh: bool = True,
+    allow_worker_teardown: bool = False,
 ) -> None:
     _validated_environment(environment)
     working_dir = _resolve_working_dir(working_directory)
+    # Always override group_vars: destructive authorization is per invocation.
+    teardown_vars = json.dumps({"allow_worker_teardown": allow_worker_teardown})
     setup_ansible(
         working_directory=working_directory,
         shared_dir=shared_dir,
@@ -1015,6 +1137,7 @@ def run_infrastructure(
             shared_dir,
             tags=["infrastructure"],
             limit=[environment],
+            extra_vars=teardown_vars,
         )
         return
     hcloud_token = get_hcloud_token(
@@ -1037,6 +1160,8 @@ def run_infrastructure(
             "infrastructure",
             "-l",
             f"{environment},provision-infrastructure",
+            "--extra-vars",
+            teardown_vars,
         ],
         cwd=working_dir,
         env=env,

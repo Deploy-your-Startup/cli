@@ -277,7 +277,7 @@ def bootstrap(
             "Hetzner" if provider == "hetzner" else "Bring your own server"
         )
         summary["Registry"] = f"ghcr.io/{github_username}"
-        summary["Postgres"] = "17"
+        summary["Postgres"] = "18.6"
     ui.input_summary(summary)
 
     if not assume_yes:
@@ -297,7 +297,7 @@ def bootstrap(
         base_domain=base_domain,
         additional_domains=additional_domains,
         github_username=github_username,
-        postgres_version="17",
+        postgres_version="18.6",
         sentry_dsn=sentry_dsn,
         # Absolute: steps run git with cwd=output_dir and pass project_dir as
         # the destination, so a relative path would be resolved twice and the
@@ -655,6 +655,35 @@ def list_vault_files(repo, file, verbose):
     raise click.exceptions.Exit(1)
 
 
+@secrets.command("get-file")
+@click.option(
+    "--file",
+    "-f",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+def get_vault_file(file):
+    """Write a vaulted file to stdout for piping, using Keychain or the CI environment."""
+    from ansible.errors import AnsibleError
+    from ansible.parsing.vault import VaultLib, VaultSecret, is_encrypted
+
+    from cli.ansible_commands import resolve_vault_password
+
+    encrypted = file.read_bytes()
+    if not is_encrypted(encrypted):
+        raise click.ClickException("The requested file is not an Ansible Vault file.")
+    password = resolve_vault_password(None, _password_scope(str(file)))
+    try:
+        value = VaultLib([("default", VaultSecret(password.encode()))]).decrypt(
+            encrypted
+        )
+    except (AnsibleError, ValueError):
+        raise click.ClickException(
+            "Could not decrypt the requested Vault file."
+        ) from None
+    sys.stdout.buffer.write(value)
+
+
 @secrets.command("get-field")
 @click.option(
     "--file", "-f", required=True, help="Path to the file containing the vault field"
@@ -762,10 +791,18 @@ def deploy():
     show_default=True,
     help="Shared deploy template repository",
 )
+@click.option(
+    "--source-version",
+    default="main",
+    show_default=True,
+    help="Source template branch or tag to sync",
+)
 @click.option("--private/--public", default=True, show_default=True)
 @click.option("--dry-run", is_flag=True, help="Preview sync without commit/push")
 @click.pass_context
-def sync(ctx, owner, repo_name, source_owner, source_repo, private, dry_run):
+def sync(
+    ctx, owner, repo_name, source_owner, source_repo, source_version, private, dry_run
+):
     """Sync the shared deploy template into your GitHub account."""
     if ctx.invoked_subcommand is None:
         from cli.sync_commands import sync_deploy_repo
@@ -775,6 +812,7 @@ def sync(ctx, owner, repo_name, source_owner, source_repo, private, dry_run):
             repo_name=repo_name,
             source_owner=source_owner,
             source_repo=source_repo,
+            source_version=source_version,
             private=private,
             dry_run=dry_run,
         )
@@ -783,6 +821,22 @@ def sync(ctx, owner, repo_name, source_owner, source_repo, private, dry_run):
 @cli.group()
 def ansible():
     """Shared Ansible deployment operations"""
+
+
+@ansible.command("pin")
+@click.option("--working-directory", default=".", show_default=True)
+@click.option(
+    "--version",
+    default="main",
+    show_default=True,
+    help="Shared repository ref to resolve and pin",
+)
+@click.option("--repo-url", default=None, help="Override the owner shared repository")
+def ansible_pin(working_directory, version, repo_url):
+    """Pin shared roles to an immutable commit and checksum without deployment."""
+    from cli.ansible_commands import run_pin
+
+    run_pin(working_directory=working_directory, version=version, repo_url=repo_url)
 
 
 @deploy.command("create")
@@ -862,6 +916,27 @@ def github_deploy(
             template_repo=template_repo,
             verbose=verbose,
         )
+    )
+
+
+@ansible.command("validate")
+@click.option("--playbook", required=True, help="Local playbook to syntax-check")
+@click.option(
+    "--inventory",
+    required=True,
+    help="Inventory file; use a static test inventory for offline checks",
+)
+@click.option("--working-directory", default=".", show_default=True)
+@click.option("--roles-path", default=None, help="Directory containing local roles")
+def ansible_validate(playbook, inventory, working_directory, roles_path):
+    """Validate playbook syntax without deploying or refreshing shared roles."""
+    from cli.ansible_commands import run_validate
+
+    run_validate(
+        playbook=playbook,
+        inventory=inventory,
+        working_directory=working_directory,
+        roles_path=roles_path,
     )
 
 
@@ -1034,6 +1109,14 @@ def ansible_deploy(
     default=None,
     help="Override shared roles repository URL",
 )
+@click.option(
+    "--allow-worker-teardown",
+    is_flag=True,
+    help="Allow deleting surplus workers after a successful drain (this run only)",
+)
+@click.option(
+    "--yes", is_flag=True, help="Confirm an explicitly requested worker teardown"
+)
 def ansible_infrastructure(
     vault_password,
     environment,
@@ -1042,9 +1125,17 @@ def ansible_infrastructure(
     version,
     refresh,
     repo_url,
+    allow_worker_teardown,
+    yes,
 ):
     """Provision infrastructure via Ansible playbook."""
     from cli.ansible_commands import resolve_vault_password, run_infrastructure
+
+    if allow_worker_teardown and not yes:
+        click.confirm(
+            "This infrastructure run may delete surplus worker servers and their local data. Continue?",
+            abort=True,
+        )
 
     resolved_vault_password = resolve_vault_password(
         vault_password=vault_password,
@@ -1059,6 +1150,7 @@ def ansible_infrastructure(
         version=version,
         refresh=refresh,
         repo_url=repo_url,
+        allow_worker_teardown=allow_worker_teardown,
     )
 
 
