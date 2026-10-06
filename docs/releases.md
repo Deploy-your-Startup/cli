@@ -7,8 +7,10 @@ PyPI publishing is a separate, optional manual workflow.
 ## Publish a tested version
 
 1. Use a clean checkout of current `origin/main`. Check the README, AGENTS.md,
-   package metadata, license, CLI help and public quickstart together. Update the
-   README's installer version for the release and commit the documentation.
+   package metadata, license, CLI help and public quickstart together. Version
+   numbers are not repeated in the documentation: the website installer pins
+   them once (`startup_cli_version` in its `install.sh`) and advances the CLI
+   pin automatically (step 5).
 2. Run `mise run lint` and `mise run test`. Push the release commit to `main`
    through the repository's normal review process, then wait for that exact
    commit's GitHub CI to pass. Do not release an older local checkout.
