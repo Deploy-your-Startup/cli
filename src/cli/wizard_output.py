@@ -145,7 +145,7 @@ def input_summary(fields: dict[str, str]) -> None:
 
 
 def banner(*, animate: bool = True) -> None:
-    """Fly once in an interactive terminal, then leave a stationary wordmark."""
+    """Let the rocket write the wordmark once, then leave it stationary."""
     stream = sys.stdout
     prefix = "  >_ deploy your startup "
     motion = (
@@ -162,17 +162,16 @@ def banner(*, animate: bool = True) -> None:
         try:
             stream.write("\x1b[?25l")
             stream.flush()
-            for frame in range(24):
-                # Decelerate into the final position; never wrap on a resize.
-                progress = 1 - (1 - frame / 23) ** 2
-                landing = min(
-                    len(prefix), max(0, shutil.get_terminal_size().columns - 4)
-                )
-                column = int(progress * landing)
-                trail = "· " if column >= 2 and frame < 21 else ""
-                stream.write("\r\x1b[2K" + " " * (column - len(trail)) + trail + "🚀")
+            # The rocket writes the wordmark: each step reveals one more
+            # character behind it and slows down as it reaches the end.
+            indent = len(prefix) - len(prefix.lstrip())
+            for shown in range(indent, len(prefix) + 1):
+                # Never wrap if the terminal shrinks mid-flight.
+                width = max(0, shutil.get_terminal_size().columns - 4)
+                text = prefix[: min(shown, width)]
+                stream.write("\r\x1b[2K" + click.style(text, fg="cyan") + "🚀")
                 stream.flush()
-                time.sleep(0.04)
+                time.sleep(0.02 + 0.05 * (shown / len(prefix)) ** 3)
         finally:
             stream.write("\r\x1b[2K\x1b[?25h")
             stream.flush()
