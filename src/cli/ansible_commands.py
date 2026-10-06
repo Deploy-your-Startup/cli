@@ -880,6 +880,41 @@ def _ensure_tailnet(
     )
 
 
+def run_validate(
+    playbook: str,
+    inventory: str,
+    *,
+    working_directory: str = ".",
+    roles_path: str | None = None,
+) -> None:
+    """Check a local playbook without refreshing roles or resolving secrets."""
+    working_dir = _resolve_working_dir(working_directory)
+    for label, value in (("Playbook", playbook), ("Inventory", inventory)):
+        if not (working_dir / value).is_file():
+            raise click.ClickException(f"{label} file not found: {working_dir / value}")
+    env = _ansible_env(working_dir)
+    if roles_path:
+        resolved_roles = (working_dir / roles_path).resolve()
+        if not resolved_roles.is_dir():
+            raise click.ClickException(f"Roles directory not found: {resolved_roles}")
+        env["ANSIBLE_ROLES_PATH"] = str(resolved_roles)
+    _run_command(
+        [
+            _find_uv(),
+            "run",
+            "--project",
+            str(working_dir),
+            ansible_bin("ansible-playbook"),
+            playbook,
+            "--inventory",
+            inventory,
+            "--syntax-check",
+        ],
+        cwd=working_dir,
+        env=env,
+    )
+
+
 def run_deploy(
     vault_password: str,
     environment: str,
@@ -995,9 +1030,12 @@ def run_infrastructure(
     version: str = DEFAULT_VERSION,
     repo_url: str | None = None,
     refresh: bool = True,
+    allow_worker_teardown: bool = False,
 ) -> None:
     _validated_environment(environment)
     working_dir = _resolve_working_dir(working_directory)
+    # Always override group_vars: destructive authorization is per invocation.
+    teardown_vars = json.dumps({"allow_worker_teardown": allow_worker_teardown})
     setup_ansible(
         working_directory=working_directory,
         shared_dir=shared_dir,
@@ -1015,6 +1053,7 @@ def run_infrastructure(
             shared_dir,
             tags=["infrastructure"],
             limit=[environment],
+            extra_vars=teardown_vars,
         )
         return
     hcloud_token = get_hcloud_token(
@@ -1037,6 +1076,8 @@ def run_infrastructure(
             "infrastructure",
             "-l",
             f"{environment},provision-infrastructure",
+            "--extra-vars",
+            teardown_vars,
         ],
         cwd=working_dir,
         env=env,

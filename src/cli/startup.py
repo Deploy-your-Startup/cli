@@ -858,6 +858,27 @@ def github_deploy(
     )
 
 
+@ansible.command("validate")
+@click.option("--playbook", required=True, help="Local playbook to syntax-check")
+@click.option(
+    "--inventory",
+    required=True,
+    help="Inventory file; use a static test inventory for offline checks",
+)
+@click.option("--working-directory", default=".", show_default=True)
+@click.option("--roles-path", default=None, help="Directory containing local roles")
+def ansible_validate(playbook, inventory, working_directory, roles_path):
+    """Validate playbook syntax without deploying or refreshing shared roles."""
+    from cli.ansible_commands import run_validate
+
+    run_validate(
+        playbook=playbook,
+        inventory=inventory,
+        working_directory=working_directory,
+        roles_path=roles_path,
+    )
+
+
 @ansible.command("setup_ansible")
 @click.option(
     "--working-directory",
@@ -1027,6 +1048,14 @@ def ansible_deploy(
     default=None,
     help="Override shared roles repository URL",
 )
+@click.option(
+    "--allow-worker-teardown",
+    is_flag=True,
+    help="Allow deleting surplus workers after a successful drain (this run only)",
+)
+@click.option(
+    "--yes", is_flag=True, help="Confirm an explicitly requested worker teardown"
+)
 def ansible_infrastructure(
     vault_password,
     environment,
@@ -1035,9 +1064,17 @@ def ansible_infrastructure(
     version,
     refresh,
     repo_url,
+    allow_worker_teardown,
+    yes,
 ):
     """Provision infrastructure via Ansible playbook."""
     from cli.ansible_commands import resolve_vault_password, run_infrastructure
+
+    if allow_worker_teardown and not yes:
+        click.confirm(
+            "This infrastructure run may delete surplus worker servers and their local data. Continue?",
+            abort=True,
+        )
 
     resolved_vault_password = resolve_vault_password(
         vault_password=vault_password,
@@ -1052,6 +1089,7 @@ def ansible_infrastructure(
         version=version,
         refresh=refresh,
         repo_url=repo_url,
+        allow_worker_teardown=allow_worker_teardown,
     )
 
 
