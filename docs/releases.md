@@ -2,7 +2,7 @@
 
 Merging to `main` runs CI; it does not publish an installer update. The public
 installer installs a fixed Git tag with uv. GitHub releases describe those tags.
-PyPI publishing is a separate, optional manual workflow.
+The CLI is not published to PyPI.
 
 ## Publish a tested version
 
@@ -21,8 +21,7 @@ PyPI publishing is a separate, optional manual workflow.
      --title "vX.Y.Z — <release title>" --notes-file release-notes.md
    ```
 
-   `setuptools-scm` derives the package version from Git tags. Creating this
-   release does not run `publish.yml` or upload to PyPI.
+   `setuptools-scm` derives the package version from Git tags.
 4. Verify the remote tag resolves to the intended commit and the public source
    archive downloads. Install that tag in an isolated tool directory and verify
    the installed package version, `startup --help` and the affected user flow. For terminal
@@ -51,15 +50,6 @@ To install and start guided onboarding:
 ```bash
 curl -fsSL https://deploy-your-startup.com/install.sh | bash -s -- --onboard
 ```
-
-## Optional PyPI publishing
-
-`.github/workflows/publish.yml` runs only through `workflow_dispatch`. It builds
-a wheel and source distribution, then uploads through the `pypi` environment
-using Trusted Publishing. Configure the PyPI project and publisher first. If
-publishing a release, dispatch against its verified tag, not moving `main`.
-GitHub tags remain the documented install path until PyPI availability is
-verified.
 
 ## Withdraw a release
 

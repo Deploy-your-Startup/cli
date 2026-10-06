@@ -112,5 +112,5 @@ reporting a deployment as successful.
   `startup ansible` resolves `.shared-roles` from the same workflow reference.
   Keep these three in step when the major version changes.
 - Check README, CLI help, tests documentation and packaging comments when changing
-  commands or release behavior. Git tags are the current public installation
-  path; PyPI publishing is an optional manual workflow.
+  commands or release behavior. Git tags are the only public installation
+  path; the CLI is not published to PyPI.
