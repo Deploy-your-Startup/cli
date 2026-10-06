@@ -23,8 +23,8 @@ def auth0_json(*args: str):
     )
     if result.returncode:
         raise click.ClickException(
-            "Auth0-Aufruf fehlgeschlagen. Bitte `auth0 login` erneuern und "
-            "den gewählten Tenant prüfen. Sensible Ausgabe wurde zurückgehalten."
+            "Auth0 request failed. Run `auth0 login` again and "
+            "check the selected tenant. Sensitive output has been withheld."
         )
     return json.loads(result.stdout)
 
@@ -32,7 +32,7 @@ def auth0_json(*args: str):
 def check_auth0_login(tenant: str) -> None:
     if shutil.which("auth0") is None:
         raise click.ClickException(
-            "Auth0 CLI fehlt: `brew install auth0/auth0-cli/auth0`, dann `auth0 login`."
+            "Auth0 CLI is missing: run `brew install auth0/auth0-cli/auth0`, then `auth0 login`."
         )
     auth0_json("apps", "list", "--tenant", tenant)
     auth0_json("apis", "list", "--tenant", tenant)
@@ -44,7 +44,7 @@ def validate_browser_session(context, origin: str) -> None:
     private = context.request.get(f"{origin}/private_api/session", max_redirects=0)
     if identity.status != 200 or private.status != 200:
         raise click.ClickException(
-            "Login zurückgekehrt, aber die geschützte API ist nicht erreichbar."
+            "Login returned, but the protected API is unavailable."
         )
     session_cookies = [
         cookie
@@ -55,7 +55,7 @@ def validate_browser_session(context, origin: str) -> None:
         cookie["httpOnly"] and cookie["secure"] for cookie in session_cookies
     ):
         raise click.ClickException(
-            "Die Login-Session braucht ein sicheres HttpOnly-Cookie."
+            "The login session requires a secure HttpOnly cookie."
         )
 
 
@@ -82,7 +82,7 @@ def validate_live_login(origin: str, tenant: str, timeout: int) -> None:
                         )
                         if response.status not in (302, 401, 403):
                             raise click.ClickException(
-                                "Die private API weist ungültige Zugänge nicht korrekt ab."
+                                "The private API does not correctly reject invalid credentials."
                             )
                     response = context.request.get(
                         f"{origin}/oauth2/start", max_redirects=0
@@ -96,11 +96,11 @@ def validate_live_login(origin: str, tenant: str, timeout: int) -> None:
                         != [f"{origin}/oauth2/callback"]
                     ):
                         raise click.ClickException(
-                            "Der Login leitet nicht zum gewählten Auth0-Tenant weiter."
+                            "Login does not redirect to the selected Auth0 tenant."
                         )
                     page = context.new_page()
                     click.echo(
-                        "Bitte im geöffneten Browser bei der neuen Website anmelden. Der Check wartet auf den Rückweg und prüft die private API."
+                        "Sign in to your new website in the browser. This check waits for your return and verifies the private API."
                     )
                     page.goto(
                         f"{origin}/oauth2/start?{urlencode({'rd': origin + '/'})}",
@@ -119,11 +119,11 @@ def validate_live_login(origin: str, tenant: str, timeout: int) -> None:
                 browser.close()
     except playwright_error():
         raise click.ClickException(
-            "Browser-Login nicht abgeschlossen. Deploy/Chrome prüfen und erneut versuchen; "
-            "Browserdetails wurden zum Schutz von Zugangsdaten zurückgehalten."
+            "Browser login did not complete. Check the deployment and Chrome, then try again. "
+            "Browser details have been withheld to protect credentials."
         ) from None
     click.echo(
-        "Login validiert: richtiger Tenant, geschützte API, sichere HttpOnly-Session."
+        "Login verified: correct tenant, protected API and secure HttpOnly session."
     )
 
 
@@ -131,7 +131,7 @@ def configure_auth0(
     project_dir: Path, project_name: str, base_domain: str, tenant: str
 ) -> None:
     if not (project_dir / "oauth2-proxy" / "deployment").is_dir():
-        raise click.ClickException("Das Template enthält keine oauth2-proxy-Rolle.")
+        raise click.ClickException("This template has no oauth2-proxy role.")
     origin = f"https://{base_domain}"
     callback = f"{origin}/oauth2/callback"
     apps = auth0_json("apps", "list", "--tenant", tenant)
@@ -257,10 +257,10 @@ def configure_auth0(
                 )
             if result.returncode:
                 raise click.ClickException(
-                    "Auth0-Konfiguration konnte nicht im Vault gespeichert werden."
+                    "Could not save Auth0 configuration in the vault."
                 )
     click.echo(
-        f"Auth0-App {project_name} in {tenant} konfiguriert; Zugangsdaten im Projekt-Vault."
+        f"Auth0 app {project_name} configured in {tenant}; credentials saved in the project vault."
     )
 
 
@@ -274,7 +274,7 @@ def auth0():
 def check(tenant):
     """Validate Auth0 CLI access before creating cloud resources."""
     check_auth0_login(tenant)
-    click.echo(f"Auth0-Zugang zu {tenant} geprüft.")
+    click.echo(f"Auth0 access to {tenant} verified.")
 
 
 @auth0.command("validate")

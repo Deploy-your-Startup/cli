@@ -109,8 +109,8 @@ def _ensure_ghcr_scopes() -> None:
     if _gh_token_has_scope("read:packages") or _gh_token_has_scope("write:packages"):
         return
     click.echo(
-        "  gh CLI Token fehlt 'read:packages' Scope (für ghcr.io Image-Pulls). "
-        "Öffne Browser für gh auth refresh..."
+        "  GitHub token needs 'read:packages' for container image pulls. "
+        "Opening browser to refresh GitHub access..."
     )
     subprocess.run(
         [

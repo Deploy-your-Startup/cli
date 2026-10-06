@@ -68,7 +68,7 @@ async def _async_create_api_token(
     async with CloudflareAutomation(headless=headless) as bot:
         ok = await bot.login(register=register)
         if not ok:
-            ui.error("Cloudflare Login/Sign-up konnte nicht abgeschlossen werden.")
+            ui.error("Could not complete Cloudflare sign-in or sign-up.")
             return None
 
         return await bot.create_api_token(token_name=token_name)
@@ -126,31 +126,31 @@ class CloudflareAutomation:
     async def login(self, *, register: bool) -> bool:
         target_url = CF_SIGNUP_URL if register else CF_TOKEN_URL
         action = "Sign-up" if register else "Login"
-        ui.action_start(f"Cloudflare {action} im Browser öffnen...")
+        ui.action_start(f"Cloudflare {action}: opening in your browser...")
         await self.page.goto(target_url, wait_until="domcontentloaded")
         await self._dismiss_blocking_ui()
 
         if await self._on_token_page():
-            ui.action_done("Cloudflare Session bereits vorhanden")
+            ui.action_done("Cloudflare session already active")
             return True
 
         if register:
             ui.info(
-                "Bitte im Browser den Cloudflare Sign-up abschließen.\n"
-                "  Empfohlen: 'Continue with GitHub' verwenden."
+                "Complete Cloudflare sign-up in your browser.\n"
+                "  You can choose 'Continue with GitHub'."
             )
         else:
-            ui.info("Bitte im Browser bei Cloudflare einloggen.")
+            ui.info("Sign in to Cloudflare in your browser.")
 
         ok = await self._wait_for_session_ready()
         if ok:
-            ui.action_done("Cloudflare Session bereit")
+            ui.action_done("Cloudflare session ready")
         else:
-            ui.action_fail("Cloudflare Session nicht erkannt")
+            ui.action_fail("Cloudflare session not detected")
         return ok
 
     async def create_api_token(self, *, token_name: str) -> str | None:
-        ui.action_start("Cloudflare API-Token erstellen...")
+        ui.action_start("Creating Cloudflare API token...")
 
         # The re-auth below can fire at *any* point, so one pass through the
         # form is not enough — see `_wait_for_form_ready`.
@@ -167,29 +167,29 @@ class CloudflareAutomation:
                 # be read again. Always look before starting over.
                 created = await self._extract_success_token()
                 if created:
-                    ui.action_done("Cloudflare API-Token erstellt")
+                    ui.action_done("Cloudflare API token created")
                     return created
 
                 if attempt == TOKEN_FORM_ATTEMPTS:
                     ui.action_fail(
-                        f"Token-Formular nach {TOKEN_FORM_ATTEMPTS} Versuchen "
-                        "nicht abgeschlossen"
+                        f"Token form still incomplete after {TOKEN_FORM_ATTEMPTS} attempts"
+                        ""
                     )
                     raise
                 ui.info(
-                    f"Cloudflare hat das Formular unterbrochen "
-                    f"(Versuch {attempt}/{TOKEN_FORM_ATTEMPTS}) — "
-                    f"Session prüfen und neu ausfüllen.\n"
+                    f"Cloudflare interrupted the form "
+                    f"(attempt {attempt}/{TOKEN_FORM_ATTEMPTS}) — "
+                    f"Checking the session and retrying.\n"
                     f"  {type(exc).__name__}: {str(exc).splitlines()[0]}"
                 )
 
         token = await self._extract_token()
         if token:
-            ui.action_done("Cloudflare API-Token erstellt")
+            ui.action_done("Cloudflare API token created")
             return token
 
-        ui.action_fail("Cloudflare API-Token konnte nicht automatisch gelesen werden")
-        ui.info("Bitte den Token aus dem Browser kopieren und hier einfügen.")
+        ui.action_fail("Could not read the Cloudflare API token automatically")
+        ui.info("Copy the token from the browser and paste it here.")
         manual_token = ui.text_input("Cloudflare API Token", hide_input=True)
         return manual_token or None
 
