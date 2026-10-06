@@ -13,8 +13,6 @@ import logging
 import sys
 from pathlib import Path
 
-from ansible.parsing.vault import VaultSecret
-
 # Import from our modular vault package
 from cli.vault import (
     check_can_decrypt_with_password,
@@ -71,9 +69,6 @@ def rotate_vault_password(
         logger.error("Both old and new passwords are required")
         return False
 
-    VaultSecret(old_password.encode())
-    VaultSecret(new_password.encode())
-
     base_path = Path(repo)
     specific_path = Path(file_path) if file_path else None
 
@@ -125,7 +120,7 @@ def rotate_vault_password(
                     failed = True
             else:
                 # Check for inline vault blocks
-                text = path.read_text(encoding="utf-8", errors="ignore")
+                text = path.read_bytes().decode("utf-8", errors="ignore")
                 if "$ANSIBLE_VAULT" in text or "!vault" in text:
                     # Do not partially rotate a file containing blocks sealed
                     # with different passwords.
