@@ -14,6 +14,7 @@ from cli.template_commands import (
     template_authentication,
 )
 from cli.wizard.context import BootstrapContext
+from cli.wizard.steps import pitch_project as pitch_project_step
 from cli.wizard.steps import project as project_step
 
 
@@ -230,3 +231,77 @@ def test_bootstrap_renders_selected_template_and_resume_preserves_edits(
     assert (
         ctx.project_dir / "make.sh"
     ).read_text() == "# Local edits after interrupted bootstrap\n"
+
+
+def test_pitch_bootstrap_renders_copier_template_and_resume_keeps_edits(tmp_path):
+    # GIVEN a pitch template laid out like Deploy-your-Startup/pitch-template
+    source = tmp_path.resolve() / "pitch-template"
+    init(source)
+    (source / "copier.yml").write_text(
+        "_subdirectory: template\n"
+        "_templates_suffix: ''\n"
+        "_envops:\n"
+        "  variable_start_string: '§§deploy_your_startup.'\n"
+        "  variable_end_string: '§§'\n"
+        "  block_start_string: '§§%'\n"
+        "  block_end_string: '%§§'\n"
+        "  keep_trailing_newline: true\n"
+        "project_name: {type: str}\n"
+        "base_domain: {type: str}\n"
+        "github_username: {type: str}\n"
+    )
+    (source / "TEMPLATE.md").write_text("Maintainer notes\n")
+    page = source / "template/frontend/src/pages"
+    page.mkdir(parents=True)
+    (page / "index.astro").write_text(
+        '---\nconst projectName = "§§deploy_your_startup.project_name§§";\n---\n'
+        "<title>{projectName}</title>\n"
+    )
+    workflow = source / "template/.github/workflows"
+    workflow.mkdir(parents=True)
+    (workflow / "deploy.yml").write_text(
+        "uses: §§deploy_your_startup.github_username§§/deploy-your-startup/"
+        ".github/workflows/deploy-pages.yml@main\n"
+        "token: ${{ secrets.CLOUDFLARE_API_TOKEN }}\n"
+    )
+    (source / "template/.copier-answers.yml").write_text(
+        "§§deploy_your_startup._copier_answers | to_nice_yaml§§\n"
+    )
+    commit(source, "pitch baseline")
+    git(source, "tag", "v0.1.0")
+    ctx = BootstrapContext(
+        project_name="launch-page",
+        base_domain="launch.example.com",
+        additional_domains="",
+        github_username="owner",
+        postgres_version="17",
+        sentry_dsn="",
+        output_dir=tmp_path.resolve(),
+        kind="pitch",
+        template_source=str(source),
+        template_version="v0.1.0",
+    )
+
+    # WHEN the pitch bootstrap creates the project
+    step = pitch_project_step.PitchProjectStep()
+    assert not step.check(ctx)
+    step.run(ctx)
+
+    # THEN only the generated project is rendered into a fresh repository
+    project = ctx.project_dir
+    assert git(project, "symbolic-ref", "--short", "HEAD") == "main"
+    assert not (project / "TEMPLATE.md").exists()
+    assert not (project / "copier.yml").exists()
+    assert (
+        'const projectName = "launch-page"'
+        in (project / "frontend/src/pages/index.astro").read_text()
+    )
+    deploy = (project / ".github/workflows/deploy.yml").read_text()
+    assert "uses: owner/deploy-your-startup/" in deploy
+    assert "${{ secrets.CLOUDFLARE_API_TOKEN }}" in deploy
+    answers = yaml.safe_load((project / ".copier-answers.yml").read_text())
+    assert answers["_commit"] == "v0.1.0"
+    assert answers["base_domain"] == "launch.example.com"
+
+    # AND a resumed bootstrap skips the step instead of overwriting edits
+    assert step.check(ctx)
