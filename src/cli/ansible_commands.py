@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import re
@@ -389,6 +390,18 @@ def clone_or_update_shared_roles(
     refresh: bool = True,
 ) -> Path:
     working_dir = _resolve_working_dir(working_directory)
+    pin_file = working_dir / "shared-roles.ref"
+    if pin_file.exists():
+        pinned = pin_file.read_text().strip()
+        if not re.fullmatch(r"[0-9a-f]{40}", pinned):
+            raise click.ClickException(
+                "shared-roles.ref must contain a full Git commit SHA."
+            )
+        if version not in {DEFAULT_VERSION, pinned}:
+            raise click.ClickException(
+                "Requested roles differ from shared-roles.ref. Update the reviewed pin first."
+            )
+        version = pinned
     target_dir = working_dir / shared_dir
     candidates = _candidate_repo_urls(working_dir, repo_url)
     last_error: Exception | None = None
@@ -583,6 +596,51 @@ def install_collections(
             )
 
 
+def _shared_roles_fingerprint(root: Path) -> str:
+    """Hash role files and the runtime configuration, independent of Git metadata."""
+    digest = hashlib.sha256()
+    paths = [
+        path
+        for path in (root / "roles").rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc"
+    ]
+    paths += [root / name for name in ROOT_SHARED_FILES if (root / name).is_file()]
+    for path in sorted(paths, key=lambda item: item.relative_to(root).as_posix()):
+        digest.update(path.relative_to(root).as_posix().encode() + b"\0")
+        digest.update(path.read_bytes() + b"\0")
+    return digest.hexdigest()
+
+
+def run_pin(
+    working_directory: str = ".",
+    version: str = DEFAULT_VERSION,
+    repo_url: str | None = None,
+) -> None:
+    """Record a resolved owner-repository commit and its runtime contents."""
+    working_dir = _resolve_working_dir(working_directory)
+    with tempfile.TemporaryDirectory(
+        prefix=".startup-pin-", dir=working_dir
+    ) as temporary:
+        root = clone_or_update_shared_roles(
+            working_directory=temporary,
+            version=version,
+            repo_url=repo_url,
+        )
+        if not (root / ".git").exists():
+            raise click.ClickException(
+                "Pinning requires a Git repository, not a local directory export."
+            )
+        revision = _run_command(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            cwd=working_dir,
+            capture_output=True,
+        ).stdout.strip()
+        fingerprint = _shared_roles_fingerprint(root)
+    (working_dir / "shared-roles.sha256").write_text(fingerprint + "\n")
+    (working_dir / "shared-roles.ref").write_text(revision + "\n")
+    click.echo(f"Pinned shared roles to {revision}. Review and commit both pin files.")
+
+
 def setup_ansible(
     working_directory: str = ".",
     shared_dir: str = DEFAULT_SHARED_DIR,
@@ -597,6 +655,30 @@ def setup_ansible(
         repo_url=repo_url,
         refresh=refresh,
     )
+    working_dir = _resolve_working_dir(working_directory)
+    fingerprint = _shared_roles_fingerprint(shared_roles_dir)
+    fingerprint_file = working_dir / "shared-roles.sha256"
+    pin_file = working_dir / "shared-roles.ref"
+    if pin_file.exists():
+        if (
+            not fingerprint_file.exists()
+            or fingerprint_file.read_text().strip() != fingerprint
+        ):
+            raise click.ClickException(
+                "Shared role contents do not match shared-roles.sha256. "
+                "Refusing to run modified or differently exported roles; update the reviewed pin and checksum together."
+            )
+    elif (shared_roles_dir / ".git").exists():
+        revision = _run_command(
+            ["git", "-C", str(shared_roles_dir), "rev-parse", "HEAD"],
+            cwd=working_dir,
+            capture_output=True,
+        ).stdout.strip()
+        pin_file.write_text(revision + "\n")
+        fingerprint_file.write_text(fingerprint + "\n")
+        click.echo(
+            f"Pinned shared roles to {revision}. Commit shared-roles.ref and shared-roles.sha256."
+        )
     install_collections(working_directory=working_directory, shared_dir=shared_dir)
     return shared_roles_dir
 
