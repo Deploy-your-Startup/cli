@@ -50,7 +50,10 @@ def _run(operation, data, password, *arguments, new_password=None):
         if new_password is not None:
             new_descriptor = stack.enter_context(_password_pipe(new_password))
             descriptors.append(new_descriptor)
-            command += ["--new-vault-password-file", f"/dev/fd/{new_descriptor}"]
+            # --new-vault-password-file resolves symlinks, and on Linux
+            # /dev/fd/N points at an unopenable "pipe:[...]". A vault id source
+            # is not resolved, so the inherited pipe stays reachable.
+            command += ["--new-vault-id", f"default@/dev/fd/{new_descriptor}"]
         command.extend(arguments)
         try:
             result = subprocess.run(
