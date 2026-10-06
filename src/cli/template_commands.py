@@ -14,6 +14,10 @@ from copier import run_copy, run_update
 from copier.main import Worker
 
 DEFAULT_TEMPLATE = "https://github.com/Deploy-your-Startup/django-backend-template.git"
+# The tested release of DEFAULT_TEMPLATE that this CLI release bootstraps. This
+# is the only place the default template version is pinned; installers and
+# docs call `startup bootstrap` without --template-version.
+DEFAULT_TEMPLATE_VERSION = "v0.1.0"
 ANSWERS_FILE = ".copier-answers.yml"
 PUBLIC_FIELDS = {
     "project_name",
@@ -73,6 +77,11 @@ def parse_data(values: tuple[str, ...]) -> dict[str, str]:
             )
         data[key] = value
     return data
+
+
+def default_template_version(source: str) -> str:
+    """Pinned release for the default template; other templates track HEAD."""
+    return DEFAULT_TEMPLATE_VERSION if source == DEFAULT_TEMPLATE else "HEAD"
 
 
 def render_project(

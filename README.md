@@ -29,20 +29,22 @@ domain you own. Servers and domains are billed by your providers.
 curl -fsSL https://deploy-your-startup.com/install.sh | bash -s -- --onboard
 ```
 
-The installer provides Python 3.14 and CLI `v0.1.4`, connects GitHub and checks
-your setup. The wizard asks for your project name and whether you already own a
-domain; without one it offers to register it through Hetzner. It then shows a
-launch plan before creating anything. Extra domains and error tracking are optional.
+The installer provides Python 3.14 and the latest stable CLI release, connects
+GitHub and checks your setup. The wizard asks for your project name and whether
+you already own a domain; without one it offers to register it through Hetzner.
+It then shows a launch plan before creating anything. Extra domains and error
+tracking are optional.
 Interactive terminals show a brief launch animation once, then stop. Set
 `STARTUP_NO_ANIMATION=1` to disable it; redirected output, CI and `NO_COLOR` stay static.
-The default application template is pinned to `v0.1.0` independently of the CLI.
+Each CLI release bootstraps a tested release of the default application
+template; the launch plan shows which one.
 
 If Git is missing, run `xcode-select --install` first. The terminal explains any
 missing prerequisites. To resume the wizard after installation:
 
 ```bash
 startup doctor
-startup bootstrap --kind fullstack --provider hetzner --domain-owned --template-version v0.1.0
+startup bootstrap --kind fullstack --provider hetzner --domain-owned
 ```
 
 The first-deploy path creates Django/FastAPI, Postgres and HTTPS on k3s in your
@@ -52,6 +54,36 @@ options, including Vue templates, are available through `startup bootstrap --hel
 Bootstrap requests a deployment; it does not prove the site is live. Follow the
 Actions link, point DNS at your server when needed, then verify your site over
 HTTPS. For local development, follow the generated project's README.
+
+## Use the CLI from a coding agent
+
+The CLI ships an agent skill that teaches Claude Code, Codex and OpenCode how
+to install, set up and operate `startup`: bootstrap, deployment verification,
+secrets and updates, including when to ask before costly or destructive steps.
+Install it for every agent found in your home directory:
+
+```bash
+startup skills install
+```
+
+Use `--agent claude|codex|opencode` to choose agents and `--dry-run` to preview
+the paths. Re-run it after updating the CLI so the skill matches your version.
+Then start a new agent session and ask it, for example, to launch a landing page
+for your domain.
+
+Without the CLI installed yet, add the same skill with a skill installer or as a
+Claude Code plugin:
+
+```bash
+npx skills add Deploy-your-Startup/cli --skill deploy-your-startup
+```
+
+```text
+/plugin marketplace add Deploy-your-Startup/cli
+/plugin install deploy-your-startup@deploy-your-startup
+```
+
+The agent offers the official installer when `startup` is missing.
 
 ## Update or remove the CLI
 
