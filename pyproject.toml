@@ -62,6 +62,11 @@ package-dir = {"" = "src"}
 where = ["src"]
 include = ["cli*"]
 
+# The agent skill ships inside the package so `startup skills install` works
+# without a checkout. Its public copy for skill installers lives in skills/.
+[tool.setuptools.package-data]
+cli = ["agent_skills/*/SKILL.md"]
+
 # Version is derived from the latest git tag (e.g. v0.5.0 -> 0.5.0) at build
 # time. The installer uses fixed `vX.Y.Z` tags; PyPI publishing is manual.
 [tool.setuptools_scm]

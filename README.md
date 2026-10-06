@@ -43,6 +43,36 @@ Bootstrap requests a deployment; it does not prove the site is live. Follow the
 Actions link, point DNS at your server when needed, then verify your site over
 HTTPS. For local development, follow the generated project's README.
 
+## Use the CLI from a coding agent
+
+The CLI ships an agent skill that teaches Claude Code, Codex and OpenCode how
+to install, set up and operate `startup`: bootstrap, deployment verification,
+secrets and updates, including when to ask before costly or destructive steps.
+Install it for every agent found in your home directory:
+
+```bash
+startup skills install
+```
+
+Use `--agent claude|codex|opencode` to choose agents and `--dry-run` to preview
+the paths. Re-run it after updating the CLI so the skill matches your version.
+Then start a new agent session and ask it, for example, to launch a landing page
+for your domain.
+
+Without the CLI installed yet, add the same skill with a skill installer or as a
+Claude Code plugin:
+
+```bash
+npx skills add Deploy-your-Startup/cli --skill deploy-your-startup
+```
+
+```text
+/plugin marketplace add Deploy-your-Startup/cli
+/plugin install deploy-your-startup@deploy-your-startup
+```
+
+The agent offers the official installer when `startup` is missing.
+
 ## Update or remove the CLI
 
 Run the installer again to install the currently published CLI release:
@@ -334,7 +364,11 @@ cli/
 │       ├── deploy.py          # GitHub deployment commands
 │       ├── rotate_vault.py    # Vault rotation utilities
 │       ├── update_vault_secrets.py  # Vault update utilities
+│       ├── skill_commands.py  # `startup skills` for coding agents
+│       ├── agent_skills/      # Agent skill bundled with the package
 │       └── vault/             # Vault management modules
+├── skills/                    # Same agent skill for skill installers
+├── .claude-plugin/            # Claude Code plugin and marketplace manifests
 ├── tests/                     # Test suite
 ├── pyproject.toml            # Project configuration
 ├── make.sh                   # Development helper script
