@@ -23,6 +23,8 @@ curl -fsSL https://deploy-your-startup.com/install.sh | bash -s -- --onboard
 The installer provides Python 3.14 and CLI `v0.1.1`, connects GitHub and checks
 your setup. The wizard asks for your project name and domain, then shows a launch
 plan before creating anything. Extra domains and error tracking are optional.
+Interactive terminals show a brief launch animation once, then stop. Set
+`STARTUP_NO_ANIMATION=1` to disable it; redirected output, CI and `NO_COLOR` stay static.
 The default application template is pinned to `v0.1.0` independently of the CLI.
 
 If Git is missing, run `xcode-select --install` first. The terminal explains any
