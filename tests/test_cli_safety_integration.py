@@ -7,7 +7,8 @@ import sys
 from pathlib import Path
 
 import pytest
-from ansible.parsing.vault import VaultLib, VaultSecret
+
+from tests.vault_support import RealVault
 
 SOURCE = Path(__file__).resolve().parents[1] / "src"
 PASSWORD = "integration-vault-password"
@@ -38,7 +39,7 @@ def run_cli(tmp_path, *args, input=None, env=None):
 
 
 def vault(password=PASSWORD):
-    return VaultLib([("default", VaultSecret(password.encode()))])
+    return RealVault(password)
 
 
 @pytest.mark.parametrize("dry_run", [False, True])

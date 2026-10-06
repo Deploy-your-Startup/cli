@@ -49,6 +49,13 @@ preserves behavior without exercising it.
   do not corrupt them. Check that secrets never enter child-process arguments
   or diagnostic output; only an explicitly requested secret-read result may
   contain plaintext on stdout.
+- Run the template integration matrix for Vault changes: render the real
+  Django/FastAPI and Vue + Django/FastAPI templates at pinned public revisions,
+  then exercise single-field, mixed multi-file and all-field updates, dry runs,
+  and bootstrap's batch secret setup plus strict rotation for Hetzner and BYOS.
+  Use disposable rendered projects and synthetic credentials; never provision
+  cloud infrastructure for these tests. `mise run test-vault` runs this matrix
+  together with the other Vault regression tests.
 - Treat these as required checks, not claims that all cases already work. Record
   uncovered behavior or failures explicitly before claiming compatibility.
 

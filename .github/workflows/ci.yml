@@ -1,8 +1,6 @@
 name: CI
 
-# Lint + tests on every push and PR. Without this, lint errors only surfaced
-# when somebody happened to run `./make.sh format` locally — which is how 144 of
-# them accumulated unnoticed.
+# Run the same lint and test contracts locally and in CI on pushes and PRs.
 on:
   push:
     branches: [main]

@@ -7,7 +7,8 @@ import sys
 from pathlib import Path
 
 import pytest
-from ansible.parsing.vault import VaultLib, VaultSecret
+
+from tests.vault_support import RealVault
 
 SOURCE = Path(__file__).resolve().parents[1] / "src"
 PASSWORD = "test-only-integration-password"
@@ -64,7 +65,7 @@ def test_real_provisioning_overrides_permanent_authorization(
     (variable_dir / "all.yml").write_text(
         "allow_worker_teardown: true\nnetwork_mode: public\n"
     )
-    vault = VaultLib([("default", VaultSecret(PASSWORD.encode()))])
+    vault = RealVault(PASSWORD)
     (tmp_path / ("ci_ssh_key" if byos else "hcloud_token_production")).write_bytes(
         vault.encrypt(b"integration-only-boundary-value")
     )
