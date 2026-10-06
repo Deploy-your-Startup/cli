@@ -43,6 +43,35 @@ Bootstrap requests a deployment; it does not prove the site is live. Follow the
 Actions link, point DNS at your server when needed, then verify your site over
 HTTPS. For local development, follow the generated project's README.
 
+### Landing page on Cloudflare Pages
+
+Validate an idea before building the application: the pitch template creates a
+static [Astro](https://astro.build) landing page that deploys to Cloudflare Pages
+on every push to `main`. It needs a GitHub account, a free Cloudflare account and
+a domain; no server is created.
+
+```bash
+startup bootstrap --kind pitch --template-version v0.1.0
+```
+
+The wizard opens the Cloudflare dashboard and asks for an API token with these
+account permissions: **Cloudflare Pages: Edit**, **Account Settings: Read** and
+**Zone: Edit**. Cloudflare then has to serve DNS for the domain:
+
+- A subdomain of a zone already on Cloudflare needs no further changes.
+- A domain registered with Hetzner gets its nameservers switched in KonsoleH.
+- A domain at another registrar: set the displayed Cloudflare nameservers there.
+- Without a domain, the wizard opens Hetzner domain registration for you to
+  review and confirm.
+
+Bootstrap renders the
+[pitch template](https://github.com/Deploy-your-Startup/pitch-template), creates
+the GitHub repository, stores the Cloudflare token and account ID as repository
+secrets, pushes the code and connects the domain and its `www` subdomain to the
+Pages project. Nameserver changes can take a while to propagate; verify the site
+over HTTPS once the Actions run has finished. Edit `frontend/src/pages/index.astro`
+and run `./make.sh run` to work on the page locally.
+
 ## Update or remove the CLI
 
 Run the installer again to install the currently published CLI release:
@@ -347,10 +376,12 @@ MIT
 
 ## Application template updates (Copier)
 
-Full-stack `startup bootstrap` renders the Django template with Copier. Select
+`startup bootstrap` renders the Django template (or, with `--kind pitch`, the
+pitch template) with Copier. Select
 an explicit template using `--template <git-url-or-local-repo>` and
-`--template-version <tag-or-commit>` when reviewing a release. Pitch templates
-and `startup sync` retain their existing workflows.
+`--template-version <tag-or-commit>` when reviewing a release. With
+`--kind pitch`, the same options select the pitch template. `startup sync`
+retains its existing workflow.
 
 Existing projects can record a baseline without changing their files:
 
