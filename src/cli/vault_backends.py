@@ -14,11 +14,23 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from typing import Protocol, runtime_checkable
 
 import click
+from keyring.errors import KeyringError
 
 DEFAULT_VAULT_BACKEND = "keychain"
+
+
+def _macos_keyring():
+    if sys.platform != "darwin":
+        raise click.ClickException(
+            "Full-stack bootstrap currently requires macOS Keychain."
+        )
+    from keyring.backends.macOS import Keyring
+
+    return Keyring()
 
 
 def keychain_service_name(project_name: str) -> str:
@@ -86,31 +98,18 @@ class KeychainBackend:
     def write(self, key: str, value: str) -> None:
         service_name = keychain_service_name(key)
         try:
-            subprocess.run(
-                [
-                    "security",
-                    "add-generic-password",
-                    "-U",
-                    "-a",
-                    os.environ.get("USER", ""),
-                    "-s",
-                    service_name,
-                    "-w",
-                    value,
-                ],
-                capture_output=True,
-                text=True,
-                check=True,
+            # The native Security API keeps the password out of process argv.
+            # Pin the macOS backend rather than honoring external backend config.
+            _macos_keyring().set_password(
+                service_name, os.environ.get("USER", ""), value
             )
-        except FileNotFoundError as exc:
-            raise click.ClickException(
-                "The macOS `security` tool is not available — the keychain "
-                "vault backend only works on macOS."
-            ) from exc
-        except subprocess.CalledProcessError as exc:
+        except click.ClickException:
+            raise
+        except (KeyringError, OSError):
+            # Provider errors can contain credentials. Never render their text.
             raise click.ClickException(
                 f'Failed to store vault password in macOS Keychain for "{service_name}".'
-            ) from exc
+            ) from None
 
 
 _BACKENDS: dict[str, type] = {

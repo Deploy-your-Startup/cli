@@ -13,14 +13,13 @@ The helpers here let the wizard:
 
 from __future__ import annotations
 
-import os
-import subprocess
 from pathlib import Path
 
 import click
 
 from cli.vault.fields import contains_vault_blocks
 from cli.vault.files import check_can_decrypt_with_password, is_full_vault_file
+from cli.vault_backends import get_backend
 
 
 def iter_vault_files(deployment_dir: Path) -> list[Path]:
@@ -90,49 +89,14 @@ def verify_rotation(
         )
 
 
-def _keychain_service_name(project_name: str) -> str:
-    from cli.ansible_commands import keychain_service_name
-
-    return keychain_service_name(project_name)
-
-
 def store_keychain_password(project_name: str, vault_password: str) -> None:
     """Store (or update) the vault password in the macOS Keychain."""
-    subprocess.run(
-        [
-            "security",
-            "add-generic-password",
-            "-a",
-            os.environ.get("USER", ""),
-            "-s",
-            _keychain_service_name(project_name),
-            "-w",
-            vault_password,
-            "-U",  # update if exists
-        ],
-        check=True,
-        capture_output=True,
-    )
+    get_backend().write(project_name, vault_password)
 
 
 def read_keychain_password(project_name: str) -> str | None:
     """Read the stored vault password, or ``None`` if absent/unavailable."""
     try:
-        result = subprocess.run(
-            [
-                "security",
-                "find-generic-password",
-                "-a",
-                os.environ.get("USER", ""),
-                "-s",
-                _keychain_service_name(project_name),
-                "-w",
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-    except (FileNotFoundError, subprocess.CalledProcessError):
+        return get_backend().read(project_name)
+    except click.ClickException:
         return None
-    pw = result.stdout.strip()
-    return pw or None

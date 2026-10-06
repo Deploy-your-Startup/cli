@@ -20,8 +20,10 @@ from .steps.hetzner import HetznerStep
 from .steps.pitch_finalize import PitchFinalizeStep
 from .steps.pitch_project import PitchProjectStep
 from .steps.project import ProjectStep
+from .steps.shared_deployment import SharedDeploymentStep
 
 FULLSTACK_STEPS: list[type[WizardStep]] = [
+    SharedDeploymentStep,
     DomainStep,
     HetznerStep,
     ProjectStep,
@@ -30,6 +32,7 @@ FULLSTACK_STEPS: list[type[WizardStep]] = [
 # Bring-your-own-server: no Hetzner token and no domain-registrar step — the user
 # brings an existing VPS and points DNS at it themselves (explained in ByosStep).
 BYOS_STEPS: list[type[WizardStep]] = [
+    SharedDeploymentStep,
     ByosStep,
     ProjectStep,
     FinalizeStep,
@@ -81,6 +84,12 @@ def check_prerequisites(ctx: BootstrapContext) -> None:
         from cli.auth0_commands import check_auth0_login
 
         check_auth0_login(ctx.auth0_tenant)
+    if ctx.kind != "pitch":
+        from cli.preflight import check_local_prerequisites
+
+        check_local_prerequisites(
+            browser=ctx.provider == "hetzner" and not ctx.hetzner_token
+        )
     required = [("git", "Git: https://git-scm.com/downloads")]
     if ctx.kind != "pitch":
         required.append(

@@ -11,52 +11,53 @@ Source of truth for the product vision: [Deploy Your Startup](https://deploy-you
 - **Template Sync**: Sync the shared `deploy-template` repository into your GitHub account
 - **Vault Rotation**: Rotate vault passwords across multiple files
 
-## Installation
+## Installation and first project (early access)
 
-### Recommended: Global Tool Installation with uv
+The supported first-deploy path is macOS + Hetzner Cloud. You need Git, Google
+Chrome, a GitHub account, a Hetzner Cloud account, and a domain whose DNS you can
+edit. Servers and domains are billed directly to your own accounts.
 
-Install the CLI as a global tool using uv (recommended):
+Install uv and the GitHub CLI, for example with Homebrew:
 
 ```bash
-uv tool install deploy-your-startup-cli --from cli
+brew install uv gh
+uv tool install --python 3.12 'git+https://github.com/Deploy-your-Startup/cli.git@main'
+uv tool update-shell
 ```
 
-Or install from the current directory:
+Open a new terminal if `startup` is not on your PATH. No PyPI account or package
+publication is required. The landing page pins the tested CLI commit; `main`
+here follows the latest changes.
 
 ```bash
-cd cli
-uv tool install deploy-your-startup-cli --from .
+gh auth login --hostname github.com --git-protocol https --scopes repo,workflow,read:packages,write:packages
+gh auth setup-git
+startup doctor
+startup bootstrap --kind fullstack --provider hetzner --domain-owned
 ```
 
-After installation, the `startup` command will be available globally.
+Configure your Git name/email and create an SSH key with `ssh-keygen -t ed25519`
+if doctor reports they are missing. The SSH key is for access to your server;
+you do not need to upload it to GitHub when using HTTPS.
 
-### Alternative: pip Installation
+Bootstrap asks for your project name, domain, and other settings. It creates the
+shared private `<your-user>/deploy-your-startup` workflow repository if missing,
+creates a private application repository, encrypts project secrets, and requests
+the first infrastructure deployment. An existing shared repository is preserved;
+run `startup sync` explicitly when you want to update it.
 
-You can also install using pip:
+Bootstrap completion is not proof that deployment succeeded. Check the Actions
+link printed at the end, point your domain's DNS at the server when needed, and
+verify the site over HTTPS. Authentication with Auth0 is optional for templates
+that support it. Pitch mode is not part of the initial public quickstart.
+
+For local development install mise and Docker and follow the generated project's
+README. Installing the CLI alone does not install every application runtime.
+
+To install a checkout for CLI development:
 
 ```bash
-pip install deploy-your-startup-cli
-```
-
-Or with uv pip:
-
-```bash
-uv pip install deploy-your-startup-cli
-```
-
-### Optional Dependencies
-
-The CLI has optional dependency groups for specific use cases:
-
-```bash
-# Install with development dependencies (pytest, ruff)
-uv pip install "deploy-your-startup-cli[dev]"
-
-# Install with server dependencies (fastapi, uvicorn)
-uv pip install "deploy-your-startup-cli[server]"
-
-# Install with all optional dependencies
-uv pip install "deploy-your-startup-cli[dev,server]"
+uv tool install --reinstall deploy-your-startup-cli --from .
 ```
 
 ## Usage
@@ -305,8 +306,8 @@ uv run pytest -v
 ./make.sh format
 
 # Or directly with uvx
-uvx ruff format
-uvx ruff check --fix
+uv run --extra dev ruff format
+uv run --extra dev ruff check --fix
 ```
 
 ## Project Structure
@@ -328,7 +329,7 @@ cli/
 
 ## Requirements
 
-- Python >= 3.11
+- Python >= 3.12
 - uv (recommended for installation and development)
 
 ## License
