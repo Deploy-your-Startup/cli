@@ -10,6 +10,7 @@ from pathlib import Path
 import click
 
 from cli.auth0_commands import auth0
+from cli.preflight import doctor
 from cli.template_commands import DEFAULT_TEMPLATE, template
 
 
@@ -43,6 +44,7 @@ def cli():
 
 cli.add_command(template)
 cli.add_command(auth0)
+cli.add_command(doctor)
 
 
 # === BOOTSTRAP COMMAND ===

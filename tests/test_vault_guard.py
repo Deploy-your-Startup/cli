@@ -5,8 +5,8 @@ sealed with the public ``TEMPLATE_VAULT_PASSWORD`` while a different password
 was written to the Keychain — and nothing noticed.
 """
 
-import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import click
 import pytest
@@ -97,32 +97,29 @@ def test_vault_is_decryptable_false_when_no_vault_files(monkeypatch):
 # --- keychain helpers --------------------------------------------------------
 
 
-def test_store_keychain_password_updates_existing(monkeypatch):
-    captured = {}
-
-    def fake_run(cmd, **kwargs):
-        captured["cmd"] = cmd
-        return subprocess.CompletedProcess(cmd, 0)
-
-    monkeypatch.setattr(vault_guard.subprocess, "run", fake_run)
+def test_store_keychain_password_uses_safe_backend(monkeypatch):
+    captured = []
+    monkeypatch.setattr(
+        vault_guard,
+        "get_backend",
+        lambda: SimpleNamespace(write=lambda *args: captured.append(args)),
+    )
     vault_guard.store_keychain_password("hallo", "s3cret")
-    assert "add-generic-password" in captured["cmd"]
-    assert "-U" in captured["cmd"]
-    assert "VAULT_PASSWORD_HALLO" in captured["cmd"]
-    assert "s3cret" in captured["cmd"]
+    assert captured == [("hallo", "s3cret")]
 
 
 def test_read_keychain_password_returns_value(monkeypatch):
-    def fake_run(cmd, **kwargs):
-        return subprocess.CompletedProcess(cmd, 0, stdout="s3cret\n", stderr="")
-
-    monkeypatch.setattr(vault_guard.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        vault_guard, "get_backend", lambda: SimpleNamespace(read=lambda key: "s3cret")
+    )
     assert vault_guard.read_keychain_password("hallo") == "s3cret"
 
 
 def test_read_keychain_password_returns_none_when_missing(monkeypatch):
-    def fake_run(cmd, **kwargs):
-        raise subprocess.CalledProcessError(1, cmd)
+    def missing(key):
+        raise click.ClickException("Not found")
 
-    monkeypatch.setattr(vault_guard.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        vault_guard, "get_backend", lambda: SimpleNamespace(read=missing)
+    )
     assert vault_guard.read_keychain_password("hallo") is None

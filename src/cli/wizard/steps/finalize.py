@@ -219,7 +219,7 @@ class FinalizeStep(WizardStep):
             )
         else:
             ui.action_fail("Workflow-Start fehlgeschlagen")
-            ui.warning(
+            raise click.ClickException(
                 "Bitte manuell starten: "
                 "gh workflow run deploy-infrastructure.yml --ref main"
                 + (f" ({last_err})" if last_err else "")
@@ -231,7 +231,7 @@ class FinalizeStep(WizardStep):
         try:
             store_keychain_password(ctx.project_name, ctx.vault_password)
             ui.action_done("Vault-Passwort in Keychain gespeichert")
-        except subprocess.CalledProcessError:
+        except click.ClickException:
             ui.action_fail("Keychain-Speicherung fehlgeschlagen")
             ui.warning(
                 "Vault-Passwort konnte nicht erneut in Keychain gespeichert werden."

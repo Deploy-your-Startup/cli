@@ -1,6 +1,7 @@
 """Tests for the pluggable vault password backends."""
 
 import subprocess
+from types import SimpleNamespace
 
 import click
 import pytest
@@ -63,3 +64,33 @@ def test_resolve_vault_password_explicit_wins_without_backend(monkeypatch):
         )
         == "explicit"
     )
+
+
+def test_write_never_sends_password_to_subprocess(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        vault_backends,
+        "_macos_keyring",
+        lambda: SimpleNamespace(set_password=lambda *args: calls.append(args)),
+    )
+    monkeypatch.setattr(
+        vault_backends.subprocess,
+        "run",
+        lambda *args, **kwargs: pytest.fail("Password storage must use the native API"),
+    )
+    monkeypatch.setenv("USER", "tester")
+    KeychainBackend().write("demo", "private-value")
+    assert calls == [("VAULT_PASSWORD_DEMO", "tester", "private-value")]
+
+
+def test_write_failure_does_not_expose_provider_error(monkeypatch):
+    def fail(*args):
+        raise vault_backends.KeyringError("private-value")
+
+    monkeypatch.setattr(
+        vault_backends, "_macos_keyring", lambda: SimpleNamespace(set_password=fail)
+    )
+    with pytest.raises(click.ClickException) as error:
+        KeychainBackend().write("demo", "private-value")
+    assert "private-value" not in str(error.value)
+    assert error.value.__suppress_context__
