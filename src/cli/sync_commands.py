@@ -250,6 +250,7 @@ def _sync_repo(
     description: str,
     commit_message: str,
     branch: str = DEFAULT_BRANCH,
+    source_version: str = DEFAULT_BRANCH,
     sync_paths: list[str] | None = None,
     dry_run: bool = False,
     replacements: dict[str, str] | None = None,
@@ -285,7 +286,7 @@ def _sync_repo(
                 _set_actions_access(target_repo, actions_access_level, cwd=temp_root)
 
         click.echo(f"Cloning source repository {source_repo} ...")
-        _clone_source_repo(source_repo, source_root, branch)
+        _clone_source_repo(source_repo, source_root, source_version)
 
         click.echo(f"Cloning target repository {target_repo} ...")
         _clone_target_repo(target_repo, target_root, branch)
@@ -321,6 +322,7 @@ def sync_deploy_repo(
     repo_name: str = "deploy-your-startup",
     source_owner: str = DEFAULT_TEMPLATE_OWNER,
     source_repo: str = DEFAULT_DEPLOY_TEMPLATE_REPO,
+    source_version: str = DEFAULT_BRANCH,
     private: bool = True,
     dry_run: bool = False,
 ) -> bool:
@@ -333,6 +335,7 @@ def sync_deploy_repo(
         description="Shared deploy workflows, actions, and Ansible roles",
         commit_message="sync shared deploy repo",
         dry_run=dry_run,
+        source_version=source_version,
         replacements={
             "§§deploy_your_startup.github_username§§": resolved_owner,
             "§§deploy_your_startup.deploy_repo_name§§": repo_name,

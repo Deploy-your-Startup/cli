@@ -20,7 +20,7 @@ domain you own. Servers and domains are billed by your providers.
 curl -fsSL https://deploy-your-startup.com/install.sh | bash -s -- --onboard
 ```
 
-The installer provides Python 3.14 and CLI `v0.1.1`, connects GitHub and checks
+The installer provides Python 3.14 and CLI `v0.1.3`, connects GitHub and checks
 your setup. The wizard asks for your project name and domain, then shows a launch
 plan before creating anything. Extra domains and error tracking are optional.
 Interactive terminals show a brief launch animation once, then stop. Set
@@ -222,8 +222,13 @@ In CI, the shared deploy action exports the bundled roles into
 `--no-refresh` so the exported copy is reused instead of trying to clone the
 shared repository again.
 
-Locally, keep the default `--refresh` behavior so `startup` can still update the
-shared deploy checkout from git.
+Locally, keep the default `--refresh` behavior. The first Git-backed setup records
+`shared-roles.ref` and `shared-roles.sha256`; review and commit both files.
+Subsequent runs reuse that exact commit. CI exports must match its checksum.
+To update roles, first sync the shared deployment repository, then run
+`startup ansible pin --working-directory deployment --version <reviewed-ref>`.
+Review and commit both new pin files, and ensure CI exports the same roles.
+`startup sync` alone does not advance an existing project's pin.
 
 Examples:
 
@@ -231,7 +236,7 @@ Examples:
 # One-time setup for a user account
 startup sync --owner philipp-lein
 
-# Local deployment keeps refreshing the shared checkout
+# Local deployment refreshes Git while preserving the reviewed pin
 uv run startup ansible setup_ansible --working-directory .
 
 # CI-style reuse of a pre-exported .shared-roles directory
@@ -421,3 +426,8 @@ for the tenant and validates CLI access before provisioning. With `--yes`, pass
 After deployment: `startup auth0 validate --tenant <tenant> --base-domain <domain>`
 opens a temporary browser for a real login and checks the protected API and secure
 HttpOnly session. No passwords, tokens or browser state are printed or saved.
+
+## Maintainer releases
+
+See [CLI releases](docs/releases.md) for tags, verification, installer updates
+and optional PyPI publishing.
