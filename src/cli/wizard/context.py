@@ -66,7 +66,7 @@ class BootstrapContext:
             if not value
         ]
         if missing:
-            raise RuntimeError("Cloudflare-Zugangsdaten fehlen: " + ", ".join(missing))
+            raise RuntimeError("Missing Cloudflare credentials: " + ", ".join(missing))
         assert self.cloudflare_api_token is not None
         assert self.cloudflare_account_id is not None
         return self.cloudflare_api_token, self.cloudflare_account_id

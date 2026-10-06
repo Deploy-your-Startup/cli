@@ -121,7 +121,7 @@ def byos_deploy_key_install_command(ctx: BootstrapContext, public_key: str) -> s
 
 class ProjectStep(WizardStep):
     number = 3
-    name = "Projekt erstellen"
+    name = "Create project"
 
     def check(self, ctx: BootstrapContext) -> bool:
         if ctx.mode != "github":
@@ -130,14 +130,14 @@ class ProjectStep(WizardStep):
         if not ctx.project_dir.exists():
             if repo_exists(ctx.full_repo):
                 ui.info(
-                    f"Repository {ctx.full_repo} existiert, aber ist nicht lokal geklont."
+                    f"Repository {ctx.full_repo} exists but has not been cloned locally."
                 )
                 return False
             return False
 
         if has_placeholders(ctx.project_dir):
             ui.info(
-                "Repository existiert, hat aber noch Placeholder — konfiguriere neu..."
+                "Repository exists with unresolved placeholders — applying settings..."
             )
             return False
 
@@ -148,13 +148,13 @@ class ProjectStep(WizardStep):
         keychain_password = read_keychain_password(ctx.project_name)
         if not vault_is_decryptable(ctx.deployment_dir, keychain_password):
             ui.info(
-                "Vault lässt sich nicht mit dem Keychain-Passwort entschlüsseln "
-                "— konfiguriere Secrets neu..."
+                "Cannot decrypt vault with the Keychain password "
+                "— configuring secrets again..."
             )
             return False
 
         ctx.vault_password = keychain_password
-        ui.skip_indicator(f"Projekt {ctx.project_name} bereits konfiguriert")
+        ui.skip_indicator(f"Project {ctx.project_name} already configured")
         return True
 
     def run(self, ctx: BootstrapContext) -> None:
@@ -162,22 +162,22 @@ class ProjectStep(WizardStep):
 
         # 3a. Create a fresh application repository.
         if need_clone:
-            ui.action_start("Projektverzeichnis erstellen...")
+            ui.action_start("Creating project folder...")
             ctx.project_dir.mkdir(parents=True)
             _run_command(["git", "init", "-b", "main"], cwd=ctx.project_dir)
-            ui.action_done("Projektverzeichnis erstellt")
+            ui.action_done("Project folder created")
 
         # 3b. SSH Keys
         user_public_key = prompt_user_public_key(non_interactive=ctx.non_interactive)
-        ui.action_start("CI SSH Key generieren...")
+        ui.action_start("Generating CI SSH key...")
         with tempfile.TemporaryDirectory(prefix="bootstrap-ssh-") as ssh_tmp:
             ci_private_key, ci_public_key = _generate_ssh_keypair(
                 ctx.project_name, Path(ssh_tmp)
             )
-        ui.action_done("CI SSH Key generiert")
+        ui.action_done("CI SSH key generated")
 
         # 3c. Placeholders
-        ui.action_start("Projekt konfigurieren...")
+        ui.action_start("Configuring project...")
         replacements = template_replacements(
             project_name=ctx.project_name,
             base_domain=ctx.base_domain,
@@ -198,10 +198,10 @@ class ProjectStep(WizardStep):
                 source=ctx.template_source,
                 version=ctx.template_version,
             )
-        ui.action_done("Projekt konfiguriert")
+        ui.action_done("Project configured")
 
         # 3d. Vault secrets
-        ui.action_start("Secrets verschlüsseln...")
+        ui.action_start("Encrypting secrets...")
         from cli.update_vault_secrets import update_secrets as update_vault_secrets
         from cli.vault.common import generate_random_secret
 
@@ -238,11 +238,11 @@ class ProjectStep(WizardStep):
             set_file_content=file_content,
         )
         if not ok or pw_failed:
-            raise click.ClickException("Fehler beim Verschlüsseln der Secrets.")
-        ui.action_done("Secrets verschlüsselt")
+            raise click.ClickException("Could not encrypt secrets.")
+        ui.action_done("Secrets encrypted")
 
         # 3e. Rotate vault password
-        ui.action_start("Vault-Passwort rotieren...")
+        ui.action_start("Rotating vault password...")
         from cli.rotate_vault import rotate_vault_password as rotate_vault
 
         rotated = rotate_vault(
@@ -252,21 +252,21 @@ class ProjectStep(WizardStep):
             strict=True,
         )
         if not rotated:
-            raise click.ClickException("Fehler beim Rotieren des Vault-Passworts.")
+            raise click.ClickException("Could not rotate vault password.")
 
         # Verify the end state before trusting it: the vault must decrypt with the
         # new password and must NOT decrypt with the public template constant.
         # Without this, a partial rotation silently leaves the vault sealed with
         # a well-known password while a different one lands in Keychain/CI.
         verify_rotation(ctx.deployment_dir, ctx.vault_password, TEMPLATE_VAULT_PASSWORD)
-        ui.action_done("Vault-Passwort rotiert")
+        ui.action_done("Vault password rotated")
 
         # 3f. Persist the vault password immediately — it only lived in memory so
         # far, and every later step (token cleanup, repo creation, push) can fail
         # and orphan the freshly rotated vault. Keychain first, fail loud.
-        ui.action_start("Vault-Passwort in Keychain speichern...")
+        ui.action_start("Saving vault password in Keychain...")
         store_keychain_password(ctx.project_name, ctx.vault_password)
-        ui.action_done("Vault-Passwort in Keychain gespeichert")
+        ui.action_done("Vault password saved in Keychain")
 
         # 3g. Remove .bak files left behind by vault encryption
         for bak in ctx.project_dir.rglob("*.bak"):
@@ -278,16 +278,16 @@ class ProjectStep(WizardStep):
             # Write the static inventory and hand the user the deploy public key.
             from .byos import write_byos_inventory
 
-            ui.action_start("BYOS-Inventory schreiben...")
+            ui.action_start("Writing BYOS inventory...")
             inv_path = write_byos_inventory(ctx.deployment_dir, ctx)
-            ui.action_done(f"Inventory geschrieben: {inv_path.name}")
+            ui.action_done(f"Inventory written: {inv_path.name}")
 
-            ui.action_start("BYOS-Deploy-Key schreiben...")
+            ui.action_start("Writing BYOS deploy key...")
             deploy_key_path = write_byos_deploy_public_key(
                 ctx.deployment_dir, ci_public_key
             )
             ensure_byos_deploy_public_key_ignored(ctx.project_dir)
-            ui.action_done(f"Deploy-Key geschrieben: {deploy_key_path.name}")
+            ui.action_done(f"Deploy key written: {deploy_key_path.name}")
 
             # CI workflows are the same generic caller stubs the template ships
             # for every target: they call the reusable workflows in
@@ -300,18 +300,18 @@ class ProjectStep(WizardStep):
                 else f"/home/{ctx.byos_ssh_user}/.ssh/authorized_keys"
             )
             ui.info(
-                "Füge diesen Deploy-Public-Key auf dem Server in "
-                f"{authorized_keys} ein, damit Ansible sich einloggen kann:\n\n"
+                "Add this public deploy key to "
+                f"{authorized_keys} on the server so Ansible can connect:\n\n"
                 f"{ci_public_key}\n"
                 "Schnellweg:\n"
                 f"  {byos_deploy_key_install_command(ctx, ci_public_key)}\n"
-                f"Die lokale Hilfsdatei {deploy_key_path} ist in .gitignore "
-                "eingetragen und wird nicht committed."
+                f"The local helper file {deploy_key_path} is in .gitignore "
+                "and will not be committed."
             )
         else:
             # Token cleanup — immediately after vault encryption.
-            ui.action_start("Hetzner Token aufräumen...")
+            ui.action_start("Cleaning up temporary Hetzner token...")
             from cli.hetzner.credentials import delete_token
 
             delete_token()
-            ui.action_done("Hetzner Token aufgeräumt 🗑️")
+            ui.action_done("Temporary Hetzner token removed")

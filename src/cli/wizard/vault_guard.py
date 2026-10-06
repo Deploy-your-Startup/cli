@@ -61,8 +61,7 @@ def verify_rotation(
     files = iter_vault_files(deployment_dir)
     if not files:
         raise click.ClickException(
-            f"Vault-Verifikation fehlgeschlagen: keine Vault-Dateien unter "
-            f"{deployment_dir} gefunden."
+            f"Vault verification failed: no vault files in {deployment_dir}."
         )
 
     not_rotated = [
@@ -72,8 +71,8 @@ def verify_rotation(
     ]
     if not_rotated:
         raise click.ClickException(
-            "Vault-Verifikation fehlgeschlagen: lässt sich nach der Rotation "
-            f"nicht mit dem neuen Passwort entschlüsseln: {', '.join(not_rotated)}"
+            "Vault verification failed: cannot decrypt after rotation "
+            f"with the new password: {', '.join(not_rotated)}"
         )
 
     still_template = [
@@ -83,8 +82,8 @@ def verify_rotation(
     ]
     if still_template:
         raise click.ClickException(
-            "Vault-Verifikation fehlgeschlagen: noch mit dem öffentlichen "
-            "Template-Passwort entschlüsselbar (Rotation nicht durchgelaufen): "
+            "Vault verification failed: still decryptable with the public "
+            "template password (rotation incomplete): "
             f"{', '.join(still_template)}"
         )
 

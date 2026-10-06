@@ -1,10 +1,8 @@
-"""Tests for the bootstrap vault safety guards.
+"""Integration checks with real encrypted files and the startup CLI."""
 
-These cover the regression where a half-finished bootstrap left the vault
-sealed with the public ``TEMPLATE_VAULT_PASSWORD`` while a different password
-was written to the Keychain — and nothing noticed.
-"""
-
+import os
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -13,85 +11,83 @@ import pytest
 
 from cli.wizard import vault_guard
 
-TEMPLATE = "ranhah-ceqZu9-fihfez"
-NEW = "brand-new-rotated-password"
+TEMPLATE = "synthetic-template-password"
+NEW = "synthetic-rotated-password"
 
 
-def _patch_decrypt(monkeypatch, decryptable):
-    """decryptable: dict mapping password -> set of file names that decrypt."""
-
-    def fake_check(path: Path, password: str) -> bool:
-        return Path(path).name in decryptable.get(password, set())
-
-    monkeypatch.setattr(vault_guard, "check_can_decrypt_with_password", fake_check)
-
-
-def _patch_files(monkeypatch, names):
-    files = [Path("/repo/deployment") / n for n in names]
-    monkeypatch.setattr(vault_guard, "iter_vault_files", lambda _d: files)
-
-
-# --- verify_rotation ---------------------------------------------------------
-
-
-def test_verify_rotation_passes_when_sealed_with_new_only(monkeypatch):
-    _patch_files(monkeypatch, ["production.yml", "all.yml"])
-    _patch_decrypt(monkeypatch, {NEW: {"production.yml", "all.yml"}})
-    # Should not raise.
-    vault_guard.verify_rotation(Path("/repo/deployment"), NEW, TEMPLATE)
-
-
-def test_verify_rotation_raises_when_still_template_decryptable(monkeypatch):
-    _patch_files(monkeypatch, ["production.yml"])
-    _patch_decrypt(
-        monkeypatch,
-        {NEW: {"production.yml"}, TEMPLATE: {"production.yml"}},
-    )
-    with pytest.raises(click.ClickException) as exc:
-        vault_guard.verify_rotation(Path("/repo/deployment"), NEW, TEMPLATE)
-    assert "Template-Passwort" in str(exc.value)
-
-
-def test_verify_rotation_raises_when_new_cannot_decrypt(monkeypatch):
-    _patch_files(monkeypatch, ["production.yml"])
-    _patch_decrypt(monkeypatch, {TEMPLATE: {"production.yml"}})
-    with pytest.raises(click.ClickException) as exc:
-        vault_guard.verify_rotation(Path("/repo/deployment"), NEW, TEMPLATE)
-    assert "neuen Passwort" in str(exc.value)
+def encrypted_file(folder, filename, password):
+    path = folder / filename
+    path.write_text("label: example\n")
+    command = [
+        sys.executable,
+        "-m",
+        "cli.startup",
+        "secrets",
+        "update",
+        "-r",
+        str(path),
+        "-p",
+        password,
+        "--field-stdin",
+        "secret",
+        "--create-in",
+        str(path),
+    ]
+    for extra in (["--dry-run"], []):
+        result = subprocess.run(
+            command + extra,
+            input="synthetic-value",
+            text=True,
+            capture_output=True,
+            check=False,
+            env={
+                **os.environ,
+                "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
+            },
+        )
+        assert result.returncode == 0, result.stderr
+    return path
 
 
-def test_verify_rotation_raises_when_no_vault_files(monkeypatch):
-    _patch_files(monkeypatch, [])
-    _patch_decrypt(monkeypatch, {})
-    with pytest.raises(click.ClickException) as exc:
-        vault_guard.verify_rotation(Path("/repo/deployment"), NEW, TEMPLATE)
-    assert "keine Vault-Dateien" in str(exc.value)
+def test_rotation_accepts_real_files_with_new_password(tmp_path):
+    # GIVEN two vault files encrypted through the public CLI.
+    encrypted_file(tmp_path, "production.yml", NEW)
+    encrypted_file(tmp_path, "all.yml", NEW)
+    # WHEN the rotation guard reads and decrypts both files.
+    vault_guard.verify_rotation(tmp_path, NEW, TEMPLATE)
+    # THEN all files are usable with the new password only.
+    assert vault_guard.vault_is_decryptable(tmp_path, NEW)
+    assert not vault_guard.vault_is_decryptable(tmp_path, TEMPLATE)
 
 
-# --- vault_is_decryptable ----------------------------------------------------
+def test_rotation_rejects_unchanged_template_password(tmp_path):
+    # GIVEN a vault still using the template password.
+    encrypted_file(tmp_path, "production.yml", TEMPLATE)
+    # WHEN rotation reports the same password as the new one.
+    # THEN the real guard rejects it with an English diagnostic.
+    with pytest.raises(click.ClickException, match="template password"):
+        vault_guard.verify_rotation(tmp_path, TEMPLATE, TEMPLATE)
 
 
-def test_vault_is_decryptable_true_when_all_files_decrypt(monkeypatch):
-    _patch_files(monkeypatch, ["production.yml", "all.yml"])
-    _patch_decrypt(monkeypatch, {NEW: {"production.yml", "all.yml"}})
-    assert vault_guard.vault_is_decryptable(Path("/repo/deployment"), NEW) is True
+def test_rotation_rejects_mixed_passwords(tmp_path):
+    # GIVEN one rotated file and one forgotten file.
+    encrypted_file(tmp_path, "production.yml", NEW)
+    encrypted_file(tmp_path, "all.yml", TEMPLATE)
+    # WHEN verifying the whole deployment.
+    # THEN the failed file is identified and the deployment is not ready.
+    with pytest.raises(click.ClickException, match=r"new password: all\.yml"):
+        vault_guard.verify_rotation(tmp_path, NEW, TEMPLATE)
+    assert not vault_guard.vault_is_decryptable(tmp_path, NEW)
 
 
-def test_vault_is_decryptable_false_when_one_file_fails(monkeypatch):
-    _patch_files(monkeypatch, ["production.yml", "all.yml"])
-    _patch_decrypt(monkeypatch, {NEW: {"production.yml"}})
-    assert vault_guard.vault_is_decryptable(Path("/repo/deployment"), NEW) is False
-
-
-def test_vault_is_decryptable_false_without_password(monkeypatch):
-    _patch_files(monkeypatch, ["production.yml"])
-    _patch_decrypt(monkeypatch, {NEW: {"production.yml"}})
-    assert vault_guard.vault_is_decryptable(Path("/repo/deployment"), None) is False
-
-
-def test_vault_is_decryptable_false_when_no_vault_files(monkeypatch):
-    _patch_files(monkeypatch, [])
-    assert vault_guard.vault_is_decryptable(Path("/repo/deployment"), NEW) is False
+def test_rotation_rejects_missing_vault_files(tmp_path):
+    # GIVEN a directory with no encrypted files.
+    # WHEN checking rotation or decryptability.
+    # THEN empty state is never treated as a successful rotation.
+    with pytest.raises(click.ClickException, match="no vault files"):
+        vault_guard.verify_rotation(tmp_path, NEW, TEMPLATE)
+    assert not vault_guard.vault_is_decryptable(tmp_path, NEW)
+    assert not vault_guard.vault_is_decryptable(tmp_path, None)
 
 
 # --- keychain helpers --------------------------------------------------------
