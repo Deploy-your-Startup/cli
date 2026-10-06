@@ -138,3 +138,6 @@ This will:
 `uv run --extra dev pytest tests/test_onboarding_integration.py tests/test_vault_guard.py`
 exercises the actual CLI prompts, optional settings, cancellation and real vault
 files. Cloud accounts and paid infrastructure are not created by these checks.
+
+`tests/test_launch_animation_integration.py` uses a real pseudo-terminal to check
+a single launch, stationary prompts, motion opt-out and cursor restoration on interruption.
