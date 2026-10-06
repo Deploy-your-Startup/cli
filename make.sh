@@ -36,6 +36,18 @@ if [ "$1" == "test" ]; then
   uv run --extra dev pytest
 fi
 
+if [ "$1" == "test_vault" ]; then
+  echo "Running Vault integration tests and the real template matrix..."
+  uv run --extra dev pytest -v --durations=10 \
+    tests/vault_features \
+    tests/test_vault_process_integration.py \
+    tests/test_vault_templates_integration.py \
+    tests/test_vault_distribution_integration.py \
+    tests/test_vault_guard.py \
+    tests/test_ci_vault_integration.py \
+    tests/test_cli_safety_integration.py
+fi
+
 if [ "$1" == "install_tool" ]; then
   echo "Installing deploy-your-startup-cli as a global tool..."
   uv tool install --reinstall deploy-your-startup-cli --from .
@@ -59,6 +71,7 @@ if [ "$1" == "help" ] || [ -z "$1" ]; then
   echo "  format        - Format code and run ruff checks"
   echo "  lint          - Check formatting, lint and types without changing files"
   echo "  test          - Run pytest tests"
+  echo "  test_vault    - Run Vault integration tests against real templates"
   echo "  install_tool  - Install CLI as a global tool"
   echo "  dev_install   - Install in development mode"
   echo "  clean         - Remove build artifacts"

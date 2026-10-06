@@ -5,9 +5,8 @@ Utilities for handling fully encrypted files in Ansible vault.
 import logging
 import shutil
 
-from ansible.parsing.vault import VaultEditor, VaultSecret
-
-from .common import create_vault_lib, verify_vault_password
+from .common import verify_vault_password
+from .process import decrypt, encrypt, rekey
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -49,10 +48,6 @@ def rotate_full_vault_file(
         bool: True if the rotation was successful, False otherwise
     """
     try:
-        if dry_run:
-            logger.info(f"[DRY-RUN] Would rotate full vault file: {file_path}")
-            return True
-
         # First, verify we can decrypt the file with the old password
         content = get_vault_file_content(file_path, old_password, strict=True)
         if content is None:
@@ -61,18 +56,18 @@ def rotate_full_vault_file(
             )
             return False
 
+        if dry_run:
+            logger.info(f"[DRY-RUN] Would rotate full vault file: {file_path}")
+            return True
+
+        encrypted = rekey(file_path.read_bytes(), old_password, new_password)
         # Create a backup if requested
         if create_backup and file_path.exists():
             bak = file_path.with_suffix(file_path.suffix + ".bak")
             shutil.copy2(file_path, bak)
             logger.info(f"Backup saved: {bak}")
 
-        # Create the vault libraries using the helper function
-        old_vault_lib = create_vault_lib(old_password, strict=True)
-        new_secret = VaultSecret(new_password.encode())
-
-        # Use VaultEditor to rekey the file directly
-        VaultEditor(old_vault_lib).rekey_file(str(file_path), new_secret)
+        file_path.write_bytes(encrypted)
         logger.info(f"Rotated vault file: {file_path}")
 
         return True
@@ -105,13 +100,7 @@ def get_vault_file_content(file_path, vault_password, strict=False):
         with open(file_path) as f:
             vault_text = f.read()
 
-        # Verify the password can decrypt the content
-        if verify_vault_password(vault_text, vault_password, strict=strict):
-            # Create vault lib and decrypt content
-            vault_lib = create_vault_lib(vault_password, strict=strict)
-            decrypted = vault_lib.decrypt(vault_text.encode()).decode("utf-8")
-            return decrypted.strip()
-        return None
+        return decrypt(vault_text, vault_password).decode("utf-8")
     # Ansible reports a wrong vault password as any of several exception
     # types (AnsibleError, ValueError, binascii.Error, UnicodeDecodeError, ...),
     # so this stays broad on purpose.
@@ -133,15 +122,8 @@ def update_vault_file(file_path, new_content, vault_password):
         bool: True if the update was successful, False otherwise
     """
     try:
-        # Create a VaultLib using the helper function
-        vault_lib = create_vault_lib(vault_password, strict=True)
-
-        # Encrypt the content directly
-        encrypted = vault_lib.encrypt(new_content).decode()
-
-        # Write the encrypted content to the file
-        with open(file_path, "w") as f:
-            f.write(encrypted)
+        encrypted = encrypt(new_content, vault_password)
+        file_path.write_bytes(encrypted)
 
         logger.info(f"Updated vault file: {file_path}")
         return True

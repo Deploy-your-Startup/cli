@@ -223,10 +223,39 @@ def bootstrap(
         _require(project_name, "--project-name")
         project_name = ui.text_input("Project name (for example, my-startup)")
 
-    # Domain
-    if not base_domain:
+    # Domain — ask whether one exists first, so "no domain yet" leads to
+    # registering one instead of a prompt that assumes ownership.
+    if not base_domain and kind == "fullstack" and domain_owned is None:
         _require(base_domain, "--base-domain")
-        base_domain = ui.text_input("Domain you own (for example, example.com)")
+        domain_owned = (
+            ui.numbered_choice(
+                "Do you already have a domain?",
+                [
+                    "Yes, I own a domain",
+                    "No, register a new one through Hetzner",
+                ],
+            )
+            == 1
+        )
+    domain_label = {
+        True: "Your domain",
+        False: "Domain to register",
+        None: "Domain",
+    }[domain_owned]
+    while not base_domain or not re.fullmatch(
+        r"(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}",
+        base_domain,
+    ):
+        if base_domain:
+            ui.error("Enter a domain like example.com (lowercase, without https://).")
+            if assume_yes:
+                raise click.ClickException(
+                    f"--base-domain '{base_domain}' is not a valid domain name."
+                )
+        _require(base_domain, "--base-domain")
+        base_domain = (
+            ui.text_input(f"{domain_label} (for example, example.com)").strip().lower()
+        )
 
     # Keep optional configuration out of the first-deploy path.
     import os
@@ -276,7 +305,8 @@ def bootstrap(
     summary = {
         "Type": "Full-Stack" if kind == "fullstack" else "Pitch (Cloudflare Pages)",
         "Project": project_name,
-        "Domain": base_domain,
+        "Domain": base_domain
+        + (" (register through Hetzner)" if domain_owned is False else ""),
         "GitHub": f"{github_username}/{project_name}",
     }
     if kind == "fullstack":
@@ -677,20 +707,16 @@ def list_vault_files(repo, file, verbose):
 )
 def get_vault_file(file):
     """Write a vaulted file to stdout for piping, using Keychain or the CI environment."""
-    from ansible.errors import AnsibleError
-    from ansible.parsing.vault import VaultLib, VaultSecret, is_encrypted
-
     from cli.ansible_commands import resolve_vault_password
+    from cli.vault.process import VaultError, decrypt
 
     encrypted = file.read_bytes()
-    if not is_encrypted(encrypted):
+    if not encrypted.startswith(b"$ANSIBLE_VAULT;"):
         raise click.ClickException("The requested file is not an Ansible Vault file.")
     password = resolve_vault_password(None, _password_scope(str(file)))
     try:
-        value = VaultLib([("default", VaultSecret(password.encode()))]).decrypt(
-            encrypted
-        )
-    except (AnsibleError, ValueError):
+        value = decrypt(encrypted, password)
+    except VaultError:
         raise click.ClickException(
             "Could not decrypt the requested Vault file."
         ) from None
@@ -725,7 +751,7 @@ def get_vault_field(file, field, vault_password, verbose):
     vault_password = resolve_vault_password(vault_password, _password_scope(file))
 
     if verbose:
-        click.echo(f"Getting value for field {field} from file {file}")
+        click.echo(f"Getting value for field {field} from file {file}", err=True)
 
     value = get_inline_vault_value(file_path, field, vault_password, verbose)
     if value is None:
