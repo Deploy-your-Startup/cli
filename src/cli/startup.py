@@ -11,6 +11,7 @@ import click
 
 from cli.auth0_commands import auth0
 from cli.preflight import doctor
+from cli.skill_commands import skills
 from cli.template_commands import DEFAULT_TEMPLATE, template
 
 
@@ -45,6 +46,7 @@ def cli():
 cli.add_command(template)
 cli.add_command(auth0)
 cli.add_command(doctor)
+cli.add_command(skills)
 
 
 # === BOOTSTRAP COMMAND ===

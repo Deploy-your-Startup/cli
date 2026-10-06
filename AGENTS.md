@@ -114,3 +114,10 @@ reporting a deployment as successful.
 - Check README, CLI help, tests documentation and packaging comments when changing
   commands or release behavior. Git tags are the current public installation
   path; PyPI publishing is an optional manual workflow.
+- The agent skill `deploy-your-startup` tells coding agents how to use this
+  CLI. It ships in three channels with identical content:
+  `skills/deploy-your-startup/SKILL.md` (skill installers and the Claude Code
+  plugin in `.claude-plugin/`) and `src/cli/agent_skills/` (bundled for
+  `startup skills install`). When a command, option or safety rule changes,
+  update both copies; `tests/test_agent_skill_integration.py` fails on drift
+  and on commands the skill names but the CLI no longer has.

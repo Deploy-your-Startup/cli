@@ -1,0 +1,11 @@
+{
+  "name": "deploy-your-startup",
+  "description": "Lets Claude Code install, set up and operate the Deploy Your Startup `startup` CLI: bootstrap, deploy, secrets and updates in your own accounts.",
+  "author": {
+    "name": "Deploy Your Startup"
+  },
+  "homepage": "https://deploy-your-startup.com",
+  "repository": "https://github.com/Deploy-your-Startup/cli",
+  "license": "MIT",
+  "keywords": ["deployment", "startup", "hetzner", "ansible", "k3s"]
+}

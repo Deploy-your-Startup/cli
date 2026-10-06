@@ -1,0 +1,16 @@
+{
+  "name": "deploy-your-startup",
+  "owner": {
+    "name": "Deploy Your Startup"
+  },
+  "metadata": {
+    "description": "Official Claude Code plugin for the Deploy Your Startup CLI."
+  },
+  "plugins": [
+    {
+      "name": "deploy-your-startup",
+      "source": "./",
+      "description": "Lets Claude Code install, set up and operate the Deploy Your Startup `startup` CLI."
+    }
+  ]
+}
