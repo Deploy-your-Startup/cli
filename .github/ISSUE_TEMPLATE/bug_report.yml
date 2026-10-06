@@ -1,0 +1,39 @@
+name: Bug report
+description: Report a CLI, installation or first-deploy problem.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: "Include only redacted output. Never share tokens, passwords, private keys or decrypted vault files."
+  - type: input
+    id: system
+    attributes:
+      label: System
+      placeholder: "macOS version and Apple Silicon / Intel"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: CLI release and installation method
+      placeholder: "v0.1.0, website installer"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps and command
+      description: "What did you run? Remove any credentials from commands."
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual result
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Redacted error and startup doctor output
+      render: text

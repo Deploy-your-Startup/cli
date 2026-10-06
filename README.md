@@ -17,22 +17,22 @@ The supported first-deploy path is macOS + Hetzner Cloud. You need Git, Google
 Chrome, a GitHub account, a Hetzner Cloud account, and a domain whose DNS you can
 edit. Servers and domains are billed directly to your own accounts.
 
-Install uv and the GitHub CLI, for example with Homebrew:
+Install the CLI with the website installer, then add GitHub CLI if needed:
 
 ```bash
-brew install uv gh
-uv tool install --python 3.14 'git+https://github.com/Deploy-your-Startup/cli.git@v0.1.0'
-uv tool update-shell
+curl -fsSL https://deploy-your-startup.com/install.sh | bash
+brew install gh
 ```
 
-Open a new terminal if `startup` is not on your PATH. No PyPI account or package
-publication is required. The GitHub tag pins the tested release.
+The installer provides Python 3.14 and the pinned CLI release (`v0.1.0`). Open a
+new terminal after installing. If Git is missing, run `xcode-select --install`
+first. No PyPI publication is required.
 
 ```bash
 gh auth login --hostname github.com --git-protocol https --scopes repo,workflow,read:packages,write:packages
 gh auth setup-git
 startup doctor
-startup bootstrap --kind fullstack --provider hetzner --domain-owned
+startup bootstrap --kind fullstack --provider hetzner --domain-owned --template-version v0.1.0
 ```
 
 Configure your Git name/email and create an SSH key with `ssh-keygen -t ed25519`
@@ -52,6 +52,27 @@ that support it. Pitch mode is not part of the initial public quickstart.
 
 For local development install mise and Docker and follow the generated project's
 README. Installing the CLI alone does not install every application runtime.
+
+## Update or remove the CLI
+
+Run the installer again to install the currently published CLI release:
+
+```bash
+curl -fsSL https://deploy-your-startup.com/install.sh | bash
+```
+
+This updates the CLI only. Use `startup sync` for shared deployment workflows and
+roles, and `startup template update` for application template changes.
+
+To remove the managed CLI installation:
+
+```bash
+curl -fsSL https://deploy-your-startup.com/uninstall.sh | bash
+```
+
+Removal asks for confirmation and preserves projects, Keychain credentials and
+cloud resources. Servers continue running and billing until you remove them
+separately. Installations made directly with uv are managed with `uv tool uninstall deploy-your-startup-cli`; the website uninstaller handles its own installations.
 
 To install a checkout for CLI development:
 
@@ -127,7 +148,6 @@ The old parameter names are still supported but deprecated:
 - `--set-field` → use `--field-set`
 - `--vault-file` → use `--file-rotate`
 - `--set-file-content` → use `--file-content`
-```
 
 ### GitHub Deployment
 
