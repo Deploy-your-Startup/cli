@@ -93,6 +93,8 @@ def resolve_vault_password(
     """
     if vault_password:
         return vault_password
+    if environment_password := os.environ.get("STARTUP_VAULT_PASSWORD"):
+        return environment_password
 
     project_name = _resolve_project_name(_resolve_working_dir(working_directory))
 
