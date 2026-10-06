@@ -25,12 +25,17 @@ PyPI publishing is a separate, optional manual workflow.
    release does not run `publish.yml` or upload to PyPI.
 4. Verify the remote tag resolves to the intended commit and the public source
    archive downloads. Install that tag in an isolated tool directory and verify
-   `startup --version`, `startup --help` and the affected user flow. For terminal
+   the installed package version, `startup --help` and the affected user flow. For terminal
    animations, use an interactive terminal; redirected output stays static.
-5. In `philipp-lein/deploy-your-startup-website`, change the CLI tag in
-   `frontend/public/install.sh`. Keep the application template tag independent.
-   Run `mise run test` and `mise run build`, then push the tested change to
-   `main`. Its Deploy workflow tests and deploys the website to Cloudflare Pages.
+5. The website's Deploy workflow checks the latest stable CLI release every ten
+   minutes, updates `frontend/public/install.sh`, tests and commits the new pin,
+   then dispatches a fresh website deploy. GitHub may delay scheduled runs.
+   Dispatch Deploy manually to check sooner. Drafts, prereleases and older
+   versions are skipped; the application template tag stays independent.
+   See the website repository's `docs/cli-installer-updates.md` for details.
+   For a manual update or rollback, change the installer pin in
+   `philipp-lein/deploy-your-startup-website`, run `mise run test` and
+   `mise run build`, then push the tested change to `main`.
 6. Wait for the website deployment to succeed. Check the live `install.sh`
    contains the new tag and is shell code, then verify the live homepage and
    `/get-started/`. Only then report the installer update as published.
