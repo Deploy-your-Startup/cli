@@ -88,9 +88,9 @@ class ByosStep(WizardStep):
 
     def run(self, ctx: BootstrapContext) -> None:
         ui.info(
-            "Bring-your-own-server: kein Cloud-Account nötig. Du brauchst nur "
-            "einen erreichbaren VPS (z.B. IONOS) mit frischem Ubuntu/Debian und "
-            "root-SSH-Zugang."
+            "Bring your own server: no cloud account needed. Use "
+            "a reachable VPS with a fresh Ubuntu/Debian installation and "
+            "root SSH access."
         )
 
         # A host given on the command line is validated the same way, so a typo
@@ -101,21 +101,21 @@ class ByosStep(WizardStep):
             )
 
         while not ctx.byos_host:
-            host = ui.text_input("Server IP oder Hostname (z.B. 203.0.113.10)")
+            host = ui.text_input("Server IP or hostname (for example, 203.0.113.10)")
             if _looks_like_host(host):
                 ctx.byos_host = host.strip()
                 break
-            ui.error("Bitte eine gültige IP-Adresse oder einen Hostnamen angeben.")
+            ui.error("Enter a valid IP address or hostname.")
 
         if not ctx.non_interactive:
-            ctx.byos_ssh_user = ui.text_input("SSH-User auf dem Server", default="root")
+            ctx.byos_ssh_user = ui.text_input("SSH user on the server", default="root")
 
         ui.info(
-            f"Stelle sicher, dass auf {ctx.byos_host} die Ports 22 (SSH), 80 und "
-            "443 (HTTP/HTTPS für Let's Encrypt) offen sind und dass der DNS "
-            f"A-Record von '{ctx.base_domain}' auf {ctx.byos_host} zeigt.\n"
-            "Den Deploy-SSH-Key bekommst du im nächsten Schritt — den fügst du "
-            f"einmalig in ~{'' if ctx.byos_ssh_user == 'root' else '/' + ctx.byos_ssh_user}"
-            "/.ssh/authorized_keys auf dem Server ein."
+            f"Check that {ctx.byos_host} has ports 22 (SSH), 80 and "
+            "443 (HTTP/HTTPS for Let's Encrypt) open and that the DNS "
+            f"A record for '{ctx.base_domain}' points to {ctx.byos_host}.\n"
+            "The next step generates a deploy SSH key. Add it to "
+            f"~{'' if ctx.byos_ssh_user == 'root' else '/' + ctx.byos_ssh_user}"
+            "/.ssh/authorized_keys on the server."
         )
-        ui.action_done(f"Server gesetzt: {ctx.byos_ssh_user}@{ctx.byos_host}")
+        ui.action_done(f"Server selected: {ctx.byos_ssh_user}@{ctx.byos_host}")

@@ -70,17 +70,15 @@ def check_prerequisites(ctx: BootstrapContext) -> None:
                     "This template supports Auth0: pass --auth0-tenant <tenant> "
                     "or --without-auth before bootstrap."
                 )
-            if click.confirm(
-                "Auth0-Login für dieses Template einrichten?", default=True
-            ):
+            if click.confirm("Set up Auth0 login for this template?", default=True):
                 ctx.auth0_tenant = click.prompt(
-                    "Auth0-Tenant (z. B. example.eu.auth0.com)"
+                    "Auth0 tenant (for example, example.eu.auth0.com)"
                 )
             else:
                 ctx.without_auth = True
     if ctx.auth0_tenant:
         if ctx.kind == "pitch":
-            raise click.ClickException("--auth0-tenant benötigt --kind fullstack.")
+            raise click.ClickException("--auth0-tenant requires --kind fullstack.")
         from cli.auth0_commands import check_auth0_login
 
         check_auth0_login(ctx.auth0_tenant)
@@ -92,16 +90,14 @@ def check_prerequisites(ctx: BootstrapContext) -> None:
         )
     required = [("git", "Git: https://git-scm.com/downloads")]
     if ctx.kind != "pitch":
-        required.append(
-            ("ssh-keygen", "OpenSSH (sollte mit dem System geliefert werden)")
-        )
+        required.append(("ssh-keygen", "OpenSSH (included with macOS)"))
     if ctx.mode == "github":
         required.append(("gh", "GitHub CLI: https://cli.github.com (brew install gh)"))
 
     missing = [(name, hint) for name, hint in required if shutil.which(name) is None]
     if missing:
         lines = [f"  • {name} — {hint}" for name, hint in missing]
-        raise click.ClickException("Fehlende Tools:\n" + "\n".join(lines))
+        raise click.ClickException("Missing tools:\n" + "\n".join(lines))
 
     if ctx.mode == "github":
         result = subprocess.run(
@@ -109,7 +105,7 @@ def check_prerequisites(ctx: BootstrapContext) -> None:
         )
         if result.returncode != 0:
             raise click.ClickException(
-                "GitHub CLI ist nicht eingeloggt. Bitte `gh auth login` ausführen."
+                "GitHub CLI is not signed in. Run `gh auth login`."
             )
 
         # ghcr.io image pulls need `read:packages`. This used to be noticed deep
@@ -149,13 +145,13 @@ def run_wizard(ctx: BootstrapContext) -> None:
                 continue
             step.run(ctx)
             completed += 1
-            ui.success(f"Step {idx} abgeschlossen")
+            ui.success(f"Step {idx} complete")
         except click.ClickException:
             raise
         # Top-level boundary: any failure here is reported to the user and
         # handled, never surfaced as a traceback.
         except Exception as exc:
-            ui.error(f"Fehler in Step {idx}: {exc}")
+            ui.error(f"Error in step {idx}: {exc}")
             raise click.ClickException(str(exc)) from exc
 
     # All steps done — show summary
@@ -188,7 +184,7 @@ def run_wizard(ctx: BootstrapContext) -> None:
     )
     if ctx.auth0_tenant:
         ui.info(
-            "Nach erfolgreichem Deploy den echten Website-Login prüfen:\n"
+            "After deployment, verify the application login:\n"
             f"  startup auth0 validate --tenant {ctx.auth0_tenant} "
             f"--base-domain {ctx.base_domain}"
         )

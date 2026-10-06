@@ -26,7 +26,7 @@ def set_github_vault_secret(project_dir, password: str) -> None:
         check=False,
     )
     if result.returncode:
-        raise click.ClickException("GitHub Vault-Secret konnte nicht gesetzt werden.")
+        raise click.ClickException("Could not set the GitHub vault secret.")
 
 
 class FinalizeStep(WizardStep):
@@ -48,13 +48,13 @@ class FinalizeStep(WizardStep):
         if dirty.stdout.strip():
             return False
         if is_pushed(ctx.project_dir) and repo_exists(ctx.full_repo):
-            ui.skip_indicator("Code bereits gepusht")
+            ui.skip_indicator("Code already pushed")
             return True
         return False
 
     def run(self, ctx: BootstrapContext) -> None:
         # 4a. Commit
-        ui.action_start("Code committen...")
+        ui.action_start("Committing project...")
         _run_command(["git", "add", "-A"], cwd=ctx.project_dir)
         status = subprocess.run(
             ["git", "status", "--porcelain"],
@@ -70,7 +70,7 @@ class FinalizeStep(WizardStep):
             )
             ui.action_done("Committed")
         else:
-            ui.action_done("Nichts zu committen")
+            ui.action_done("Nothing to commit")
 
         # 4b. GitHub repo + remote
         subprocess.run(
@@ -80,12 +80,12 @@ class FinalizeStep(WizardStep):
             check=False,
         )
         if not repo_exists(ctx.full_repo):
-            ui.action_start("GitHub-Repository erstellen...")
+            ui.action_start("Creating GitHub repository...")
             _run_command(
                 ["gh", "repo", "create", ctx.full_repo, "--private", "--source", "."],
                 cwd=ctx.project_dir,
             )
-            ui.action_done("Repository erstellt")
+            ui.action_done("Repository created")
         else:
             _run_command(
                 [
@@ -99,7 +99,7 @@ class FinalizeStep(WizardStep):
             )
 
         # 4c. GitHub Actions config
-        ui.action_start("GitHub Actions konfigurieren...")
+        ui.action_start("Configuring GitHub Actions...")
         _run_command(
             [
                 "gh",
@@ -130,17 +130,17 @@ class FinalizeStep(WizardStep):
             cwd=ctx.project_dir,
             capture_output=True,
         )
-        ui.action_done("GitHub Actions konfiguriert")
+        ui.action_done("GitHub Actions configured")
 
         # 4d. Vault password as GitHub secret
         if not ctx.vault_password:
             raise click.ClickException(
-                "Vault-Passwort fehlt im Bootstrap-Kontext. Bitte Step 3 erneut "
-                "ausführen oder das Passwort in der Keychain prüfen."
+                "Vault password is missing from setup. Rerun the project step "
+                "or check the password in Keychain."
             )
-        ui.action_start("Vault-Passwort als GitHub Secret...")
+        ui.action_start("Saving vault password as a GitHub secret...")
         set_github_vault_secret(ctx.project_dir, ctx.vault_password)
-        ui.action_done("GitHub Secret gesetzt")
+        ui.action_done("GitHub secret saved")
 
         # 4e. Deploy key onto the VPS. Before the push on purpose: pushing starts
         # the deploy workflow, and that workflow logs into the server with this
@@ -155,44 +155,44 @@ class FinalizeStep(WizardStep):
             deploy_public_key = (
                 (ctx.deployment_dir / BYOS_DEPLOY_PUBLIC_KEY_FILE).read_text().strip()
             )
-            ui.action_start("Deploy-Key auf dem VPS installieren...")
+            ui.action_start("Installing deploy key on the server...")
             if install_byos_deploy_key(ctx, deploy_public_key):
-                ui.action_done(f"Deploy-Key auf {ctx.byos_host} installiert")
+                ui.action_done(f"Deploy key on {ctx.byos_host} installed")
             else:
                 ui.info(
-                    f"Konnte {ctx.byos_ssh_user}@{ctx.byos_host} nicht per SSH "
-                    "erreichen. Führe das hier von einem Rechner aus, der auf "
-                    "den Server kommt — sonst schlägt der Deploy fehl:\n"
+                    f"Could not reach {ctx.byos_ssh_user}@{ctx.byos_host} over SSH. "
+                    "Run this from a machine that can reach "
+                    "the server before deploying:\n"
                     f"  {byos_deploy_key_install_command(ctx, deploy_public_key)}"
                 )
 
         # 4f. Push
-        ui.action_start("Push nach GitHub...")
+        ui.action_start("Pushing to GitHub...")
         _run_command(
             ["git", "push", "-u", "origin", "main"],
             cwd=ctx.project_dir,
             capture_output=True,
         )
-        ui.action_done("Gepusht")
+        ui.action_done("Pushed")
 
         # 4g. Provision. On byos there is nothing to provision in the cloud — the
         # user runs the install/deploy locally against their VPS, so we just print
         # the next steps instead of kicking off the Hetzner infrastructure workflow.
         if ctx.provider == "byos":
-            ui.action_done("BYOS — kein Cloud-Provisioning nötig")
+            ui.action_done("BYOS — no cloud provisioning needed")
             ui.info(
-                "Nächste Schritte:\n"
+                "Next steps:\n"
                 f"  cd {ctx.deployment_dir}\n"
                 "  ./make.sh setup\n"
                 "  ./make.sh infrastructure --environment production\n"
                 "  ./make.sh deploy --environment production\n"
-                "Das installiert k3s auf dem VPS und rollt cert-manager, Postgres "
-                "und das Backend aus."
+                "This installs k3s on the server and deploys cert-manager, Postgres "
+                "and the backend."
             )
             return
 
         # 4f (hetzner). Trigger infra workflow (retry — GitHub needs time to index)
-        ui.action_start("Infrastructure-Workflow starten...")
+        ui.action_start("Requesting infrastructure deployment...")
         triggered = False
         last_err: str | None = None
         for attempt in range(6):
@@ -211,28 +211,26 @@ class FinalizeStep(WizardStep):
             last_err = (proc.stderr or proc.stdout or "").strip()
 
         if triggered:
-            ui.action_done("Infrastructure-Workflow angefordert")
+            ui.action_done("Infrastructure deployment requested")
             ui.info(
-                "GitHub weist den Runner zu; bei einer Actions-Störung kann "
-                "der Start verzögert sein. Status:\n"
+                "GitHub is assigning a runner; an Actions outage may "
+                "delay the start. Status:\n"
                 f"  https://github.com/{ctx.full_repo}/actions"
             )
         else:
-            ui.action_fail("Workflow-Start fehlgeschlagen")
+            ui.action_fail("Could not start workflow")
             raise click.ClickException(
-                "Bitte manuell starten: "
+                "Start it manually: "
                 "gh workflow run deploy-infrastructure.yml --ref main"
                 + (f" ({last_err})" if last_err else "")
             )
 
         # 4g. Re-assert vault password in Keychain (already stored in step 3f;
         # this is an idempotent safety net in case it was changed since).
-        ui.action_start("Vault-Passwort in Keychain speichern...")
+        ui.action_start("Saving vault password in Keychain...")
         try:
             store_keychain_password(ctx.project_name, ctx.vault_password)
-            ui.action_done("Vault-Passwort in Keychain gespeichert")
+            ui.action_done("Vault password saved in Keychain")
         except click.ClickException:
-            ui.action_fail("Keychain-Speicherung fehlgeschlagen")
-            ui.warning(
-                "Vault-Passwort konnte nicht erneut in Keychain gespeichert werden."
-            )
+            ui.action_fail("Could not save to Keychain")
+            ui.warning("Could not save the vault password to Keychain again.")

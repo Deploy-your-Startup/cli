@@ -7,6 +7,11 @@ tracking, numbered choices, skip indicators, and summary boxes.
 
 from __future__ import annotations
 
+import os
+import shutil
+import sys
+import time
+
 import click
 
 # ── Progress indicator ───────────────────────────────────────────────
@@ -95,14 +100,14 @@ def numbered_choice(prompt: str, options: list[str]) -> int:
     click.echo()
 
     while True:
-        raw = click.prompt("  Auswahl", type=str)
+        raw = click.prompt("  Choose", type=str)
         try:
             choice = int(raw)
             if 1 <= choice <= len(options):
                 return choice
         except ValueError:
             pass
-        click.echo(click.style(f"  Bitte 1-{len(options)} eingeben.", fg="red"))
+        click.echo(click.style(f"  Enter a number from 1 to {len(options)}.", fg="red"))
 
 
 # ── Text input ───────────────────────────────────────────────────────
@@ -128,7 +133,7 @@ def input_summary(fields: dict[str, str]) -> None:
         fields: Mapping of label → value.
     """
     click.echo()
-    click.echo(click.style("  ── Zusammenfassung ", fg="white", bold=True) + "─" * 35)
+    click.echo(click.style("  ── Your launch plan ", fg="white", bold=True) + "─" * 35)
     click.echo()
     max_label = max(len(k) for k in fields)
     for label, value in fields.items():
@@ -139,30 +144,42 @@ def input_summary(fields: dict[str, str]) -> None:
 # ── Welcome banner ───────────────────────────────────────────────────
 
 
-def banner() -> None:
-    """Display the welcome banner."""
-    click.echo()
-    click.echo(
-        click.style(
-            "  ╔══════════════════════════════════════════════════════╗",
-            fg="cyan",
+def banner(*, animate: bool = True) -> None:
+    """Fly once in an interactive terminal, then leave a stationary wordmark."""
+    stream = sys.stdout
+    prefix = "  >_ deploy your startup "
+    motion = (
+        animate
+        and stream.isatty()
+        and os.environ.get("TERM", "dumb") != "dumb"
+        and not any(
+            name in os.environ for name in ("NO_COLOR", "CI", "STARTUP_NO_ANIMATION")
         )
-    )
-    click.echo(
-        click.style(
-            "  ║          🚀 Deploy Your Startup — Bootstrap         ║",
-            fg="cyan",
-        )
-    )
-    click.echo(
-        click.style(
-            "  ╚══════════════════════════════════════════════════════╝",
-            fg="cyan",
-        )
+        and shutil.get_terminal_size().columns >= len(prefix) + 4
     )
     click.echo()
-    click.echo("  Lass uns dein neues Startup aufsetzen.")
-    click.echo("  Ich führe dich durch jeden Schritt.")
+    if motion:
+        try:
+            stream.write("\x1b[?25l")
+            stream.flush()
+            for frame in range(24):
+                # Decelerate into the final position; never wrap on a resize.
+                progress = 1 - (1 - frame / 23) ** 2
+                landing = min(
+                    len(prefix), max(0, shutil.get_terminal_size().columns - 4)
+                )
+                column = int(progress * landing)
+                trail = "· " if column >= 2 and frame < 21 else ""
+                stream.write("\r\x1b[2K" + " " * (column - len(trail)) + trail + "🚀")
+                stream.flush()
+                time.sleep(0.04)
+        finally:
+            stream.write("\r\x1b[2K\x1b[?25h")
+            stream.flush()
+    click.echo(click.style(prefix + "🚀", fg="cyan"))
+    click.echo()
+    click.echo("  Your idea. Your infrastructure.")
+    click.echo("  A few questions, then we’ll guide you through setup.")
     click.echo()
 
 
@@ -199,7 +216,7 @@ def summary_box(
 
     click.echo()
     click.echo(click.style(top, fg="green"))
-    click.echo(click.style(_pad(f"✅ {project_name} ist bereit!"), fg="green"))
+    click.echo(click.style(_pad(f"✅ {project_name} is configured!"), fg="green"))
     click.echo(click.style(mid, fg="green"))
     click.echo(click.style(_empty(), fg="green"))
     click.echo(click.style(_pad(f"📁 {project_dir}"), fg="green"))
@@ -208,7 +225,7 @@ def summary_box(
     click.echo(click.style(_pad(f"🌐 {domain}"), fg="green"))
     if keychain_service:
         click.echo(
-            click.style(_pad(f"🔑 Keychain-Eintrag: {keychain_service}"), fg="green")
+            click.style(_pad(f"🔑 Keychain entry: {keychain_service}"), fg="green")
         )
     click.echo(click.style(_empty(), fg="green"))
     click.echo(click.style(mid, fg="green"))
@@ -216,40 +233,40 @@ def summary_box(
     if kind == "pitch":
         click.echo(
             click.style(
-                _pad("Build & Deploy laufen automatisch via GitHub Actions"),
+                _pad("Build and deploy run through GitHub Actions"),
                 fg="green",
             )
         )
-        click.echo(click.style(_pad("(Push auf main → Cloudflare Pages)."), fg="green"))
+        click.echo(click.style(_pad("(Push to main → Cloudflare Pages)."), fg="green"))
         click.echo(click.style(_empty(), fg="green"))
         click.echo(
             click.style(
-                _pad(f"Custom Domain {domain} ist automatisch verknüpft"),
+                _pad(f"Custom Domain {domain} is connected"),
                 fg="green",
             )
         )
         click.echo(
             click.style(
-                _pad("(Cloudflare: DNS + SSL nach NS-Propagation aktiv)."),
+                _pad("(Cloudflare: DNS + TLS follow nameserver propagation)."),
                 fg="green",
             )
         )
     else:
         if provider == "byos":
-            _emit("BYOS: Deploy läuft lokal gegen deinen VPS.")
+            _emit("BYOS: deploy locally to your server.")
             _emit()
-            _emit("Copy-Paste-Befehle stehen direkt unter dieser Box.")
+            _emit("Copy the commands below to continue.")
             if byos_deploy_key_command:
-                _emit("1) Deploy-Key auf den VPS kopieren")
-            _emit("2) Danach lokal deployen")
+                _emit("1) Copy the deploy key to the server")
+            _emit("2) Then deploy locally")
         else:
-            _emit("Build & Deploy laufen automatisch via GitHub Actions")
-            _emit("(Push auf main → backend & deployment).")
+            _emit("Build and deploy run through GitHub Actions")
+            _emit("(Push to main → backend & deployment).")
             _emit()
-            _emit("Deployment wurde angefordert, noch nicht verifiziert.")
+            _emit("Deployment requested; verify it before calling it live.")
             if github_url:
                 _emit(f"Status: {github_url}/actions")
-            _emit("Prüfe danach DNS und HTTPS für deine Domain.")
+            _emit("Then verify your domain’s DNS and HTTPS.")
     click.echo(click.style(_empty(), fg="green"))
     click.echo(click.style(bot, fg="green"))
     click.echo()
@@ -257,10 +274,10 @@ def summary_box(
         click.echo("  Copy-Paste:")
         click.echo()
         if byos_deploy_key_command:
-            click.echo("  # Deploy-Key einmalig auf den VPS kopieren")
+            click.echo("  # Copy the deploy key to your server once")
             click.echo(f"  {byos_deploy_key_command}")
             click.echo()
-        click.echo("  # Danach lokal deployen")
+        click.echo("  # Then deploy locally")
         click.echo(f"  cd {project_dir}/deployment")
         click.echo("  ./make.sh setup")
         click.echo("  ./make.sh infrastructure --environment production")
