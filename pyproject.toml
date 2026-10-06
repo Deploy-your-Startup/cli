@@ -63,7 +63,7 @@ where = ["src"]
 include = ["cli*"]
 
 # Version is derived from the latest git tag (e.g. v0.5.0 -> 0.5.0) at build
-# time. Tag a release with `vX.Y.Z` and the publish workflow ships that version.
+# time. The installer uses fixed `vX.Y.Z` tags; PyPI publishing is manual.
 [tool.setuptools_scm]
 
 [tool.pytest.ini_options]
