@@ -755,10 +755,18 @@ def deploy():
     show_default=True,
     help="Shared deploy template repository",
 )
+@click.option(
+    "--source-version",
+    default="main",
+    show_default=True,
+    help="Source template branch or tag to sync",
+)
 @click.option("--private/--public", default=True, show_default=True)
 @click.option("--dry-run", is_flag=True, help="Preview sync without commit/push")
 @click.pass_context
-def sync(ctx, owner, repo_name, source_owner, source_repo, private, dry_run):
+def sync(
+    ctx, owner, repo_name, source_owner, source_repo, source_version, private, dry_run
+):
     """Sync the shared deploy template into your GitHub account."""
     if ctx.invoked_subcommand is None:
         from cli.sync_commands import sync_deploy_repo
@@ -768,6 +776,7 @@ def sync(ctx, owner, repo_name, source_owner, source_repo, private, dry_run):
             repo_name=repo_name,
             source_owner=source_owner,
             source_repo=source_repo,
+            source_version=source_version,
             private=private,
             dry_run=dry_run,
         )
@@ -776,6 +785,22 @@ def sync(ctx, owner, repo_name, source_owner, source_repo, private, dry_run):
 @cli.group()
 def ansible():
     """Shared Ansible deployment operations"""
+
+
+@ansible.command("pin")
+@click.option("--working-directory", default=".", show_default=True)
+@click.option(
+    "--version",
+    default="main",
+    show_default=True,
+    help="Shared repository ref to resolve and pin",
+)
+@click.option("--repo-url", default=None, help="Override the owner shared repository")
+def ansible_pin(working_directory, version, repo_url):
+    """Pin shared roles to an immutable commit and checksum without deployment."""
+    from cli.ansible_commands import run_pin
+
+    run_pin(working_directory=working_directory, version=version, repo_url=repo_url)
 
 
 @deploy.command("create")
