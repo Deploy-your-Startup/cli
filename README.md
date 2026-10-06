@@ -20,7 +20,7 @@ domain you own. Servers and domains are billed by your providers.
 curl -fsSL https://deploy-your-startup.com/install.sh | bash -s -- --onboard
 ```
 
-The installer provides Python 3.14 and CLI `v0.1.3`, connects GitHub and checks
+The installer provides Python 3.14 and the latest stable CLI release, connects GitHub and checks
 your setup. The wizard asks for your project name and domain, then shows a launch
 plan before creating anything. Extra domains and error tracking are optional.
 Interactive terminals show a brief launch animation once, then stop. Set
