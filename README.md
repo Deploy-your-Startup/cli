@@ -25,14 +25,15 @@ your setup. The wizard asks for your project name and domain, then shows a launc
 plan before creating anything. Extra domains and error tracking are optional.
 Interactive terminals show a brief launch animation once, then stop. Set
 `STARTUP_NO_ANIMATION=1` to disable it; redirected output, CI and `NO_COLOR` stay static.
-The default application template is pinned to `v0.1.0` independently of the CLI.
+Each CLI release bootstraps a tested release of the default application
+template; the launch plan shows which one.
 
 If Git is missing, run `xcode-select --install` first. The terminal explains any
 missing prerequisites. To resume the wizard after installation:
 
 ```bash
 startup doctor
-startup bootstrap --kind fullstack --provider hetzner --domain-owned --template-version v0.1.0
+startup bootstrap --kind fullstack --provider hetzner --domain-owned
 ```
 
 The first-deploy path creates Django/FastAPI, Postgres and HTTPS on k3s in your
@@ -388,7 +389,10 @@ MIT
 
 Full-stack `startup bootstrap` renders the Django template with Copier. Select
 an explicit template using `--template <git-url-or-local-repo>` and
-`--template-version <tag-or-commit>` when reviewing a release. Pitch templates
+`--template-version <tag-or-commit>` when reviewing a release. Without
+`--template-version`, the default template uses the release pinned in
+`DEFAULT_TEMPLATE_VERSION` (`src/cli/template_commands.py`) and other templates
+use `HEAD`. Pitch templates
 and `startup sync` retain their existing workflows.
 
 Existing projects can record a baseline without changing their files:

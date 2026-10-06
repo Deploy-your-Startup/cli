@@ -12,7 +12,11 @@ import click
 from cli.auth0_commands import auth0
 from cli.preflight import doctor
 from cli.skill_commands import skills
-from cli.template_commands import DEFAULT_TEMPLATE, template
+from cli.template_commands import (
+    DEFAULT_TEMPLATE,
+    default_template_version,
+    template,
+)
 
 
 def run_command(cmd, verbose=False):
@@ -76,8 +80,8 @@ cli.add_command(skills)
 )
 @click.option(
     "--template-version",
-    default="HEAD",
-    help="Full-stack template tag, branch or commit.",
+    help="Full-stack template tag, branch or commit "
+    "(default: the tested release of the default template, HEAD for others).",
 )
 @click.option(
     "--domain-owned/--buy-domain",
@@ -268,6 +272,7 @@ def bootstrap(
 
     # ── Summary + confirmation ───────────────────────────────────
 
+    template_version = template_version or default_template_version(template_source)
     summary = {
         "Type": "Full-Stack" if kind == "fullstack" else "Pitch (Cloudflare Pages)",
         "Project": project_name,
@@ -280,6 +285,12 @@ def bootstrap(
         )
         summary["Registry"] = f"ghcr.io/{github_username}"
         summary["Postgres"] = "18.6"
+        template_name = (
+            "Django/FastAPI"
+            if template_source == DEFAULT_TEMPLATE
+            else template_source.rstrip("/").removesuffix(".git").rsplit("/", 1)[-1]
+        )
+        summary["Template"] = f"{template_name} {template_version}"
     ui.input_summary(summary)
 
     if not assume_yes:
