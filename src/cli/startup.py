@@ -160,7 +160,7 @@ def bootstrap(
     from cli.bootstrap_wizard import BootstrapContext, run_wizard
     from cli.sync_commands import _github_owner
 
-    ui.banner()
+    ui.banner(animate=not assume_yes)
 
     def _require(value, option: str):
         """In --yes mode a missing answer is an error, not a prompt."""
