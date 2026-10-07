@@ -1,9 +1,7 @@
 import contextlib
 import json
 import re
-import secrets
 import shutil
-import string
 import subprocess
 import sys
 import tempfile
@@ -11,20 +9,14 @@ from pathlib import Path
 
 import yaml
 
-# ansible ships no type information, so ty cannot see this constant. Suppressed
-# at the import rather than by disabling `unresolved-import` globally — a real
-# typo in any other import must still fail the lint gate.
-from ansible.constants import DEFAULT_VAULT_IDENTITY  # ty: ignore[unresolved-import]
-from ansible.parsing.vault import VaultLib, VaultSecret
-
-from .ansible_bin import ansible_bin
-from .vault.common import generate_random_secret, verify_vault_password
+from .vault.common import generate_random_secret
 from .vault.fields import (
-    extract_vault_block,
     normalize_vault_block,
     regen_vault_string,
     replace_block,
+    verify_inline_field,
 )
+from .vault.process import VaultError, decrypt, encrypt, rekey
 
 
 def is_full_vault_file(path: Path) -> bool:
@@ -48,127 +40,34 @@ def rotate_full_vault_file(
     verify_password: bool = True,
 ):
     """Rotate a full vault file or replace its content."""
-    vault_secret = VaultSecret(vault_password.encode())
-    new_vault_secret = VaultSecret((new_password or vault_password).encode())
-
-    if new_content is not None:
-        # We're replacing the content
-        # Encrypt the new content
-        vault = VaultLib([(DEFAULT_VAULT_IDENTITY, vault_secret)])
-        encrypted = vault.encrypt(new_content.encode())
-
-        if dry_run and dry_dir:
-            # In dry run mode, create the output file in the dry run directory
-            if work_dir and path.is_relative_to(work_dir):
-                rel_path = path.relative_to(work_dir)
-            else:
-                rel_path = path.name
-            out = dry_dir / rel_path
-            out.parent.mkdir(parents=True, exist_ok=True)
-            out.write_bytes(encrypted)
-            return True
+    try:
+        if new_content is not None:
+            encrypted = encrypt(new_content, new_password or vault_password)
+        elif verify_password:
+            encrypted = rekey(
+                path.read_bytes(), vault_password, new_password or vault_password
+            )
         else:
-            # Backup and write
-            if path.exists():
-                bak = path.with_suffix(path.suffix + ".bak")
-                shutil.copy2(path, bak)
-                print(f"Backup saved: {bak}")
-            path.write_bytes(encrypted)
-            return True
-    else:
-        # We're just rotating the vault password (re-encrypting with the same password)
-        encrypted = None
-
-        if verify_password:
-            try:
-                # Try to decrypt to verify the password
-                vault = VaultLib([(DEFAULT_VAULT_IDENTITY, vault_secret)])
-                content = vault.decrypt(path.read_bytes())
-
-                # Re-encrypt with the new password if provided, otherwise use the same password
-                # (effectively just rotating the salt if same password)
-                new_vault = VaultLib([(DEFAULT_VAULT_IDENTITY, new_vault_secret)])
-                encrypted = new_vault.encrypt(content)
-            # Ansible reports a wrong vault password as any of several exception
-            # types (AnsibleError, ValueError, binascii.Error, UnicodeDecodeError, ...),
-            # so this stays broad on purpose.
-            except Exception as e:  # noqa: BLE001
-                print(f"Error rotating vault file {path}: {e}", file=sys.stderr)
-                return False
-        else:
-            # When verification is not required, use ansible-vault command-line tool
-            # to create a new encrypted file with the new password
-            try:
-                # Create a temporary file for the vault password
-                with tempfile.NamedTemporaryFile(
-                    delete=False, mode="w"
-                ) as new_pass_file:
-                    new_pass_file.write(new_password or vault_password)
-                    new_pass_path = new_pass_file.name
-
-                # Create a temporary file for the output
-                with tempfile.NamedTemporaryFile(delete=False) as output_file:
-                    output_path = output_file.name
-
-                # Use ansible-vault to create a new encrypted file
-                # First, create a plaintext file with random content
-                random_content = "".join(
-                    secrets.choice(string.ascii_letters + string.digits)
-                    for _ in range(32)
+            encrypted = encrypt(
+                generate_random_secret(), new_password or vault_password
+            )
+        if dry_run:
+            if dry_dir is not None:
+                rel = (
+                    path.relative_to(work_dir)
+                    if work_dir and path.is_relative_to(work_dir)
+                    else path.name
                 )
-                with tempfile.NamedTemporaryFile(delete=False, mode="w") as plain_file:
-                    plain_file.write(random_content)
-                    plain_path = plain_file.name
-
-                # Encrypt the plaintext file with the new password
-                subprocess.run(
-                    [
-                        ansible_bin("ansible-vault"),
-                        "encrypt",
-                        "--vault-password-file",
-                        new_pass_path,
-                        "--output",
-                        output_path,
-                        plain_path,
-                    ],
-                    check=True,
-                )
-
-                # Read the encrypted content
-                encrypted = Path(output_path).read_bytes()
-
-                # Clean up temporary files
-                Path(new_pass_path).unlink()
-                Path(plain_path).unlink()
-                Path(output_path).unlink()
-            # Ansible reports a wrong vault password as any of several exception
-            # types (AnsibleError, ValueError, binascii.Error, UnicodeDecodeError, ...),
-            # so this stays broad on purpose.
-            except Exception as e:  # noqa: BLE001
-                print(f"Error creating new vault file {path}: {e}", file=sys.stderr)
-                return False
-
-        # Write the encrypted content to the output file
-        if encrypted:
-            if dry_run and dry_dir:
-                # In dry run mode, create the output file in the dry run directory
-                if work_dir and path.is_relative_to(work_dir):
-                    rel_path = path.relative_to(work_dir)
-                else:
-                    rel_path = path.name
-                out = dry_dir / rel_path
+                out = dry_dir / rel
                 out.parent.mkdir(parents=True, exist_ok=True)
                 out.write_bytes(encrypted)
-                return True
-            else:
-                # Backup and write
-                if path.exists():
-                    bak = path.with_suffix(path.suffix + ".bak")
-                    shutil.copy2(path, bak)
-                    print(f"Backup saved: {bak}")
-                path.write_bytes(encrypted)
-                return True
-
+            return True
+        if path.exists():
+            shutil.copy2(path, path.with_suffix(path.suffix + ".bak"))
+        path.write_bytes(encrypted)
+        return True
+    except (OSError, ValueError):
+        print(f"Could not update Vault file {path}.", file=sys.stderr)
         return False
 
 
@@ -203,7 +102,7 @@ def find_yaml_files(root: Path):
 
 def load_text(path: Path):
     try:
-        return path.read_text()
+        return path.read_bytes().decode()
     except (OSError, UnicodeDecodeError) as e:
         print(f"Error reading {path}: {e}", file=sys.stderr)
         return None
@@ -212,9 +111,9 @@ def load_text(path: Path):
 def backup_and_write(path: Path, content: str):
     if path.exists():
         bak = path.with_suffix(path.suffix + ".bak")
-        bak.write_text(path.read_text())
+        bak.write_bytes(path.read_bytes())
         print(f"Backup saved: {bak}")
-    path.write_text(content)
+    path.write_bytes(content.encode())
 
 
 def update_fields_in_yaml(yaml_content, updates, vault_file):
@@ -238,8 +137,8 @@ def update_fields_in_yaml(yaml_content, updates, vault_file):
         # Convert back to YAML string
         return yaml.dump(data, default_flow_style=False)
 
-    except yaml.YAMLError as e:
-        print(f"Error parsing YAML: {e}", file=sys.stderr)
+    except yaml.YAMLError:
+        print("Could not parse decrypted YAML.", file=sys.stderr)
         return None
 
 
@@ -299,11 +198,6 @@ def update_secrets(
         if dry_dir.exists():
             shutil.rmtree(dry_dir)
         dry_dir.mkdir()
-
-    # Temp vault-password file
-    with tempfile.NamedTemporaryFile(delete=False, mode="w") as tf:
-        tf.write(vault_password)
-        vault_file = tf.name
 
     try:
         updated = []
@@ -379,9 +273,7 @@ def update_secrets(
                     if verify_password:
                         try:
                             # Try to decrypt to verify the password
-                            vault_secret = VaultSecret(vault_password.encode())
-                            vault = VaultLib([(DEFAULT_VAULT_IDENTITY, vault_secret)])
-                            vault.decrypt(path.read_bytes())
+                            decrypt(path.read_bytes(), vault_password)
                         # Ansible reports a wrong vault password as any of several exception
                         # types (AnsibleError, ValueError, binascii.Error, UnicodeDecodeError, ...),
                         # so this stays broad on purpose.
@@ -471,18 +363,15 @@ def update_secrets(
                             continue
                     else:
                         # If verify-password is enabled, check if we can decrypt the existing vault
-                        if verify_password:
-                            vault_block = extract_vault_block(text, var)
-                            if vault_block and not verify_vault_password(
-                                vault_block, vault_password
-                            ):
-                                print(
-                                    f"Error: Cannot decrypt existing vault for {var} in {rel}. Incorrect password."
-                                )
-                                password_verification_failed = True
-                                continue
+                        if verify_password and not verify_inline_field(
+                            text, var, vault_password
+                        ):
+                            print(
+                                f"Error: Cannot decrypt existing vault for {var} in {rel}. Incorrect password."
+                            )
+                            return False, updated, True
 
-                    new_block = regen_vault_string(var, plain, vault_file)
+                    new_block = regen_vault_string(var, plain, vault_password)
                     new_text, count = replace_block(text, var, new_block)
                     if count:
                         modified = True
@@ -496,7 +385,7 @@ def update_secrets(
                         # Create the output file in the dry run directory with the same structure
                         out = dry_dir / rel
                         out.parent.mkdir(parents=True, exist_ok=True)
-                        out.write_text(text)
+                        out.write_bytes(text.encode())
                         if verbose:
                             print(f"Dry-run: wrote {out}")
                     else:
@@ -531,13 +420,13 @@ def update_secrets(
 
                 try:
                     # Decrypt the file
-                    vault_secret = VaultSecret(vault_password.encode())
-                    vault = VaultLib([(DEFAULT_VAULT_IDENTITY, vault_secret)])
-                    decrypted_content = vault.decrypt(yml.read_bytes()).decode("utf-8")
+                    decrypted_content = decrypt(
+                        yml.read_bytes(), vault_password
+                    ).decode("utf-8")
 
                     # Update the YAML content
                     new_content = update_fields_in_yaml(
-                        decrypted_content, updates_dict, vault_file
+                        decrypted_content, updates_dict, vault_password
                     )
                     if new_content is not None:
                         # Re-encrypt the updated content
@@ -572,8 +461,7 @@ def update_secrets(
                         f"Error processing encrypted YAML file {rel}: {e}",
                         file=sys.stderr,
                     )
-                    if verify_password:
-                        password_verification_failed = True
+                    return False, updated, True
 
             # Fields that matched no vault block anywhere. Either create them in the
             # file the caller named, or say so - never pretend they were stored.
@@ -587,11 +475,26 @@ def update_secrets(
                         print(f"Error: --create-in file does not exist: {target}")
                         return False, updated, password_verification_failed
 
-                    text = load_text(target) or ""
+                    if is_full_vault_file(target):
+                        print(
+                            "Cannot append inline fields to a fully encrypted file.",
+                            file=sys.stderr,
+                        )
+                        return False, updated, password_verification_failed
+                    target_rel = (
+                        target.relative_to(work_dir)
+                        if work_dir in target.parents
+                        else target.name
+                    )
+                    preview = dry_dir / target_rel
+                    source = preview if dry_run and preview.exists() else target
+                    text = load_text(source) or ""
                     if text and not text.endswith("\n"):
                         text += "\n"
                     for var in missing:
-                        block = regen_vault_string(var, updates_dict[var], vault_file)
+                        block = regen_vault_string(
+                            var, updates_dict[var], vault_password
+                        )
                         # Same indentation the replace path produces, so a created
                         # field is indistinguishable from one that was already there.
                         text += "\n" + normalize_vault_block(block)
@@ -605,7 +508,7 @@ def update_secrets(
                     if dry_run:
                         out = dry_dir / rel
                         out.parent.mkdir(parents=True, exist_ok=True)
-                        out.write_text(text)
+                        out.write_bytes(text.encode())
                         print(f"Dry-run: would create {', '.join(missing)} in {rel}")
                     else:
                         backup_and_write(target, text)
@@ -641,9 +544,7 @@ def update_secrets(
                     # If verify-password is enabled and it's a vault file, check if we can decrypt it
                     if verify_password and is_full_vault_file(path):
                         try:
-                            vault_secret = VaultSecret(vault_password.encode())
-                            vault = VaultLib([(DEFAULT_VAULT_IDENTITY, vault_secret)])
-                            vault.decrypt(path.read_bytes())
+                            decrypt(path.read_bytes(), vault_password)
                         # Ansible reports a wrong vault password as any of several exception
                         # types (AnsibleError, ValueError, binascii.Error, UnicodeDecodeError, ...),
                         # so this stays broad on purpose.
@@ -728,7 +629,9 @@ def update_secrets(
             print(f"{dry_run_prefix}No updates applied.")
             return True, [], False
 
+    except VaultError as error:
+        print(str(error), file=sys.stderr)
+        return False, updated, password_verification_failed
     finally:
-        Path(vault_file).unlink(missing_ok=True)
         if not repo_path.exists():
             shutil.rmtree(work_dir)

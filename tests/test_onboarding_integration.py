@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def launch(tmp_path, answers, *options):
+def launch(tmp_path, answers, *options, domain_option=("--domain-owned",)):
     return subprocess.run(
         [
             sys.executable,
@@ -19,7 +19,7 @@ def launch(tmp_path, answers, *options):
             "fullstack",
             "--provider",
             "hetzner",
-            "--domain-owned",
+            *domain_option,
             "--github-username",
             "example-owner",
             "--output-dir",
@@ -81,4 +81,87 @@ def test_interrupted_onboarding_does_not_create_resources(tmp_path):
     # THEN the process exits with an understandable abort and no project.
     assert result.returncode != 0
     assert "Aborted" in result.stderr
+    assert not (tmp_path / "projects").exists()
+
+
+def test_user_without_a_domain_is_offered_registration(tmp_path):
+    # GIVEN a new user who has no domain yet and first types something invalid.
+    # WHEN they choose to register one and then decline creation.
+    result = launch(
+        tmp_path, "my-startup\n2\nkeine\nmy-startup.de\n\n\n", domain_option=()
+    )
+    # THEN the CLI asks before assuming ownership, rejects the non-domain and
+    # plans the registration instead of treating the domain as owned.
+    assert result.returncode == 0, result.stderr
+    assert "Do you already have a domain?" in result.stdout
+    assert "register a new one through Hetzner" in result.stdout
+    assert "Domain to register (for example, example.com)" in result.stdout
+    assert "Enter a domain like example.com" in result.stdout
+    assert "my-startup.de (register through Hetzner)" in result.stdout
+    assert "Cancelled. No resources were created." in result.stdout
+    assert not (tmp_path / "projects").exists()
+
+
+def test_user_with_a_domain_is_asked_for_it(tmp_path):
+    # GIVEN a new user who already owns a domain.
+    # WHEN they say so and enter it, then decline creation.
+    result = launch(tmp_path, "my-startup\n1\nexample.com\n\n\n", domain_option=())
+    # THEN the plan uses that domain without a registration.
+    assert result.returncode == 0, result.stderr
+    assert "Your domain (for example, example.com)" in result.stdout
+    assert "register through Hetzner" not in result.stdout.split("Your launch plan")[1]
+    assert "Cancelled. No resources were created." in result.stdout
+
+
+def test_launch_plan_shows_the_pinned_default_template(tmp_path):
+    # GIVEN a new user who does not choose a template version.
+    # WHEN they review the launch plan and cancel.
+    result = launch(tmp_path, "my-startup\nexample.com\n\n\n")
+    # THEN the plan names the tested template release this CLI pins.
+    assert result.returncode == 0, result.stderr
+    assert "Template  Django/FastAPI v0.1.1" in result.stdout
+
+
+def test_explicit_or_custom_templates_keep_their_version(tmp_path):
+    # GIVEN a user who picks a template version, or a custom template.
+    # WHEN they review the launch plan and cancel.
+    pinned = launch(
+        tmp_path, "my-startup\nexample.com\n\n\n", "--template-version", "main"
+    )
+    custom = launch(
+        tmp_path,
+        "my-startup\nexample.com\n\n\n",
+        "--template",
+        "https://example.com/acme/vue-template.git",
+    )
+    # THEN their choice wins, and a custom template follows its HEAD.
+    assert "Template  Django/FastAPI main" in pinned.stdout, pinned.stderr
+    assert "Template  vue-template HEAD" in custom.stdout, custom.stderr
+
+
+def test_pitch_launch_pins_builtin_and_preserves_explicit_templates(tmp_path):
+    # GIVEN a user choosing a landing page without creating external resources.
+    options = (
+        "--kind",
+        "pitch",
+        "--project-name",
+        "my-startup",
+        "--base-domain",
+        "example.com",
+    )
+    # WHEN they inspect the default, an explicit release and a custom template.
+    default = launch(tmp_path, "\n\n", *options)
+    explicit = launch(tmp_path, "\n\n", *options, "--template-version", "v2.0.0")
+    custom = launch(
+        tmp_path, "\n\n", *options, "--template", "https://example.com/pitch.git"
+    )
+    # THEN the plan names the pinned release, preserves overrides and cancels.
+    for result, version in [
+        (default, "v0.1.0"),
+        (explicit, "v2.0.0"),
+        (custom, "HEAD"),
+    ]:
+        assert result.returncode == 0, result.stderr
+        assert f"Template  Pitch {version}" in result.stdout
+        assert "Cancelled. No resources were created." in result.stdout
     assert not (tmp_path / "projects").exists()

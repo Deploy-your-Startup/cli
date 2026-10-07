@@ -2,13 +2,17 @@
 
 Merging to `main` runs CI; it does not publish an installer update. The public
 installer installs a fixed Git tag with uv. GitHub releases describe those tags.
-The CLI is not published to PyPI.
+PyPI publishing is a separate, optional manual workflow.
 
 ## Publish a tested version
 
 1. Use a clean checkout of current `origin/main`. Check the README, AGENTS.md,
-   package metadata, license, CLI help and public quickstart together. Update the
-   README's installer version for the release and commit the documentation.
+   package metadata, license, CLI help and public quickstart together. Version
+   numbers are not repeated in the documentation: the website installer pins
+   them once (`startup_cli_version` in its `install.sh`) and advances the CLI
+   pin automatically (step 5). To ship a newer default application template,
+   change `DEFAULT_TEMPLATE_VERSION` in `src/cli/template_commands.py`; it is
+   the only place that version is pinned.
 2. Run `mise run lint` and `mise run test`. Push the release commit to `main`
    through the repository's normal review process, then wait for that exact
    commit's GitHub CI to pass. Do not release an older local checkout.
@@ -21,7 +25,8 @@ The CLI is not published to PyPI.
      --title "vX.Y.Z — <release title>" --notes-file release-notes.md
    ```
 
-   `setuptools-scm` derives the package version from Git tags.
+   `setuptools-scm` derives the package version from Git tags. Creating this
+   release does not run `publish.yml` or upload to PyPI.
 4. Verify the remote tag resolves to the intended commit and the public source
    archive downloads. Install that tag in an isolated tool directory and verify
    the installed package version, `startup --help` and the affected user flow. For terminal
@@ -50,6 +55,15 @@ To install and start guided onboarding:
 ```bash
 curl -fsSL https://deploy-your-startup.com/install.sh | bash -s -- --onboard
 ```
+
+## Optional PyPI publishing
+
+`.github/workflows/publish.yml` runs only through `workflow_dispatch`. It builds
+a wheel and source distribution, then uploads through the `pypi` environment
+using Trusted Publishing. Configure the PyPI project and publisher first. If
+publishing a release, dispatch against its verified tag, not moving `main`.
+GitHub tags remain the documented install path until PyPI availability is
+verified.
 
 ## Withdraw a release
 
