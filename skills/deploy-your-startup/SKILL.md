@@ -64,6 +64,10 @@ startup bootstrap --yes --kind pitch \
   --project-name my-startup --base-domain example.com
 ```
 
+Built-in full-stack and pitch templates use the tested releases pinned by the CLI.
+The launch plan shows the selected version. Use `--template-version <tag-or-commit>`
+to choose another version; custom `--template` sources default to HEAD.
+
 Use `--output-dir <dir>` when the user keeps projects in a specific folder.
 Run bootstrap outside a sandbox: the Hetzner and Cloudflare steps can open a
 real browser for the user to sign in. If no token is passed, that browser path
