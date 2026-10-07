@@ -6,3 +6,6 @@ run = "./make.sh test"
 
 [tasks.format]
 run = "./make.sh format"
+
+[tasks.test-vault]
+run = "./make.sh test_vault"

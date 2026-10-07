@@ -49,6 +49,13 @@ preserves behavior without exercising it.
   do not corrupt them. Check that secrets never enter child-process arguments
   or diagnostic output; only an explicitly requested secret-read result may
   contain plaintext on stdout.
+- Run the template integration matrix for Vault changes: render the real
+  Django/FastAPI and Vue + Django/FastAPI templates at pinned public revisions,
+  then exercise single-field, mixed multi-file and all-field updates, dry runs,
+  and bootstrap's batch secret setup plus strict rotation for Hetzner and BYOS.
+  Use disposable rendered projects and synthetic credentials; never provision
+  cloud infrastructure for these tests. `mise run test-vault` runs this matrix
+  together with the other Vault regression tests.
 - Treat these as required checks, not claims that all cases already work. Record
   uncovered behavior or failures explicitly before claiming compatibility.
 
@@ -112,5 +119,12 @@ reporting a deployment as successful.
   `startup ansible` resolves `.shared-roles` from the same workflow reference.
   Keep these three in step when the major version changes.
 - Check README, CLI help, tests documentation and packaging comments when changing
-  commands or release behavior. Git tags are the only public installation
-  path; the CLI is not published to PyPI.
+  commands or release behavior. Git tags are the current public installation
+  path; PyPI publishing is an optional manual workflow.
+- The agent skill `deploy-your-startup` tells coding agents how to use this
+  CLI. It ships in three channels with identical content:
+  `skills/deploy-your-startup/SKILL.md` (skill installers and the Claude Code
+  plugin in `.claude-plugin/`) and `src/cli/agent_skills/` (bundled for
+  `startup skills install`). When a command, option or safety rule changes,
+  update both copies; `tests/test_agent_skill_integration.py` fails on drift
+  and on commands the skill names but the CLI no longer has.

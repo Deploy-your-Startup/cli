@@ -79,9 +79,12 @@ def terminal_launch(tmp_path, *, static=False, interrupt=False):
 def test_rocket_flies_once_and_stops_before_questions(tmp_path):
     # GIVEN an interactive terminal, WHEN onboarding starts,
     code, output, project = terminal_launch(tmp_path)
-    # THEN frames stop before the first prompt, the cursor returns, and cancel is safe.
+    # THEN the rocket writes the wordmark behind it, frames stop before the
+    # first prompt, the cursor returns, and cancel is safe.
     assert code == 0, output
     intro, questions = output.split("Project name", 1)
+    for partial in (">_ d", ">_ deploy y", ">_ deploy your startup"):
+        assert f"{partial}\x1b[0m🚀" in intro
     assert intro.count("\x1b[2K") > 5
     assert intro.count("\x1b[?25l") == 1
     assert intro.count("\x1b[?25h") == 1

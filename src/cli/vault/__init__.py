@@ -2,7 +2,7 @@
 Ansible vault utilities for handling encrypted files and fields.
 """
 
-from .common import create_vault_lib, generate_random_secret, verify_vault_password
+from .common import generate_random_secret, verify_vault_password
 from .fields import (
     check_vault_blocks_with_password,
     contains_vault_blocks,
@@ -27,7 +27,6 @@ __all__ = [
     "check_can_decrypt_with_password",
     "check_vault_blocks_with_password",
     "contains_vault_blocks",
-    "create_vault_lib",
     # Field operations
     "extract_vault_block",
     "find_vaulted_files",

@@ -1,143 +1,67 @@
-# Vault Secret Management Tests
+# CLI tests
 
-This directory contains tests for the vault secret management functionality.
-
-## Running the Tests
-
-You can run all tests with pytest:
+Run from the CLI repository root. Install global uv and mise; `.python-version`
+selects Python and the dev extra supplies pytest, ruff and ty.
 
 ```bash
-# From the cli directory
-uv run python -m pytest -v tests/test_update_secrets.py
+uv sync --locked --extra dev
+mise run test
+mise run lint
 ```
 
-To run a specific test:
+For focused runs:
 
 ```bash
-# From the cli directory
-uv run python -m pytest -v tests/test_update_secrets.py::test_rotate_single_field
-uv run python -m pytest -v tests/test_update_secrets.py::test_set_specific_field_value
-uv run python -m pytest -v tests/test_update_secrets.py::test_set_file_content
+uv run --extra dev pytest tests/test_onboarding.py tests/test_bootstrap.py
+uv run --extra dev pytest tests/test_template_commands.py
+uv run --extra dev pytest tests/vault_features
+uv run --extra dev pytest tests/vault_features/test_create_and_stdin.py::test_field_stdin_keeps_the_value_out_of_the_arguments -v
 ```
 
-## Test Cases
+The suite covers bootstrap and resume behavior, prerequisite checks, GitHub
+setup, shared-role sync, Copier adoption/updates, deployment and backup/restore
+commands, Hetzner/Cloudflare automation, optional Auth0, and Vault operations.
+New tests must exercise real entrypoints and replace only external service
+boundaries with local stand-ins. A passing suite does not prove that live cloud
+provisioning or browser login works.
 
-The tests cover the following functionality:
+Vault tests use temporary fixtures and synthetic credentials. Keep real tokens,
+Keychain passwords and decrypted production data out of test inputs and output.
+For manual checks, use the `startup` commands documented in the
+[CLI README](../README.md#manage-secrets), starting with `--dry-run`. Use the current CLI commands when creating manual checks.
 
-1. **Rotating a Single Field** - Testing the generation of a random value for a field in a vault file
-2. **Setting a Specific Field Value** - Testing the `--set-field` option to set a specific value
-3. **Setting File Content** - Testing the `--set-file-content` option to replace an entire vault file
-
-## Manual Testing
-
-You can also test the functionality manually:
-
-### 1. Rotate Fields with Random Values
+## Vault and template integration runs
 
 ```bash
-# From the project root
-./cli/make.sh update-secrets \
-  --vault-password your_vault_password \
-  --repo test_repo \
-  --vault-fields backend_db_password api_key \
-  --verbose
+mise run test-vault
 ```
 
-### 2. Set Specific Field Values
+This run uses the real CLI, Ansible executables, Copier and disposable files.
+It covers exact multiline values, whitespace, comments, nested inline fields,
+creation, wrong passwords, dry runs, rotation, credential transport and the
+built wheel's dependency/license boundary. The CLI process is also tested with
+Ansible Python imports blocked; Ansible runs in its own process.
 
-```bash
-# From the project root
-./cli/make.sh update-secrets \
-  --vault-password your_vault_password \
-  --repo test_repo \
-  --set-field backend_db_password secure_password123 \
-  --set-field api_key your_api_key_here \
-  --verbose
-```
+The template matrix renders `django-backend-template` and `vue-django-template`
+from immutable public Git revisions pinned in
+`test_vault_templates_integration.py`. It checks single-field updates, mixed
+batches across files, regeneration of every inline field, and bootstrap's real
+batch-update and strict-rotation entrypoints for Hetzner and BYOS. The latter
+includes a disposable real SSH key and synthetic provider credentials. It does
+not run cloud provisioning or publish repositories.
 
-### 3. Update Entire File Content
+GitHub access is required to fetch these public template revisions. For an
+offline run, set `STARTUP_VAULT_TEMPLATE_ROOT` to a directory containing clones
+named `django-backend-template` and `vue-django-template` with the pinned commits
+already present. Templates are fetched into temporary test checkouts; source
+clones and existing applications are left intact.
 
-```bash
-# From the project root
-./cli/make.sh update-secrets \
-  --vault-password your_vault_password \
-  --repo test_repo \
-  --set-file-content hcloud_token "your-hetzner-cloud-token-content" \
-  --verbose
-```
-
-### 4. Rotate Full Vault Files (re-encrypt with same password)
-
-```bash
-# From the project root
-./cli/make.sh update-secrets \
-  --vault-password your_vault_password \
-  --repo test_repo \
-  --vault-files hcloud_token_production ci_ssh_key \
-  --verbose
-```
-
-## Creating Test Data
-
-You can create test vault files for manual testing with:
-
-```bash
-# Create a test directory
-mkdir -p test_vault_data/data
-
-# Create a simple YAML file
-echo "backend_db_password: initial_password" > test_vault_data/data/all.yml
-
-# Create a token file
-echo "initial_token_content" > test_vault_data/data/hcloud_token
-
-# Encrypt them with ansible-vault (using uv run)
-uv run ansible-vault encrypt --vault-password-file <(echo "test_password") test_vault_data/data/all.yml
-uv run ansible-vault encrypt --vault-password-file <(echo "test_password") test_vault_data/data/hcloud_token
-```
-
-Then you can run update operations on these test files:
-
-```bash
-# From the project root
-./cli/make.sh update-secrets \
-  --vault-password test_password \
-  --repo test_vault_data \
-  --set-field backend_db_password new_secure_password \
-  --verbose
-```
-
-## Combining Multiple Operations
-
-You can combine multiple operations in a single command:
-
-```bash
-./cli/make.sh update-secrets \
-  --vault-password your_vault_password \
-  --repo test_repo \
-  --set-field backend_db_password secure_password123 \
-  --vault-fields api_key \
-  --set-file-content hcloud_token "your-token-content" \
-  --vault-files another_vault_file \
-  --verbose
-```
-
-This will:
-1. Set `backend_db_password` to "secure_password123"
-2. Generate a random value for `api_key`
-3. Replace the content of `hcloud_token` with "your-token-content"
-4. Rotate (re-encrypt) `another_vault_file`
-
-## Additional Options
-
-- `--dry-run` - Preview changes without applying them
-- `--only-existing` - Only update existing vault entries
-- `--verify-password` - Verify vault password can decrypt existing secrets
 ## Guided onboarding integration checks
 
 `uv run --extra dev pytest tests/test_onboarding_integration.py tests/test_vault_guard.py`
-exercises the actual CLI prompts, optional settings, cancellation and real vault
-files. Cloud accounts and paid infrastructure are not created by these checks.
+exercises the actual CLI prompts, the domain ownership choice, optional settings,
+cancellation and real vault files. Cloud accounts and paid infrastructure are not
+created by these checks.
 
 `tests/test_launch_animation_integration.py` uses a real pseudo-terminal to check
 a single launch, stationary prompts, motion opt-out and cursor restoration on interruption.
