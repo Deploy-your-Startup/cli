@@ -113,11 +113,11 @@ reporting a deployment as successful.
   user customizations and encrypted project configuration.
 - Browser setup and account-dependent operations need separate live verification;
   local integration tests do not establish a successful first deployment.
-- `startup sync` syncs releases of the shared deploy template (default: newest
-  `vX.Y.Z`), tags the user's repository with the exact tag and moves the `vX`
-  major tag. Generated workflows reference `@v1` (`DEPLOY_MAJOR_REF`); local
-  `startup ansible` resolves `.shared-roles` from the same workflow reference.
-  Keep these three in step when the major version changes.
+- `startup sync` copies shared roles/workflows into the owner's repository.
+  Its default source is `main`; `--source-version <tag-or-commit>` selects a
+  fixed revision. It does not copy tags. Projects record an immutable role
+  revision and checksum with `startup ansible pin`; sync alone does not advance
+  those project pins. Keep CI workflow refs, role pins and checksums consistent.
 - Check README, CLI help, tests documentation and packaging comments when changing
   commands or release behavior. Git tags are the current public installation
   path; PyPI publishing is an optional manual workflow.
