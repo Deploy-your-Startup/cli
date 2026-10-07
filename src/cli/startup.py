@@ -840,7 +840,7 @@ def deploy():
     "--source-version",
     default="main",
     show_default=True,
-    help="Source template branch or tag to sync",
+    help="Source template branch, tag or full commit SHA to sync",
 )
 @click.option("--private/--public", default=True, show_default=True)
 @click.option("--dry-run", is_flag=True, help="Preview sync without commit/push")
