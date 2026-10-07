@@ -22,8 +22,9 @@ while keeping ownership and room to grow.
 
 ## Your first startup
 
-Start on macOS with Git, Chrome, a GitHub account, a Hetzner Cloud account and a
-domain you own. Servers and domains are billed by your providers.
+Start on macOS with Git, Chrome, a GitHub account and a Hetzner Cloud account.
+Bring a domain or register one during setup. Servers and domains are billed by
+your providers.
 
 ```bash
 curl -fsSL https://deploy-your-startup.com/install.sh | bash -s -- --onboard
@@ -44,7 +45,7 @@ missing prerequisites. To resume the wizard after installation:
 
 ```bash
 startup doctor
-startup bootstrap --kind fullstack --provider hetzner --domain-owned
+startup bootstrap --kind fullstack --provider hetzner
 ```
 
 The first-deploy path creates Django/FastAPI, Postgres and HTTPS on k3s in your
