@@ -2,7 +2,8 @@
 
 Two flows live here:
   * fullstack: Provider → Project → Finalize  (Django + k3s)
-  * pitch:     Domain → Cloudflare → Project → Finalize  (Astro → Cloudflare Pages)
+  * pitch:     Shared workflows → Cloudflare → Domain → Project → Finalize
+               (Astro → Cloudflare Pages)
 
 Each step is its own module under ``wizard.steps.*``; the runner picks the
 right list from ``ctx.kind``.

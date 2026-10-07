@@ -14,6 +14,7 @@ from cli.preflight import doctor
 from cli.skill_commands import skills
 from cli.template_commands import (
     DEFAULT_TEMPLATE,
+    PITCH_TEMPLATE,
     default_template_version,
     template,
 )
@@ -75,13 +76,13 @@ cli.add_command(skills)
 @click.option(
     "--template",
     "template_source",
-    default=DEFAULT_TEMPLATE,
-    help="Full-stack Copier template Git URL or local repository.",
+    help="Copier template Git URL or local repository "
+    "(default: the Django template, or the pitch template with --kind pitch).",
 )
 @click.option(
     "--template-version",
-    help="Full-stack template tag, branch or commit "
-    "(default: the tested release of the default template, HEAD for others).",
+    help="Template tag, branch or commit "
+    "(default: the tested release of built-in templates, HEAD for others).",
 )
 @click.option(
     "--domain-owned/--buy-domain",
@@ -186,6 +187,9 @@ def bootstrap(
             ],
         )
         kind = "fullstack" if choice == 1 else "pitch"
+
+    if template_source is None:
+        template_source = PITCH_TEMPLATE if kind == "pitch" else DEFAULT_TEMPLATE
 
     # ── Provider selection (full-stack only) ─────────────────────
 
@@ -321,6 +325,8 @@ def bootstrap(
             else template_source.rstrip("/").removesuffix(".git").rsplit("/", 1)[-1]
         )
         summary["Template"] = f"{template_name} {template_version}"
+    else:
+        summary["Template"] = f"Pitch {template_version}"
     ui.input_summary(summary)
 
     if not assume_yes:
@@ -834,7 +840,7 @@ def deploy():
     "--source-version",
     default="main",
     show_default=True,
-    help="Source template branch or tag to sync",
+    help="Source template branch, tag or full commit SHA to sync",
 )
 @click.option("--private/--public", default=True, show_default=True)
 @click.option("--dry-run", is_flag=True, help="Preview sync without commit/push")

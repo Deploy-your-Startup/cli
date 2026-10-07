@@ -132,6 +132,7 @@ def _set_actions_access(full_repo_name: str, access_level: str, *, cwd: Path) ->
 
 
 def _clone_source_repo(source_repo: str, destination: Path, branch: str) -> None:
+    is_commit = len(branch) == 40 and all(c in "0123456789abcdefABCDEF" for c in branch)
     _run_command(
         [
             "gh",
@@ -142,11 +143,15 @@ def _clone_source_repo(source_repo: str, destination: Path, branch: str) -> None
             "--",
             "--depth",
             "1",
-            "--branch",
-            branch,
+            *([] if is_commit else ["--branch", branch]),
         ],
         cwd=destination.parent,
     )
+    if is_commit:
+        _run_command(
+            ["git", "fetch", "--depth", "1", "origin", branch], cwd=destination
+        )
+        _run_command(["git", "checkout", "--detach", branch], cwd=destination)
 
 
 def _clone_target_repo(full_repo_name: str, destination: Path, branch: str) -> None:
