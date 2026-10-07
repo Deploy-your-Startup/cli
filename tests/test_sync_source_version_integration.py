@@ -17,7 +17,10 @@ def git(*args, cwd, env):
 
 
 @pytest.mark.parametrize("dry_run", [True, False])
-def test_sync_uses_requested_source_branch_and_keeps_target_main(tmp_path, dry_run):
+@pytest.mark.parametrize("ref_kind", ["branch", "tag", "commit"])
+def test_sync_uses_requested_source_ref_and_keeps_target_main(
+    tmp_path, dry_run, ref_kind
+):
     # GIVEN source and target bare git remotes behind a fake GitHub boundary.
     env = {
         **os.environ,
@@ -42,6 +45,16 @@ def test_sync_uses_requested_source_branch_and_keeps_target_main(tmp_path, dry_r
             )
             git("add", ".", cwd=checkout, env=env)
             git("commit", "-m", "new roles", cwd=checkout, env=env)
+            source_ref = "codex/tested-roles"
+            if ref_kind == "tag":
+                git("tag", "v0.1.0", cwd=checkout, env=env)
+                source_ref = "v0.1.0"
+            elif ref_kind == "commit":
+                source_ref = git("rev-parse", "HEAD", cwd=checkout, env=env)
+            if ref_kind != "branch":
+                (checkout / "role.txt").write_text("unreviewed future roles")
+                git("add", ".", cwd=checkout, env=env)
+                git("commit", "-m", "future roles", cwd=checkout, env=env)
         git(
             "clone",
             "--bare",
@@ -82,7 +95,7 @@ if args[:1] == ['api'] and args[1].startswith('users/'):
             "--owner",
             "sample",
             "--source-version",
-            "codex/tested-roles",
+            source_ref,
             *(["--dry-run"] if dry_run else []),
         ],
         cwd=tmp_path,
