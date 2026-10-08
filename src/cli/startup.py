@@ -1246,6 +1246,11 @@ def ansible_infrastructure(
 ):
     """Provision infrastructure via Ansible playbook."""
     from cli.ansible_commands import resolve_vault_password, run_infrastructure
+    from cli.cluster_commands import require_cluster_owner
+
+    require_cluster_owner(
+        Path(working_directory).expanduser().resolve(), "infrastructure"
+    )
 
     if allow_worker_teardown and not yes:
         click.confirm(
@@ -1486,6 +1491,9 @@ def ansible_update_vms(
 ):
     """Update Hetzner VM packages via Ansible playbook."""
     from cli.ansible_commands import resolve_vault_password, run_update_vms
+    from cli.cluster_commands import require_cluster_owner
+
+    require_cluster_owner(Path(working_directory).expanduser().resolve(), "update-vms")
 
     resolved_vault_password = resolve_vault_password(
         vault_password=vault_password,
@@ -1572,6 +1580,9 @@ def ansible_k3s_upgrade(
 ):
     """Upgrade k3s cluster-wide: control plane first, then workers."""
     from cli.ansible_commands import resolve_vault_password, run_k3s_upgrade
+    from cli.cluster_commands import require_cluster_owner
+
+    require_cluster_owner(Path(working_directory).expanduser().resolve(), "k3s-upgrade")
 
     resolved_vault_password = resolve_vault_password(
         vault_password=vault_password,
@@ -1645,6 +1656,11 @@ def ansible_cert_manager_upgrade(
 ):
     """Upgrade cert-manager cluster-wide to the pinned chart version."""
     from cli.ansible_commands import resolve_vault_password, run_cert_manager_upgrade
+    from cli.cluster_commands import require_cluster_owner
+
+    require_cluster_owner(
+        Path(working_directory).expanduser().resolve(), "cert-manager-upgrade"
+    )
 
     resolved_vault_password = resolve_vault_password(
         vault_password=vault_password,
