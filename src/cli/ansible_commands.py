@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import click
 import yaml
@@ -34,6 +35,7 @@ ROOT_SHARED_FILES = [
     "backup-playbook.yml",
     "restore-playbook.yml",
     "update-vms-playbook.yml",
+    "os-upgrade-playbook.yml",
     "k3s-upgrade-playbook.yml",
     "inventory.ini",
     "inventory.hcloud.yml",
@@ -1560,6 +1562,164 @@ def run_update_vms(
         env=env,
         input_text=vault_password,
     )
+
+
+def run_os_upgrade(
+    vault_password: str | None,
+    environment: str,
+    *,
+    target_version: str,
+    execute: bool = False,
+    backup_confirmed: bool = False,
+    health_urls: tuple[str, ...] = (),
+    working_directory: str = ".",
+    limit: str | None = None,
+    shared_dir: str = DEFAULT_SHARED_DIR,
+    version: str = DEFAULT_VERSION,
+    repo_url: str | None = None,
+    refresh: bool = True,
+) -> None:
+    """Preview or perform a serial Ubuntu LTS release upgrade."""
+    _validated_environment(environment)
+    if not re.fullmatch(r"[0-9]{2}\.04", target_version) or int(target_version[:2]) % 2:
+        raise click.ClickException(
+            "--target-version must be an Ubuntu LTS version such as 26.04"
+        )
+    if execute and not backup_confirmed:
+        raise click.ClickException(
+            "--execute requires --backup-confirmed after verifying backups and a recovery plan"
+        )
+    if execute and not health_urls:
+        raise click.ClickException(
+            "--execute requires at least one --health-url for application verification"
+        )
+    if limit and not re.fullmatch(r"[A-Za-z0-9_*?.-]+", limit):
+        raise click.ClickException(
+            "--limit must be a single host, group or glob within the environment"
+        )
+    for url in health_urls:
+        # These URLs are printed by Ansible; never accept embedded credentials.
+        try:
+            parsed = urlsplit(url)
+        except ValueError as exc:
+            raise click.ClickException(
+                "--health-url must be a valid HTTPS URL"
+            ) from exc
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+        ):
+            raise click.ClickException(
+                "--health-url must be an HTTPS URL without embedded credentials"
+            )
+    working_dir = _resolve_working_dir(working_directory)
+    vault_password = resolve_vault_password(vault_password, working_directory)
+    setup_ansible(
+        working_directory=working_directory,
+        shared_dir=shared_dir,
+        version=version,
+        repo_url=repo_url,
+        refresh=refresh,
+    )
+    # Always use the reviewed shared playbook, rather than a same-named local file.
+    playbook_path = working_dir / shared_dir / "os-upgrade-playbook.yml"
+    if not playbook_path.is_file():
+        raise click.ClickException(
+            "OS upgrade playbook missing from the pinned shared roles; sync a release containing it and update the reviewed role pin"
+        )
+    effective_limit = f"{environment}:&{limit}" if limit else environment
+    extra_vars = json.dumps(
+        {
+            "os_upgrade_target": target_version,
+            "os_upgrade_environment": environment,
+            "os_upgrade_execute": execute,
+            "os_upgrade_backup_confirmed": backup_confirmed,
+            "os_upgrade_health_urls": list(health_urls),
+        }
+    )
+    click.echo(
+        "OS upgrade: "
+        + (
+            "execute (nodes may be unavailable during reboot)"
+            if execute
+            else "preview only; no package upgrades or reboots"
+        )
+    )
+    if _is_byos(working_dir):
+        with byos_private_key_file(
+            working_directory, vault_password, shared_dir
+        ) as key_path:
+            _run_os_upgrade_playbook(
+                working_dir,
+                vault_password,
+                _ansible_env(working_dir, shared_dir),
+                playbook_path,
+                effective_limit,
+                extra_vars,
+                inventory_args=["-i", BYOS_INVENTORY, "--private-key", key_path],
+            )
+        return
+    env = _ansible_env(working_dir, shared_dir)
+    env["HCLOUD_TOKEN"] = get_hcloud_token(
+        working_directory, vault_password, environment, shared_dir
+    )
+    _ensure_tailnet(working_dir, environment, shared_dir, env)
+    _run_os_upgrade_playbook(
+        working_dir,
+        vault_password,
+        env,
+        playbook_path,
+        effective_limit,
+        extra_vars,
+    )
+
+
+def _run_os_upgrade_playbook(
+    working_dir: Path,
+    vault_password: str,
+    env: dict[str, str],
+    playbook_path: Path,
+    effective_limit: str,
+    extra_vars: str,
+    *,
+    inventory_args: list[str] | None = None,
+) -> None:
+    command = [
+        _find_uv(),
+        "run",
+        "--project",
+        str(working_dir),
+        ansible_bin("ansible-playbook"),
+        str(playbook_path),
+        *(inventory_args or []),
+        "--vault-password-file",
+        "/bin/cat",
+        "-l",
+        effective_limit,
+        "--extra-vars",
+        extra_vars,
+    ]
+    try:
+        listing = _run_command(
+            [*command, "--list-hosts"],
+            cwd=working_dir,
+            env=env,
+            input_text=vault_password,
+            capture_output=True,
+        )
+    except click.ClickException as exc:
+        if "no hosts to target" in str(exc):
+            raise click.ClickException(
+                "No VM hosts match this environment and --limit; no upgrade started"
+            ) from exc
+        raise
+    if not any(int(count) for count in re.findall(r"hosts \((\d+)\)", listing.stdout)):
+        raise click.ClickException(
+            "No VM hosts match this environment and --limit; no upgrade started"
+        )
+    _run_command(command, cwd=working_dir, env=env, input_text=vault_password)
 
 
 def run_k3s_upgrade(
