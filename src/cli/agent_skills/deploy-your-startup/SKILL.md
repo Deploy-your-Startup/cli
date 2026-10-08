@@ -156,6 +156,10 @@ Bootstrap additional applications with `--cluster <file> --kind fullstack`,
 unique project names and domains. Point their DNS at the same ingress; attachment
 creates no servers. Each project has its own namespace, database, media and Vault.
 
+Shared-cluster bootstrap requires a compatible template revision declaring
+shared_cluster support; select it with --template-version. Older templates are
+rejected before account or server setup.
+
 Run infrastructure, update-vms, os-upgrade, k3s-upgrade and cert-manager-upgrade from the
 cluster owner, and account for every attached application before these operations.
 Attached projects are application-only. Deployment SSH keys remain administrative:

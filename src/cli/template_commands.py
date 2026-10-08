@@ -38,6 +38,22 @@ PUBLIC_FIELDS = {
 PROTECTED = ("deployment/group_vars/**",)
 
 
+def template_supports_shared_cluster(source: str, version: str) -> bool:
+    """Inspect the shared-cluster contract before any account/server setup."""
+    with Worker(
+        src_path=source, vcs_ref=version, skip_tasks=True, quiet=True
+    ) as worker:
+        manifest = worker.template.local_abspath / "startup-template.yml"
+        if not manifest.is_file():
+            return False
+        values = yaml.safe_load(manifest.read_text())
+        return (
+            isinstance(values, dict)
+            and values.get("schema") == 1
+            and values.get("shared_cluster") is True
+        )
+
+
 def template_authentication(source: str, version: str) -> str | None:
     """Inspect public template capabilities without rendering or running tasks."""
     with Worker(

@@ -18,6 +18,7 @@ from cli.template_commands import (
     PITCH_TEMPLATE,
     default_template_version,
     template,
+    template_supports_shared_cluster,
 )
 from cli.verification import verify
 
@@ -378,6 +379,13 @@ def bootstrap(
     # ── Summary + confirmation ───────────────────────────────────
 
     template_version = template_version or default_template_version(template_source)
+    if (shared_cluster or cluster_config) and not template_supports_shared_cluster(
+        template_source, template_version
+    ):
+        raise click.ClickException(
+            "This template revision does not support shared clusters. Use --template-version "
+            "with a compatible release or reviewed ref; no account or server setup was started."
+        )
     summary = {
         "Type": "Full-Stack" if kind == "fullstack" else "Pitch (Cloudflare Pages)",
         "Project": project_name,

@@ -203,8 +203,12 @@ production environment. Review the selected target version before running them.
 
 ## Deploy several startups to one cluster
 
-Create one cluster owner with `startup bootstrap --kind fullstack --provider
-hetzner --shared-cluster`. This provisions infrastructure in your account and
+Select a template release declaring shared-cluster support with
+`--template-version <compatible-template-ref>`. During review, select the
+reviewed template branch explicitly; older pinned templates are rejected before
+account or server setup. Create one cluster owner with
+`startup bootstrap --kind fullstack --provider hetzner --shared-cluster
+--template-version <compatible-template-ref>`. This provisions infrastructure in your account and
 puts the owner's application in its own namespace. Verify Actions, DNS and HTTPS
 before attaching another startup. Cluster failures and upgrades affect every
 application using it.
@@ -220,6 +224,7 @@ Create another project with its own domain and repository:
 ```bash
 startup bootstrap --yes --kind fullstack \
   --cluster ../cluster-connection.yml \
+  --template-version <compatible-template-ref> \
   --project-name second-startup --base-domain second.example.com --without-auth
 ```
 

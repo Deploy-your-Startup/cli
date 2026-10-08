@@ -21,7 +21,7 @@ TEMPLATE = (
     else "https://github.com/Deploy-your-Startup/django-backend-template.git"
 )
 TEMPLATE_VERSION = (
-    "HEAD" if LOCAL_TEMPLATE.is_dir() else "8e1a387ad45f0d6c9727d4a52ac4d245e8176790"
+    "HEAD" if LOCAL_TEMPLATE.is_dir() else "c321a39c2430a87cfcd10b9cef6ffe662346d02e"
 )
 
 
@@ -74,7 +74,7 @@ def descriptor():
         (
             "vue-django-template",
             "https://github.com/Deploy-your-Startup/vue-django-template.git",
-            "cf8d7299f684bdb55556542d5a256400e2647921",
+            "382961daaf43ccd59b645c9af1619c7f2826f650",
         ),
     ],
 )
@@ -269,6 +269,10 @@ def test_attached_launch_plan_cancels_without_provisioning(tmp_path):
     path.write_text(yaml.safe_dump(descriptor()))
     result = launch(
         "bootstrap",
+        "--template",
+        str(TEMPLATE),
+        "--template-version",
+        TEMPLATE_VERSION,
         "--kind",
         "fullstack",
         "--cluster",
@@ -554,3 +558,40 @@ def test_data_playbooks_load_project_and_environment_group_vars(tmp_path, operat
     assert result.returncode == 0, result.stdout + result.stderr
     assert (tmp_path / "result").read_text() == "production-startup"
     assert not list(deployment.glob(".startup-data-*.yml"))
+
+
+def test_legacy_template_is_rejected_before_shared_cluster_account_setup(tmp_path):
+    # GIVEN a real older Copier template without the shared-cluster runtime contract.
+    source = tmp_path / "legacy-template"
+    (source / "template").mkdir(parents=True)
+    (source / "copier.yml").write_text("_subdirectory: template\n")
+    (source / "template/README.md").write_text("Legacy template\n")
+    # WHEN a user requests an owner with the real bootstrap CLI.
+    result = launch(
+        "bootstrap",
+        "--yes",
+        "--kind",
+        "fullstack",
+        "--provider",
+        "hetzner",
+        "--shared-cluster",
+        "--project-name",
+        "cluster-owner",
+        "--base-domain",
+        "owner.example.com",
+        "--domain-owned",
+        "--github-username",
+        "example-owner",
+        "--output-dir",
+        str(tmp_path / "apps"),
+        "--template",
+        str(source),
+        "--without-auth",
+        cwd=tmp_path,
+    )
+    # THEN it reports the required compatible revision before any wizard/provider work.
+    assert result.returncode != 0
+    assert "does not support shared clusters" in result.stderr
+    assert "no account or server setup was started" in result.stderr
+    assert "Step 1" not in result.stdout
+    assert not (tmp_path / "apps").exists()
