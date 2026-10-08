@@ -25,6 +25,7 @@ PUBLIC_FIELDS = {
     "github_username",
     "additional_domains",
     "deploy_repo_name",
+    "deploy_ref",
     "docker_registry_host",
     "postgres_version",
     "k8s_namespace",

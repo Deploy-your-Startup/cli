@@ -181,6 +181,7 @@ def run_wizard(ctx: BootstrapContext) -> None:
         keychain_service=keychain_service,
         provider=ctx.provider,
         byos_deploy_key_command=byos_deploy_key_command,
+        cluster_owner=ctx.cluster_config["owner"] if ctx.cluster_config else None,
     )
     if ctx.auth0_tenant:
         ui.info(

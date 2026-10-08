@@ -1088,6 +1088,11 @@ def run_cert_manager_upgrade(
     shared playbook would re-apply the issuers with the role defaults and
     silently switch a DNS-01 project back to HTTP-01.
     """
+    from cli.cluster_commands import require_cluster_owner
+
+    require_cluster_owner(
+        _resolve_working_dir(working_directory), "cert-manager-upgrade"
+    )
     _validated_environment(environment)
     extra_vars: dict[str, object] = {"cert_manager_upgrade": True}
     if cert_manager_version:
@@ -1116,6 +1121,9 @@ def run_infrastructure(
     refresh: bool = True,
     allow_worker_teardown: bool = False,
 ) -> None:
+    from cli.cluster_commands import require_cluster_owner
+
+    require_cluster_owner(_resolve_working_dir(working_directory), "infrastructure")
     _validated_environment(environment)
     working_dir = _resolve_working_dir(working_directory)
     # Always override group_vars: destructive authorization is per invocation.
@@ -1505,6 +1513,9 @@ def run_update_vms(
     repo_url: str | None = None,
     refresh: bool = True,
 ) -> None:
+    from cli.cluster_commands import require_cluster_owner
+
+    require_cluster_owner(_resolve_working_dir(working_directory), "update-vms")
     _validated_environment(environment)
     working_dir = _resolve_working_dir(working_directory)
     setup_ansible(
@@ -1575,6 +1586,9 @@ def run_k3s_upgrade(
     repo_url: str | None = None,
     refresh: bool = True,
 ) -> None:
+    from cli.cluster_commands import require_cluster_owner
+
+    require_cluster_owner(_resolve_working_dir(working_directory), "k3s-upgrade")
     _validated_environment(environment)
     working_dir = _resolve_working_dir(working_directory)
     setup_ansible(
