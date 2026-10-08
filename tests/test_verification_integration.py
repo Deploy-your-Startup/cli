@@ -11,6 +11,7 @@ import pytest
 from click.testing import CliRunner
 
 from cli.startup import cli
+from cli.vault.process import encrypt
 
 
 @pytest.fixture
@@ -36,9 +37,19 @@ print(json.dumps({'workflow_runs':[{'event':'push','status':'completed','conclus
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
-            body = json.dumps(
-                {"status": os.environ.get("VERIFY_HEALTH", "ok")}
-            ).encode()
+            payload = {"status": os.environ.get("VERIFY_HEALTH", "ok")}
+            if self.path == "/servers":
+                payload = {
+                    "servers": [
+                        {
+                            "name": "demo-master-0",
+                            "public_net": {"ipv4": {"ip": "192.0.2.10"}},
+                        }
+                    ]
+                }
+            elif self.path == "/load_balancers":
+                payload = {"load_balancers": []}
+            body = json.dumps(payload).encode()
             self.send_response(200)
             self.end_headers()
             self.wfile.write(body)
@@ -59,6 +70,16 @@ print(json.dumps({'workflow_runs':[{'event':'push','status':'completed','conclus
         )
 
     monkeypatch.setattr(httpx, "get", get)
+    client_get = httpx.Client.get
+
+    def cloud_get(client, url, **kwargs):
+        return client_get(
+            client,
+            f"http://127.0.0.1:{server.server_port}/" + str(url).rsplit("/", 1)[-1],
+            **kwargs,
+        )
+
+    monkeypatch.setattr(httpx.Client, "get", cloud_get)
     original_resolve = socket.getaddrinfo
 
     def resolve(host, *args, **kwargs):
@@ -124,6 +145,24 @@ def test_missing_project_is_actionable(tmp_path):
     result = CliRunner().invoke(cli, ["verify", "--working-directory", str(tmp_path)])
     assert result.exit_code == 1
     assert ".copier-answers.yml" in result.output
+
+
+def test_server_ip_is_read_with_real_vault_without_exposing_token(project, monkeypatch):
+    # GIVEN a real encrypted project token and local Hetzner API stand-in,
+    # WHEN verifying without --server-ip, THEN decrypt via the real CLI,
+    # discover the server and never print its credential.
+    password = "synthetic-verification-password"
+    token = "synthetic-project-token"
+    deployment = project / "deployment"
+    deployment.mkdir()
+    (deployment / "hcloud_token_production").write_bytes(
+        encrypt(token.encode(), password)
+    )
+    monkeypatch.setenv("STARTUP_VAULT_PASSWORD", password)
+    result = CliRunner().invoke(cli, ["verify", "--working-directory", str(project)])
+    assert result.exit_code == 0, result.output
+    assert "example.com A 192.0.2.10" in result.output
+    assert token not in result.output and password not in result.output
 
 
 def test_bootstrap_exposes_explicit_verification_controls():
