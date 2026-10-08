@@ -67,8 +67,27 @@ def descriptor():
     }
 
 
-def test_two_rendered_projects_keep_separate_data_and_reuse_cluster_inventory(tmp_path):
+@pytest.mark.parametrize(
+    "template_name,remote,revision",
+    [
+        ("django-backend-template", str(TEMPLATE), TEMPLATE_VERSION),
+        (
+            "vue-django-template",
+            "https://github.com/Deploy-your-Startup/vue-django-template.git",
+            "cf8d7299f684bdb55556542d5a256400e2647921",
+        ),
+    ],
+)
+def test_two_rendered_projects_keep_separate_data_and_reuse_cluster_inventory(
+    tmp_path,
+    template_name,
+    remote,
+    revision,
+):
     # GIVEN the real application template and an existing cluster descriptor.
+    local_template = ROOT.parent / template_name
+    source = str(local_template) if local_template.is_dir() else remote
+    template_version = "HEAD" if local_template.is_dir() else revision
     owner: dict = {}
     for name in ("cluster-owner", "second-startup"):
         ctx = BootstrapContext(
@@ -99,8 +118,8 @@ def test_two_rendered_projects_keep_separate_data_and_reuse_cluster_inventory(tm
                 ci_public_key="ssh-ed25519 AAAATEST integration",
                 user_public_key="ssh-ed25519 AAAATEST operator",
             ),
-            source=str(TEMPLATE),
-            version=TEMPLATE_VERSION,
+            source=source,
+            version=template_version,
         )
         configure_project_cluster(ctx)
         before = (ctx.deployment_dir / "cluster.yml").read_bytes()

@@ -138,7 +138,7 @@ Bootstrap additional applications with `--cluster <file> --kind fullstack`,
 unique project names and domains. Point their DNS at the same ingress; attachment
 creates no servers. Each project has its own namespace, database, media and Vault.
 
-Run infrastructure, update-vms, k3s-upgrade and cert-manager-upgrade from the
+Run infrastructure, update-vms, os-upgrade, k3s-upgrade and cert-manager-upgrade from the
 cluster owner, and account for every attached application before these operations.
 Attached projects are application-only. Deployment SSH keys remain administrative:
 this mode is for trusted projects, not independent customers. Verify network
