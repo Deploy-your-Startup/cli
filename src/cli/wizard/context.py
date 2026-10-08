@@ -28,6 +28,10 @@ class BootstrapContext:
     auth0_tenant: str | None = None
     without_auth: bool = False
 
+    deployment_ref: str = "main"
+    shared_cluster: bool = False
+    cluster_config: dict | None = None
+
     # Bring-your-own-server inputs (provider == "byos")
     byos_host: str | None = None  # VPS IP or hostname Ansible connects to
     byos_ssh_user: str = "root"

@@ -40,7 +40,9 @@ def kubernetes_namespace(ctx: BootstrapContext) -> str:
     BYOS projects use their already validated kebab-case project name, so two
     projects pointed at one VPS are isolated without an extra mode switch.
     """
-    return ctx.project_name if ctx.provider == "byos" else "default"
+    return (
+        ctx.project_name if ctx.provider == "byos" or ctx.shared_cluster else "default"
+    )
 
 
 def write_byos_deploy_public_key(deployment_dir: Path, public_key: str) -> Path:
@@ -153,6 +155,10 @@ class ProjectStep(WizardStep):
             )
             return False
 
+        from cli.cluster_commands import configure_project_cluster
+
+        if ctx.shared_cluster or ctx.cluster_config:
+            configure_project_cluster(ctx)
         ctx.vault_password = keychain_password
         ui.skip_indicator(f"Project {ctx.project_name} already configured")
         return True
@@ -188,6 +194,7 @@ class ProjectStep(WizardStep):
             k8s_namespace=kubernetes_namespace(ctx),
             ci_public_key=ci_public_key,
             user_public_key=user_public_key,
+            deployment_ref=ctx.deployment_ref,
         )
         # Resuming a partly completed bootstrap must never overwrite application
         # edits or advance its recorded baseline. Updates have their own command.
@@ -198,6 +205,15 @@ class ProjectStep(WizardStep):
                 source=ctx.template_source,
                 version=ctx.template_version,
             )
+        if ctx.deployment_ref != "main":
+            workflow_text = "\n".join(
+                path.read_text()
+                for path in (ctx.project_dir / ".github/workflows").glob("*.yml")
+            )
+            if "@" + ctx.deployment_ref not in workflow_text:
+                raise click.ClickException(
+                    "This template does not support --deployment-ref; use a template with the deploy_ref Copier answer."
+                )
         ui.action_done("Project configured")
 
         # 3d. Vault secrets
@@ -308,7 +324,10 @@ class ProjectStep(WizardStep):
                 f"The local helper file {deploy_key_path} is in .gitignore "
                 "and will not be committed."
             )
-        else:
+        from cli.cluster_commands import configure_project_cluster
+
+        configure_project_cluster(ctx)
+        if ctx.provider == "hetzner":
             # Token cleanup — immediately after vault encryption.
             ui.action_start("Cleaning up temporary Hetzner token...")
             from cli.hetzner.credentials import delete_token

@@ -10,6 +10,7 @@ from pathlib import Path
 import click
 
 from cli.auth0_commands import auth0
+from cli.cluster_commands import cluster
 from cli.preflight import doctor
 from cli.skill_commands import skills
 from cli.template_commands import (
@@ -17,6 +18,7 @@ from cli.template_commands import (
     PITCH_TEMPLATE,
     default_template_version,
     template,
+    template_supports_shared_cluster,
 )
 from cli.verification import verify
 
@@ -51,6 +53,7 @@ def cli():
 
 cli.add_command(template)
 cli.add_command(auth0)
+cli.add_command(cluster)
 cli.add_command(doctor)
 cli.add_command(skills)
 cli.add_command(verify)
@@ -117,6 +120,23 @@ cli.add_command(verify)
     is_flag=True,
     help="Read a Hetzner token from stdin instead of a process argument.",
 )
+@click.option(
+    "--shared-cluster",
+    is_flag=True,
+    help="Own a reusable cluster; use a project namespace.",
+)
+@click.option(
+    "--cluster",
+    "cluster_path",
+    type=click.Path(exists=True, path_type=Path),
+    help="Attach to a public descriptor exported by startup cluster export.",
+)
+@click.option(
+    "--deployment-ref",
+    default="main",
+    show_default=True,
+    help="Reviewed shared-workflow ref used by the generated project.",
+)
 @click.option("--byos-host", help="Existing server's IP or hostname (provider byos).")
 @click.option("--byos-ssh-user", help="SSH user on that server (default: root).")
 @click.option("--cloudflare-token", help="Cloudflare API token (pitch only).")
@@ -150,6 +170,9 @@ def bootstrap(
     domain_owned,
     hetzner_token,
     hetzner_token_stdin,
+    shared_cluster,
+    cluster_path,
+    deployment_ref,
     byos_host,
     byos_ssh_user,
     cloudflare_token,
@@ -192,6 +215,36 @@ def bootstrap(
             raise click.ClickException(f"--yes needs {option} to be set as well.")
         return value
 
+    if (
+        not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]*", deployment_ref)
+        or ".." in deployment_ref
+    ):
+        raise click.ClickException(
+            "--deployment-ref must be a Git branch, tag or commit without whitespace."
+        )
+    cluster_config = None
+    if cluster_path:
+        from cli.cluster_commands import read_descriptor
+
+        if (
+            shared_cluster
+            or provider not in (None, "byos")
+            or byos_host
+            or hetzner_token
+            or domain_owned is False
+        ):
+            raise click.ClickException(
+                "--cluster cannot be combined with --shared-cluster, Hetzner provisioning, --byos-host or --buy-domain."
+            )
+        cluster_config = read_descriptor(cluster_path)
+        provider = "byos"
+        master = next(
+            node for node in cluster_config["nodes"] if node["role"] == "master"
+        )
+        byos_host, byos_ssh_user = master["host"], master["ssh_user"]
+    if (shared_cluster or cluster_config) and kind == "pitch":
+        raise click.ClickException("Cluster options require --kind fullstack.")
+
     # ── Mode selection ───────────────────────────────────────────
 
     if kind is None:
@@ -224,6 +277,9 @@ def bootstrap(
                 ],
             )
             provider = "hetzner" if provider_choice == 1 else "byos"
+
+    if (shared_cluster or cluster_config) and kind != "fullstack":
+        raise click.ClickException("Cluster options require --kind fullstack.")
 
     # ── Collect inputs ───────────────────────────────────────────
 
@@ -323,6 +379,13 @@ def bootstrap(
     # ── Summary + confirmation ───────────────────────────────────
 
     template_version = template_version or default_template_version(template_source)
+    if (shared_cluster or cluster_config) and not template_supports_shared_cluster(
+        template_source, template_version
+    ):
+        raise click.ClickException(
+            "This template revision does not support shared clusters. Use --template-version "
+            "with a compatible release or reviewed ref; no account or server setup was started."
+        )
     summary = {
         "Type": "Full-Stack" if kind == "fullstack" else "Pitch (Cloudflare Pages)",
         "Project": project_name,
@@ -334,6 +397,11 @@ def bootstrap(
         summary["Provider"] = (
             "Hetzner" if provider == "hetzner" else "Bring your own server"
         )
+        if cluster_config:
+            summary["Cluster owner"] = cluster_config["owner"]
+            summary["Infrastructure"] = "Existing cluster; application deployment only"
+        elif shared_cluster:
+            summary["Cluster"] = "Owned here; additional startups may attach"
         summary["Registry"] = f"ghcr.io/{github_username}"
         summary["Postgres"] = "18.6"
         template_name = (
@@ -375,6 +443,9 @@ def bootstrap(
         without_auth=without_auth,
         kind=kind,
         provider=provider,
+        deployment_ref=deployment_ref,
+        shared_cluster=shared_cluster,
+        cluster_config=cluster_config,
         byos_host=byos_host,
         byos_ssh_user=byos_ssh_user or "root",
         hetzner_token=hetzner_token,
@@ -478,6 +549,11 @@ def secrets():
     ),
 )
 @click.option(
+    "--file-stdin",
+    default=None,
+    help="Replace a full encrypted file with exact UTF-8 content read from stdin.",
+)
+@click.option(
     "--create-in",
     default=None,
     type=click.Path(),
@@ -553,6 +629,7 @@ def update_secrets(
     field_random,
     field_set,
     field_stdin,
+    file_stdin,
     create_in,
     file_rotate,
     file_content,
@@ -615,6 +692,8 @@ def update_secrets(
     # project the path belongs to. Before this, the password had to be passed on
     # the command line, where `ps` and the shell history can see it.
     #
+    if field_stdin and file_stdin:
+        raise click.UsageError("Use either --field-stdin or --file-stdin, not both.")
     vault_password = resolve_vault_password(vault_password, _password_scope(repo))
 
     # Merge new and old parameter names for backward compatibility
@@ -645,6 +724,12 @@ def update_secrets(
     merged_file_content = list(file_content) if file_content else []
     if set_file_content:  # Old parameter name
         merged_file_content.extend(set_file_content)
+
+    if file_stdin:
+        content = sys.stdin.read()
+        if not content:
+            raise click.ClickException("--file-stdin was given but stdin was empty.")
+        merged_file_content.append((file_stdin, content))
 
     # Convert to appropriate formats
     set_field_pairs = merged_field_set if merged_field_set else None
@@ -1196,6 +1281,11 @@ def ansible_infrastructure(
 ):
     """Provision infrastructure via Ansible playbook."""
     from cli.ansible_commands import resolve_vault_password, run_infrastructure
+    from cli.cluster_commands import require_cluster_owner
+
+    require_cluster_owner(
+        Path(working_directory).expanduser().resolve(), "infrastructure"
+    )
 
     if allow_worker_teardown and not yes:
         click.confirm(
@@ -1436,6 +1526,9 @@ def ansible_update_vms(
 ):
     """Update Hetzner VM packages via Ansible playbook."""
     from cli.ansible_commands import resolve_vault_password, run_update_vms
+    from cli.cluster_commands import require_cluster_owner
+
+    require_cluster_owner(Path(working_directory).expanduser().resolve(), "update-vms")
 
     resolved_vault_password = resolve_vault_password(
         vault_password=vault_password,
@@ -1592,6 +1685,9 @@ def ansible_k3s_upgrade(
 ):
     """Upgrade k3s cluster-wide: control plane first, then workers."""
     from cli.ansible_commands import resolve_vault_password, run_k3s_upgrade
+    from cli.cluster_commands import require_cluster_owner
+
+    require_cluster_owner(Path(working_directory).expanduser().resolve(), "k3s-upgrade")
 
     resolved_vault_password = resolve_vault_password(
         vault_password=vault_password,
@@ -1665,6 +1761,11 @@ def ansible_cert_manager_upgrade(
 ):
     """Upgrade cert-manager cluster-wide to the pinned chart version."""
     from cli.ansible_commands import resolve_vault_password, run_cert_manager_upgrade
+    from cli.cluster_commands import require_cluster_owner
+
+    require_cluster_owner(
+        Path(working_directory).expanduser().resolve(), "cert-manager-upgrade"
+    )
 
     resolved_vault_password = resolve_vault_password(
         vault_password=vault_password,

@@ -104,6 +104,36 @@ def cli(tmp_path, *args, stdin=None, password=PASSWORD):
     return result
 
 
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_full_file_stdin_keeps_exact_content_out_of_child_arguments(tmp_path, dry_run):
+    # GIVEN an actual fully encrypted Vault file containing a synthetic secret.
+    path = tmp_path / "provider-token"
+    before = encrypt(tmp_path, b"old-provider-token")
+    path.write_text(before)
+    value = "new-provider-token-ü\nsecond line\n\n".encode()
+    # WHEN the real CLI reads the replacement through stdin.
+    result = cli(
+        tmp_path,
+        "update",
+        "-r",
+        tmp_path,
+        "--file-stdin",
+        path.name,
+        *(["--dry-run"] if dry_run else []),
+        stdin=value,
+    )
+    # THEN the operation is lossless and neither stdout nor child argv contain it.
+    assert result.returncode == 0, result.stderr
+    target = tmp_path / "dry-run-output/provider-token" if dry_run else path
+    if dry_run:
+        assert path.read_text() == before
+    decrypted = ansible(tmp_path, "decrypt", target.read_bytes())
+    assert decrypted.returncode == 0, decrypted.stderr
+    assert decrypted.stdout == value
+    assert b"new-provider-token" not in result.stdout + result.stderr
+    assert "new-provider-token" not in (tmp_path / "argv.jsonl").read_text()
+
+
 @pytest.mark.parametrize(
     "value",
     [b"--leading-option", "  ünicode\nline two  ".encode(), b"key\n\n", b"single"],

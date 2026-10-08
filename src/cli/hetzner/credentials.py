@@ -15,7 +15,7 @@ def save_token(
     token_name: str = "deploy-cli",
 ) -> Path:
     """Save API token to local config file. Returns the file path."""
-    config.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    config.TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
 
     env_content = (
         f"# Hetzner Cloud API Token\n"
@@ -53,6 +53,15 @@ def load_token() -> str | None:
 def token_exists() -> bool:
     """Check if a token file already exists."""
     return config.TOKEN_FILE.exists() and load_token() is not None
+
+
+def token_project() -> str | None:
+    """Identify the saved token's project without exposing its value."""
+    if config.TOKEN_FILE.exists():
+        for line in config.TOKEN_FILE.read_text().splitlines():
+            if line.startswith("# Project: "):
+                return line.removeprefix("# Project: ").strip()
+    return None
 
 
 def delete_token() -> bool:
