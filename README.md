@@ -379,8 +379,9 @@ The preview runs an update in a temporary Git clone and shows tracked diffs and
 new file names. Resolve conflicts and run affected project checks before
 committing the updated files and Copier answers. Existing
 `deployment/group_vars` files are preserved. Updates do not commit, push,
-deploy or decrypt Vault. The default target is the template's HEAD; pass a tag
-or commit for repeatable updates.
+deploy or decrypt Vault. Commit local template changes before using `HEAD` so
+Copier records a reachable baseline for later updates. The default target is the
+template's HEAD; pass a tag or commit for repeatable updates.
 
 For a project without Copier answers, record its original baseline first:
 
