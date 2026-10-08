@@ -66,7 +66,9 @@ startup bootstrap --yes --kind pitch \
 
 Built-in full-stack and pitch templates use the tested releases pinned by the CLI.
 The launch plan shows the selected version. Use `--template-version <tag-or-commit>`
-to choose another version; custom `--template` sources default to HEAD.
+to choose another version; custom `--template` sources default to HEAD. Commit
+changes in a local Git template before using HEAD; temporary draft commits cannot
+serve as reliable baselines for future template updates.
 
 Use `--output-dir <dir>` when the user keeps projects in a specific folder.
 Run bootstrap outside a sandbox: the Hetzner and Cloudflare steps can open a
@@ -147,6 +149,28 @@ replace servers, delete data or interrupt the site. Explain what will change
 and get an explicit yes before running them. Never add
 `--allow-worker-teardown` unless the user asked for workers to be removed.
 
+## Shared clusters
+
+For mutually trusted startups in the same owner's accounts, bootstrap one
+Hetzner owner with `--shared-cluster`. Verify its first deployment, then run
+`startup cluster export --working-directory deployment --output <new-file>`.
+Bootstrap additional applications with `--cluster <file> --kind fullstack`,
+unique project names and domains. Point their DNS at the same ingress; attachment
+creates no servers. Each project has its own namespace, database, media and Vault.
+
+Shared-cluster bootstrap requires a compatible template revision declaring
+shared_cluster support; select it with --template-version. Older templates are
+rejected before account or server setup.
+
+Run infrastructure, update-vms, os-upgrade, k3s-upgrade and cert-manager-upgrade from the
+cluster owner, and account for every attached application before these operations.
+Attached projects are application-only. Deployment SSH keys remain administrative:
+this mode is for trusted projects, not independent customers. Verify network
+policies, quotas and per-startup backups. Local data volumes do not fail over
+between nodes. Do not silently convert existing production projects or change
+their namespace. Use `--deployment-ref <reviewed-ref>` only with a template that
+supports `deploy_ref` when reviewing an unpublished shared workflow branch.
+
 ## 5. Secrets
 
 Secrets live as inline Ansible Vault fields in
@@ -174,6 +198,10 @@ macOS Keychain when `-p` is omitted — always omit it.
   ```zsh
   read -rs "?Secret: " s && printf '%s' "$s" | startup secrets update -r "$PWD/deployment/group_vars/production.yml" --field-stdin <name> --create-in "$PWD/deployment/group_vars/production.yml"; unset s
   ```
+
+- Replace an encrypted whole-file secret through stdin:
+  `startup secrets update -r deployment --file-stdin <filename> --dry-run`,
+  then repeat without `--dry-run`. Never put its value in process arguments.
 
 - Rotating the vault password (`startup secrets rotate-password`) is
   destructive for anyone holding the old password; confirm first.

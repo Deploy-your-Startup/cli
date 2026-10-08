@@ -201,6 +201,60 @@ Back up before cluster upgrades. Use `startup ansible k3s-upgrade` or
 `startup ansible cert-manager-upgrade` with the project's working directory and
 production environment. Review the selected target version before running them.
 
+## Deploy several startups to one cluster
+
+Select a template release declaring shared-cluster support with
+`--template-version <compatible-template-ref>`. During review, select the
+reviewed template branch explicitly; older pinned templates are rejected before
+account or server setup. Create one cluster owner with
+`startup bootstrap --kind fullstack --provider hetzner --shared-cluster
+--template-version <compatible-template-ref>`. This provisions infrastructure in your account and
+puts the owner's application in its own namespace. Verify Actions, DNS and HTTPS
+before attaching another startup. Cluster failures and upgrades affect every
+application using it.
+
+From the owner's project, export its public connection settings:
+
+```bash
+startup cluster export --working-directory deployment --output ../cluster-connection.yml
+```
+
+Create another project with its own domain and repository:
+
+```bash
+startup bootstrap --yes --kind fullstack \
+  --cluster ../cluster-connection.yml \
+  --template-version <compatible-template-ref> \
+  --project-name second-startup --base-domain second.example.com --without-auth
+```
+
+Point the second domain at the same cluster ingress. Its Vault, deployment SSH
+key, namespace, database and media volumes are independent. Deploy normally with
+`startup ansible deploy`; cluster provisioning, package updates, Ubuntu release upgrades and cluster
+upgrades must run from the owner project. Attached projects cannot perform these
+operations through the CLI. No additional server is provisioned by attachment.
+
+This mode currently requires public SSH access and mutually trusted projects
+managed by the same operator. Deployment keys have administrative server access;
+it is not a security boundary between independent customers. The default k3s
+network-policy controller must remain enabled. Each namespace receives resource
+defaults, quotas and a network policy allowing its own pods, ingress from
+`kube-system`, DNS and public IPv4 destinations. Private external dependencies
+need an explicitly reviewed network-policy change. Quotas limit scheduling and
+container budgets; they do not reserve capacity or limit hostPath disk usage.
+
+Postgres and media remain pinned to their data node. Adding workers does not
+provide storage failover. Review quotas for your workload and take separately
+verified backups for every startup before shared infrastructure changes. A
+public descriptor contains addresses and identity, never credentials; regenerate
+it at a new path after changing nodes. Existing startups keep their current
+namespace and infrastructure unless explicitly migrated with backup/restore.
+
+For reviewing an unpublished shared deployment branch, use
+`--deployment-ref <reviewed-ref>` during bootstrap with a template supporting
+`deploy_ref`. The generated workflows and initial local shared-role checkout use that ref;
+an explicit local role pin remains authoritative.
+
 ### Ubuntu LTS release upgrades
 
 `update-vms` updates packages within the installed Ubuntu release. Use
@@ -325,8 +379,9 @@ The preview runs an update in a temporary Git clone and shows tracked diffs and
 new file names. Resolve conflicts and run affected project checks before
 committing the updated files and Copier answers. Existing
 `deployment/group_vars` files are preserved. Updates do not commit, push,
-deploy or decrypt Vault. The default target is the template's HEAD; pass a tag
-or commit for repeatable updates.
+deploy or decrypt Vault. Commit local template changes before using `HEAD` so
+Copier records a reachable baseline for later updates. The default target is the
+template's HEAD; pass a tag or commit for repeatable updates.
 
 For a project without Copier answers, record its original baseline first:
 
@@ -381,3 +436,11 @@ Include your OS, command and redacted error output. Keep passwords, tokens and
 decrypted configuration out of reports.
 
 MIT (as declared in `pyproject.toml`).
+
+For an encrypted whole-file secret, pipe its contents to
+`startup secrets update -r deployment --file-stdin <filename> --dry-run`,
+then repeat without `--dry-run`. Exact UTF-8 contents are preserved.
+
+Saved Hetzner tokens are reused only for their recorded project. For isolated
+automation, set `HETZNER_BOOTSTRAP_TOKEN_FILE` to a dedicated absolute path.
+An explicitly supplied token takes precedence over saved credentials.

@@ -30,9 +30,18 @@ class HetznerStep(WizardStep):
     name = "Hetzner Cloud"
 
     def check(self, ctx: BootstrapContext) -> bool:
-        from cli.hetzner.credentials import load_token, token_exists
+        from cli.hetzner.credentials import load_token, token_exists, token_project
+
+        if ctx.hetzner_token:
+            return False
 
         if not token_exists():
+            return False
+
+        if token_project() != ctx.project_name:
+            ui.info(
+                "Saved Hetzner token belongs to another project; connecting the requested project instead."
+            )
             return False
 
         token = load_token()

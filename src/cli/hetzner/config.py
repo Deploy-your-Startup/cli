@@ -45,7 +45,9 @@ CONFIG_DIR = Path(
         Path.home() / ".config" / "hetzner-bootstrap",
     )
 )
-TOKEN_FILE = CONFIG_DIR / "hetzner.env"
+TOKEN_FILE = Path(
+    os.environ.get("HETZNER_BOOTSTRAP_TOKEN_FILE", CONFIG_DIR / "hetzner.env")
+)
 
 # ── Chrome Profile (for Apple Passwords extension support) ───────────
 # Uses real Chrome instead of Playwright's bundled Chromium so that

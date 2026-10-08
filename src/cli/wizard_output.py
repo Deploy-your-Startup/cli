@@ -195,6 +195,7 @@ def summary_box(
     keychain_service: str | None = None,
     provider: str = "hetzner",
     byos_deploy_key_command: str | None = None,
+    cluster_owner: str | None = None,
 ) -> None:
     """Display the framed final summary with next steps."""
     W = 64  # total width including borders
@@ -251,7 +252,11 @@ def summary_box(
             )
         )
     else:
-        if provider == "byos":
+        if cluster_owner:
+            _emit("Application build and deploy run through GitHub Actions.")
+            _emit("Verify Actions, DNS and HTTPS for this startup.")
+            _emit("Run cluster operations from the owner project.")
+        elif provider == "byos":
             _emit("BYOS: deploy locally to your server.")
             _emit()
             _emit("Copy the commands below to continue.")
@@ -269,7 +274,7 @@ def summary_box(
     click.echo(click.style(_empty(), fg="green"))
     click.echo(click.style(bot, fg="green"))
     click.echo()
-    if kind != "pitch" and provider == "byos":
+    if kind != "pitch" and provider == "byos" and not cluster_owner:
         click.echo("  Copy-Paste:")
         click.echo()
         if byos_deploy_key_command:
@@ -279,7 +284,8 @@ def summary_box(
         click.echo("  # Then deploy locally")
         click.echo(f"  cd {project_dir}/deployment")
         click.echo("  ./make.sh setup")
-        click.echo("  ./make.sh infrastructure --environment production")
+        if not cluster_owner:
+            click.echo("  ./make.sh infrastructure --environment production")
         click.echo("  ./make.sh deploy --environment production")
         click.echo()
 

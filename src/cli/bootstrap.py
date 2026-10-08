@@ -33,6 +33,7 @@ def template_replacements(
     k8s_namespace: str,
     ci_public_key: str,
     user_public_key: str,
+    deployment_ref: str = "main",
 ) -> dict[str, str]:
     """Build the values used to configure a newly cloned project template."""
     if additional_domains:
@@ -49,6 +50,7 @@ def template_replacements(
         "§§deploy_your_startup.additional_domains§§": additional_domains_yaml,
         "§§deploy_your_startup.github_username§§": github_username,
         "§§deploy_your_startup.deploy_repo_name§§": DEFAULT_SHARED_REPO_NAME,
+        "§§deploy_your_startup.deploy_ref§§": deployment_ref,
         "§§deploy_your_startup.docker_registry_host§§": (
             f"{docker_registry_host}/{github_username}"
         ),
