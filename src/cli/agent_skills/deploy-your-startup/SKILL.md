@@ -158,9 +158,25 @@ Bootstrap additional applications with `--cluster <file> --kind fullstack`,
 unique project names and domains. Point their DNS at the same ingress; attachment
 creates no servers. Each project has its own namespace, database, media and Vault.
 
-Shared-cluster bootstrap requires a compatible template revision declaring
-shared_cluster support; select it with --template-version. Older templates are
-rejected before account or server setup.
+CLI v0.1.9 pins the compatible Django template v0.1.3, so shared mode works
+without an extra template option. Vue requires its template source and
+--template-version v0.1.2. Older templates without the capability are rejected
+before account or server setup.
+
+Use the following sequence; do not attach applications until the owner is verified:
+
+```bash
+startup bootstrap --yes --kind fullstack --provider hetzner --shared-cluster \
+  --project-name cluster-owner --base-domain owner.example.com --without-auth
+startup cluster export --working-directory cluster-owner/deployment \
+  --output cluster-connection.yml
+startup bootstrap --yes --kind fullstack --cluster cluster-connection.yml \
+  --project-name second-startup --base-domain second.example.com --without-auth
+```
+
+Keep one kubeconfig context per startup with its own namespace. Dashboards must
+check that context's namespace, not all namespaces. Never describe namespace
+policies as customer isolation: SSH keys remain cluster administrators.
 
 Run infrastructure, update-vms, os-upgrade, k3s-upgrade and cert-manager-upgrade from the
 cluster owner, and account for every attached application before these operations.
