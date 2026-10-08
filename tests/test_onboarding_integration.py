@@ -119,7 +119,7 @@ def test_launch_plan_shows_the_pinned_default_template(tmp_path):
     result = launch(tmp_path, "my-startup\nexample.com\n\n\n")
     # THEN the plan names the tested template release this CLI pins.
     assert result.returncode == 0, result.stderr
-    assert "Template  Django/FastAPI v0.1.1" in result.stdout
+    assert "Template  Django/FastAPI v0.1.2" in result.stdout
 
 
 def test_explicit_or_custom_templates_keep_their_version(tmp_path):
