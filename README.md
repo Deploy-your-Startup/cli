@@ -183,7 +183,7 @@ startup bootstrap --yes --kind fullstack \
 
 Point the second domain at the same cluster ingress. Its Vault, deployment SSH
 key, namespace, database and media volumes are independent. Deploy normally with
-`startup ansible deploy`; cluster provisioning, package updates and cluster
+`startup ansible deploy`; cluster provisioning, package updates, Ubuntu release upgrades and cluster
 upgrades must run from the owner project. Attached projects cannot perform these
 operations through the CLI. No additional server is provisioned by attachment.
 
@@ -207,6 +207,53 @@ For reviewing an unpublished shared deployment branch, use
 `--deployment-ref <reviewed-ref>` during bootstrap with a template supporting
 `deploy_ref`. The generated workflows and initial local shared-role checkout use that ref;
 an explicit local role pin remains authoritative.
+
+### Ubuntu LTS release upgrades
+
+`update-vms` updates packages within the installed Ubuntu release. Use
+`os-upgrade` for a consecutive LTS release upgrade. Preview is the default:
+
+```bash
+startup ansible os-upgrade --working-directory deployment --environment production --target-version 26.04 --dry-run
+```
+
+The command requires the release upgrader installed on each node, `Prompt=lts`
+in `/etc/update-manager/release-upgrades`, and a pinned shared deployment release
+containing `os-upgrade-playbook.yml`. After syncing such a release, use
+`startup ansible pin --working-directory deployment --version <release-tag>`
+and review and commit both role pin files. Sync alone does not move an existing
+immutable project pin.
+
+Execution requires a healthy k3s cluster, a target offered by Ubuntu and a
+reviewed path in the shared role policy. The initial policy is 24.04 → 26.04.
+Preview can inspect future LTS targets; execution remains blocked until their
+paths are reviewed. Local integration tests use disposable Ubuntu nodes and
+simulate release upgrades, kernel reboots and k3s; they do not establish live
+26.04 compatibility. Qualify the upgrade on a disposable deployment matching
+your production setup before upgrading production.
+
+Verify database, media and cluster backups plus a VM recovery route, then run:
+
+```bash
+startup ansible os-upgrade --working-directory deployment --environment production --target-version 26.04 --execute --backup-confirmed --health-url https://app.example.com/health
+```
+
+Repeat `--health-url` for additional applications. Checks require HTTPS with a
+valid certificate and HTTP 200 without redirects, before changes and after
+each node. `--limit` accepts a single hostname, inventory group or glob and
+restricts the selected environment. Nodes are upgraded one at a time; each
+must pass package, k3s, workload and application checks before the next starts.
+Multi-node clusters are drained without forcing eviction or deleting local
+pod data. Single-node clusters incur downtime during upgrade and reboot.
+
+If the controller disconnects, rerun the same command. The driver waits for an
+active upgrade and verifies completed nodes rather than upgrading them again.
+A failed node stops the fleet; it may remain cordoned. Inspect
+`/var/lib/startup/os-upgrade/upgrade.log`, `result.json` and
+`/var/log/dist-upgrade` through your server console before recovery. A failed
+or interrupted node-side upgrade requires operator recovery; the command does
+not retry it or roll it back automatically. Use the verified VM recovery route
+when necessary, and uncordon a node only after it is healthy.
 
 ## Manage secrets
 
