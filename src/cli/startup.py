@@ -1514,6 +1514,76 @@ def ansible_update_vms(
     )
 
 
+@ansible.command("os-upgrade")
+@click.option("--environment", required=True, help="Target environment")
+@click.option("--working-directory", default=".", show_default=True)
+@click.option(
+    "--target-version", required=True, help="Exact Ubuntu LTS target, for example 26.04"
+)
+@click.option(
+    "--execute", is_flag=True, help="Perform the previewed upgrade, including reboots"
+)
+@click.option("--dry-run", is_flag=True, help="Explicit preview (also the default)")
+@click.option(
+    "--backup-confirmed",
+    is_flag=True,
+    help="Confirm verified backups and a recovery plan",
+)
+@click.option(
+    "--health-url",
+    "health_urls",
+    multiple=True,
+    help="HTTPS application check before and after each node; repeat for multiple apps",
+)
+@click.option("--limit", default=None, help="Restrict hosts within the environment")
+@click.option("--shared-dir", default=".shared-roles", show_default=True)
+@click.option("--version", default="main", show_default=True)
+@click.option("--refresh/--no-refresh", default=True, show_default=True)
+@click.option("--repo-url", default=None, help="Override shared roles repository URL")
+def ansible_os_upgrade(
+    environment,
+    working_directory,
+    target_version,
+    execute,
+    dry_run,
+    backup_confirmed,
+    health_urls,
+    limit,
+    shared_dir,
+    version,
+    refresh,
+    repo_url,
+):
+    """Preview or perform an Ubuntu LTS release upgrade, one node at a time.
+
+    Package updates remain a separate operation: use update-vms for those.
+    Execution requires verified backups and at least one HTTPS health URL.
+    Release upgrades can interrupt applications, especially on single-node clusters.
+    """
+    from cli.ansible_commands import run_os_upgrade
+
+    if execute and dry_run:
+        raise click.UsageError("--execute and --dry-run cannot be combined")
+    if execute and not backup_confirmed:
+        raise click.UsageError("--execute requires --backup-confirmed")
+    if execute and not health_urls:
+        raise click.UsageError("--execute requires at least one --health-url")
+    run_os_upgrade(
+        vault_password=None,
+        environment=environment,
+        working_directory=working_directory,
+        target_version=target_version,
+        execute=execute,
+        backup_confirmed=backup_confirmed,
+        health_urls=health_urls,
+        limit=limit,
+        shared_dir=shared_dir,
+        version=version,
+        refresh=refresh,
+        repo_url=repo_url,
+    )
+
+
 @ansible.command("k3s-upgrade")
 @click.option(
     "--vault-password",

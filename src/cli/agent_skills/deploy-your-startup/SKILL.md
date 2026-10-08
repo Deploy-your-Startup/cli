@@ -102,6 +102,7 @@ password comes from the Keychain.
 | Check playbook syntax offline | `startup ansible validate --playbook <file> --inventory <file>` |
 | Back up / restore | `startup ansible backup …` / `startup ansible restore …` |
 | Update server packages | `startup ansible update-vms … [--reboot]` |
+| Preview Ubuntu LTS upgrade | `startup ansible os-upgrade … --target-version 26.04 --dry-run` |
 | Upgrade k3s / cert-manager | `startup ansible k3s-upgrade …` / `startup ansible cert-manager-upgrade …` |
 | Update shared deployment workflows and roles | `startup sync --dry-run`, then `startup sync` |
 | Update application template files | `startup template update --dry-run`, then `startup template update` |
@@ -113,7 +114,17 @@ application files of one project. After a template update, review the diff,
 resolve conflicts, run the project's checks and commit together with
 `.copier-answers.yml`.
 
-`infrastructure`, `restore`, `k3s-upgrade` and `cert-manager-upgrade` can
+`os-upgrade` previews by default. It is separate from package updates.
+Execution uses `--execute --backup-confirmed --health-url https://app.example.com/health`
+and requires a reviewed consecutive LTS path offered by Ubuntu. Verify database,
+media and cluster backups plus a VM recovery route first. A release containing
+the OS upgrade playbook must be synced and the project role pin updated. Nodes
+upgrade one at a time; single-node clusters have downtime. Local simulated
+integration checks do not establish compatibility: qualify a disposable real
+deployment before production. After a controller disconnect, rerun the same
+command; node-side failures require operator recovery, not automatic retries.
+
+`os-upgrade --execute`, `infrastructure`, `restore`, `k3s-upgrade` and `cert-manager-upgrade` can
 replace servers, delete data or interrupt the site. Explain what will change
 and get an explicit yes before running them. Never add
 `--allow-worker-teardown` unless the user asked for workers to be removed.
