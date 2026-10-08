@@ -118,6 +118,24 @@ replace servers, delete data or interrupt the site. Explain what will change
 and get an explicit yes before running them. Never add
 `--allow-worker-teardown` unless the user asked for workers to be removed.
 
+## Shared clusters
+
+For mutually trusted startups in the same owner's accounts, bootstrap one
+Hetzner owner with `--shared-cluster`. Verify its first deployment, then run
+`startup cluster export --working-directory deployment --output <new-file>`.
+Bootstrap additional applications with `--cluster <file> --kind fullstack`,
+unique project names and domains. Point their DNS at the same ingress; attachment
+creates no servers. Each project has its own namespace, database, media and Vault.
+
+Run infrastructure, update-vms, k3s-upgrade and cert-manager-upgrade from the
+cluster owner, and account for every attached application before these operations.
+Attached projects are application-only. Deployment SSH keys remain administrative:
+this mode is for trusted projects, not independent customers. Verify network
+policies, quotas and per-startup backups. Local data volumes do not fail over
+between nodes. Do not silently convert existing production projects or change
+their namespace. Use `--deployment-ref <reviewed-ref>` only with a template that
+supports `deploy_ref` when reviewing an unpublished shared workflow branch.
+
 ## 5. Secrets
 
 Secrets live as inline Ansible Vault fields in

@@ -178,6 +178,13 @@ class FinalizeStep(WizardStep):
         # 4g. Provision. On byos there is nothing to provision in the cloud — the
         # user runs the install/deploy locally against their VPS, so we just print
         # the next steps instead of kicking off the Hetzner infrastructure workflow.
+        if ctx.cluster_config:
+            ui.info(
+                "Attached to the existing cluster. Application workflows deploy into this startup's namespace; run cluster operations from "
+                + ctx.cluster_config["owner"]
+                + "."
+            )
+            return
         if ctx.provider == "byos":
             ui.action_done("BYOS — no cloud provisioning needed")
             ui.info(

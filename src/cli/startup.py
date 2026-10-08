@@ -10,6 +10,7 @@ from pathlib import Path
 import click
 
 from cli.auth0_commands import auth0
+from cli.cluster_commands import cluster
 from cli.preflight import doctor
 from cli.skill_commands import skills
 from cli.template_commands import (
@@ -49,6 +50,7 @@ def cli():
 
 cli.add_command(template)
 cli.add_command(auth0)
+cli.add_command(cluster)
 cli.add_command(doctor)
 cli.add_command(skills)
 
@@ -101,6 +103,23 @@ cli.add_command(skills)
     is_flag=True,
     help="Read a Hetzner token from stdin instead of a process argument.",
 )
+@click.option(
+    "--shared-cluster",
+    is_flag=True,
+    help="Own a reusable cluster; use a project namespace.",
+)
+@click.option(
+    "--cluster",
+    "cluster_path",
+    type=click.Path(exists=True, path_type=Path),
+    help="Attach to a public descriptor exported by startup cluster export.",
+)
+@click.option(
+    "--deployment-ref",
+    default="main",
+    show_default=True,
+    help="Reviewed shared-workflow ref used by the generated project.",
+)
 @click.option("--byos-host", help="Existing server's IP or hostname (provider byos).")
 @click.option("--byos-ssh-user", help="SSH user on that server (default: root).")
 @click.option("--cloudflare-token", help="Cloudflare API token (pitch only).")
@@ -132,6 +151,9 @@ def bootstrap(
     domain_owned,
     hetzner_token,
     hetzner_token_stdin,
+    shared_cluster,
+    cluster_path,
+    deployment_ref,
     byos_host,
     byos_ssh_user,
     cloudflare_token,
@@ -174,6 +196,36 @@ def bootstrap(
             raise click.ClickException(f"--yes needs {option} to be set as well.")
         return value
 
+    if (
+        not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]*", deployment_ref)
+        or ".." in deployment_ref
+    ):
+        raise click.ClickException(
+            "--deployment-ref must be a Git branch, tag or commit without whitespace."
+        )
+    cluster_config = None
+    if cluster_path:
+        from cli.cluster_commands import read_descriptor
+
+        if (
+            shared_cluster
+            or provider not in (None, "byos")
+            or byos_host
+            or hetzner_token
+            or domain_owned is False
+        ):
+            raise click.ClickException(
+                "--cluster cannot be combined with --shared-cluster, Hetzner provisioning, --byos-host or --buy-domain."
+            )
+        cluster_config = read_descriptor(cluster_path)
+        provider = "byos"
+        master = next(
+            node for node in cluster_config["nodes"] if node["role"] == "master"
+        )
+        byos_host, byos_ssh_user = master["host"], master["ssh_user"]
+    if (shared_cluster or cluster_config) and kind == "pitch":
+        raise click.ClickException("Cluster options require --kind fullstack.")
+
     # ── Mode selection ───────────────────────────────────────────
 
     if kind is None:
@@ -203,6 +255,9 @@ def bootstrap(
                 ],
             )
             provider = "hetzner" if provider_choice == 1 else "byos"
+
+    if (shared_cluster or cluster_config) and kind != "fullstack":
+        raise click.ClickException("Cluster options require --kind fullstack.")
 
     # ── Collect inputs ───────────────────────────────────────────
 
@@ -313,6 +368,11 @@ def bootstrap(
         summary["Provider"] = (
             "Hetzner" if provider == "hetzner" else "Bring your own server"
         )
+        if cluster_config:
+            summary["Cluster owner"] = cluster_config["owner"]
+            summary["Infrastructure"] = "Existing cluster; application deployment only"
+        elif shared_cluster:
+            summary["Cluster"] = "Owned here; additional startups may attach"
         summary["Registry"] = f"ghcr.io/{github_username}"
         summary["Postgres"] = "18.6"
         template_name = (
@@ -352,6 +412,9 @@ def bootstrap(
         without_auth=without_auth,
         kind=kind,
         provider=provider,
+        deployment_ref=deployment_ref,
+        shared_cluster=shared_cluster,
+        cluster_config=cluster_config,
         byos_host=byos_host,
         byos_ssh_user=byos_ssh_user or "root",
         hetzner_token=hetzner_token,

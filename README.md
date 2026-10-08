@@ -159,6 +159,54 @@ Back up before cluster upgrades. Use `startup ansible k3s-upgrade` or
 `startup ansible cert-manager-upgrade` with the project's working directory and
 production environment. Review the selected target version before running them.
 
+## Deploy several startups to one cluster
+
+Create one cluster owner with `startup bootstrap --kind fullstack --provider
+hetzner --shared-cluster`. This provisions infrastructure in your account and
+puts the owner's application in its own namespace. Verify Actions, DNS and HTTPS
+before attaching another startup. Cluster failures and upgrades affect every
+application using it.
+
+From the owner's project, export its public connection settings:
+
+```bash
+startup cluster export --working-directory deployment --output ../cluster-connection.yml
+```
+
+Create another project with its own domain and repository:
+
+```bash
+startup bootstrap --yes --kind fullstack \
+  --cluster ../cluster-connection.yml \
+  --project-name second-startup --base-domain second.example.com --without-auth
+```
+
+Point the second domain at the same cluster ingress. Its Vault, deployment SSH
+key, namespace, database and media volumes are independent. Deploy normally with
+`startup ansible deploy`; cluster provisioning, package updates and cluster
+upgrades must run from the owner project. Attached projects cannot perform these
+operations through the CLI. No additional server is provisioned by attachment.
+
+This mode currently requires public SSH access and mutually trusted projects
+managed by the same operator. Deployment keys have administrative server access;
+it is not a security boundary between independent customers. The default k3s
+network-policy controller must remain enabled. Each namespace receives resource
+defaults, quotas and a network policy allowing its own pods, ingress from
+`kube-system`, DNS and public IPv4 destinations. Private external dependencies
+need an explicitly reviewed network-policy change. Quotas limit scheduling and
+container budgets; they do not reserve capacity or limit hostPath disk usage.
+
+Postgres and media remain pinned to their data node. Adding workers does not
+provide storage failover. Review quotas for your workload and take separately
+verified backups for every startup before shared infrastructure changes. A
+public descriptor contains addresses and identity, never credentials; regenerate
+it at a new path after changing nodes. Existing startups keep their current
+namespace and infrastructure unless explicitly migrated with backup/restore.
+
+For reviewing an unpublished shared deployment branch, use
+`--deployment-ref <reviewed-ref>` during bootstrap with a template supporting
+`deploy_ref`. This affects the new project's workflow references only.
+
 ## Manage secrets
 
 Run from the generated project's root. Bootstrap stores the project Vault

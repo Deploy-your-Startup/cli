@@ -195,6 +195,7 @@ def summary_box(
     keychain_service: str | None = None,
     provider: str = "hetzner",
     byos_deploy_key_command: str | None = None,
+    cluster_owner: str | None = None,
 ) -> None:
     """Display the framed final summary with next steps."""
     W = 64  # total width including borders
@@ -279,7 +280,8 @@ def summary_box(
         click.echo("  # Then deploy locally")
         click.echo(f"  cd {project_dir}/deployment")
         click.echo("  ./make.sh setup")
-        click.echo("  ./make.sh infrastructure --environment production")
+        if not cluster_owner:
+            click.echo("  ./make.sh infrastructure --environment production")
         click.echo("  ./make.sh deploy --environment production")
         click.echo()
 
