@@ -87,11 +87,16 @@ class ByosStep(WizardStep):
         return False
 
     def run(self, ctx: BootstrapContext) -> None:
-        ui.info(
-            "Bring your own server: no cloud account needed. Use "
-            "a reachable VPS with a fresh Ubuntu/Debian installation and "
-            "root SSH access."
-        )
+        if ctx.cluster_config:
+            ui.info(
+                "Deploying an application to the existing shared cluster; no server provisioning."
+            )
+        else:
+            ui.info(
+                "Bring your own server: no cloud account needed. Use "
+                "a reachable VPS with a fresh Ubuntu/Debian installation and "
+                "root SSH access."
+            )
 
         # A host given on the command line is validated the same way, so a typo
         # surfaces here instead of as an SSH timeout minutes later.
