@@ -38,8 +38,23 @@ PUBLIC_FIELDS = {
 PROTECTED = ("deployment/group_vars/**",)
 
 
+def require_committed_template(source: str, version: str) -> None:
+    """Keep Copier baselines reachable instead of recording temporary draft commits."""
+    local_source = Path(source).expanduser()
+    if (
+        version == "HEAD"
+        and (local_source / ".git").exists()
+        and git(local_source, "status", "--porcelain")
+    ):
+        raise click.ClickException(
+            "Commit local template changes before using HEAD; "
+            "Copier updates require a reachable baseline commit."
+        )
+
+
 def template_supports_shared_cluster(source: str, version: str) -> bool:
     """Inspect the shared-cluster contract before any account/server setup."""
+    require_committed_template(source, version)
     with Worker(
         src_path=source, vcs_ref=version, skip_tasks=True, quiet=True
     ) as worker:
@@ -56,6 +71,7 @@ def template_supports_shared_cluster(source: str, version: str) -> bool:
 
 def template_authentication(source: str, version: str) -> str | None:
     """Inspect public template capabilities without rendering or running tasks."""
+    require_committed_template(source, version)
     with Worker(
         src_path=source, vcs_ref=version, skip_tasks=True, quiet=True
     ) as worker:
@@ -116,6 +132,7 @@ def render_project(
     version: str = "HEAD",
 ) -> None:
     """Render only public parameters. Vault encryption remains in bootstrap."""
+    require_committed_template(source, version)
     data = {
         key.removeprefix("§§deploy_your_startup.").removesuffix("§§"): value
         for key, value in replacements.items()
@@ -171,6 +188,7 @@ def adoption_data(project: Path) -> dict[str, str]:
 def adopt_project(
     project: Path, *, source: str, version: str, data: dict[str, str]
 ) -> None:
+    require_committed_template(source, version)
     project = require_clean_project(project)
     answers = project / ANSWERS_FILE
     if answers.exists() or answers.is_symlink():
@@ -203,6 +221,8 @@ def update_project(
         raise click.ClickException(
             "Project has no Copier metadata; use template adopt first."
         )
+    answers = yaml.safe_load((project / ANSWERS_FILE).read_text())
+    require_committed_template(answers["_src_path"], version)
     with tempfile.TemporaryDirectory(prefix="startup-template-update-") as temporary:
         target = project
         if dry_run:

@@ -66,7 +66,9 @@ startup bootstrap --yes --kind pitch \
 
 Built-in full-stack and pitch templates use the tested releases pinned by the CLI.
 The launch plan shows the selected version. Use `--template-version <tag-or-commit>`
-to choose another version; custom `--template` sources default to HEAD.
+to choose another version; custom `--template` sources default to HEAD. Commit
+changes in a local Git template before using HEAD; temporary draft commits cannot
+serve as reliable baselines for future template updates.
 
 Use `--output-dir <dir>` when the user keeps projects in a specific folder.
 Run bootstrap outside a sandbox: the Hetzner and Cloudflare steps can open a

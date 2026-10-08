@@ -59,6 +59,9 @@ def steps_for(ctx: BootstrapContext) -> list[type[WizardStep]]:
 
 def check_prerequisites(ctx: BootstrapContext) -> None:
     """Fail fast if required external tools are missing."""
+    from cli.template_commands import require_committed_template
+
+    require_committed_template(ctx.template_source, ctx.template_version)
     if ctx.auth0_tenant and ctx.without_auth:
         raise click.ClickException("Use either --auth0-tenant or --without-auth.")
     if ctx.kind != "pitch" and not ctx.auth0_tenant and not ctx.without_auth:

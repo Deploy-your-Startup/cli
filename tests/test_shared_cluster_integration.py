@@ -595,3 +595,69 @@ def test_legacy_template_is_rejected_before_shared_cluster_account_setup(tmp_pat
     assert "no account or server setup was started" in result.stderr
     assert "Step 1" not in result.stdout
     assert not (tmp_path / "apps").exists()
+
+
+@pytest.mark.parametrize("shared", [True, False])
+def test_dirty_local_template_is_rejected_before_recording_an_unreachable_baseline(
+    tmp_path,
+    shared,
+):
+    # GIVEN a committed compatible template with an uncommitted application edit.
+    source = tmp_path / "template"
+    source.mkdir()
+    (source / "copier.yml").write_text("{}\n")
+    (source / "startup-template.yml").write_text("schema: 1\nshared_cluster: true\n")
+    application = source / "README.md"
+    application.write_text("Committed application\n")
+    subprocess.run(
+        ["git", "init", "-b", "main", str(source)], check=True, capture_output=True
+    )
+    subprocess.run(["git", "add", "."], cwd=source, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Integration",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "-m",
+            "baseline",
+        ],
+        cwd=source,
+        check=True,
+        capture_output=True,
+    )
+    application.write_text("Uncommitted application\n")
+    # WHEN a user asks the real bootstrap process to use local HEAD.
+    mode = ("--shared-cluster",) if shared else ()
+    result = launch(
+        "bootstrap",
+        "--yes",
+        "--kind",
+        "fullstack",
+        "--provider",
+        "hetzner",
+        *mode,
+        "--project-name",
+        "cluster-owner",
+        "--base-domain",
+        "owner.example.com",
+        "--domain-owned",
+        "--github-username",
+        "example-owner",
+        "--output-dir",
+        str(tmp_path / "apps"),
+        "--template",
+        str(source),
+        "--template-version",
+        "HEAD",
+        "--without-auth",
+        cwd=tmp_path,
+    )
+    # THEN no account, project or unreachable Copier baseline is created.
+    assert result.returncode != 0
+    assert "Commit local template changes" in result.stderr
+    assert "Step 1" not in result.stdout
+    assert not (tmp_path / "apps").exists()
+    assert application.read_text() == "Uncommitted application\n"
