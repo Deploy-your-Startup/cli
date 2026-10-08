@@ -252,7 +252,11 @@ def summary_box(
             )
         )
     else:
-        if provider == "byos":
+        if cluster_owner:
+            _emit("Application build and deploy run through GitHub Actions.")
+            _emit("Verify Actions, DNS and HTTPS for this startup.")
+            _emit("Run cluster operations from the owner project.")
+        elif provider == "byos":
             _emit("BYOS: deploy locally to your server.")
             _emit()
             _emit("Copy the commands below to continue.")
@@ -270,7 +274,7 @@ def summary_box(
     click.echo(click.style(_empty(), fg="green"))
     click.echo(click.style(bot, fg="green"))
     click.echo()
-    if kind != "pitch" and provider == "byos":
+    if kind != "pitch" and provider == "byos" and not cluster_owner:
         click.echo("  Copy-Paste:")
         click.echo()
         if byos_deploy_key_command:

@@ -420,3 +420,44 @@ def test_local_setup_uses_the_reviewed_workflow_ref_before_pinning(tmp_path):
         "Reviewed branch"
         in (deployment / ".shared-roles/roles/sample/tasks/main.yml").read_text()
     )
+
+
+@pytest.mark.parametrize("operation", ["backup", "restore"])
+def test_data_playbooks_load_project_and_environment_group_vars(tmp_path, operation):
+    from cli.ansible_commands import _project_data_playbook, _run_command
+
+    # GIVEN a shared playbook and inventory outside the project's variable root.
+    deployment = tmp_path / "deployment"
+    shared = deployment / ".shared-roles"
+    shared.mkdir(parents=True)
+    variables = deployment / "group_vars"
+    variables.mkdir()
+    (variables / "all.yml").write_text("k8s_namespace: all-startup\n")
+    (variables / "production.yml").write_text("k8s_namespace: production-startup\n")
+    inventory = shared / "inventory.ini"
+    inventory.write_text("[production]\nlocalhost ansible_connection=local\n")
+    playbook = shared / f"{operation}-playbook.yml"
+    playbook.write_text(
+        "- hosts: production\n  gather_facts: false\n  tasks:\n"
+        "    - ansible.builtin.assert:\n"
+        "        that: k8s_namespace == 'production-startup'\n"
+        "    - ansible.builtin.copy:\n"
+        f"        dest: '{tmp_path / 'result'}'\n"
+        "        content: '{{ k8s_namespace }}'\n"
+    )
+    # WHEN Ansible executes the real imported playbook through the CLI's wrapper.
+    with _project_data_playbook(deployment, playbook) as wrapper:
+        result = _run_command(
+            [
+                str(Path(sys.executable).parent / "ansible-playbook"),
+                str(wrapper),
+                "-i",
+                str(inventory),
+            ],
+            cwd=deployment,
+            capture_output=True,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+    # THEN environment overrides apply and the temporary wrapper is removed.
+    assert (tmp_path / "result").read_text() == "production-startup"
+    assert not wrapper.exists()

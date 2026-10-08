@@ -1442,6 +1442,44 @@ def run_kubeconfig(
                 os.unlink(ssh_key_path)
 
 
+@contextlib.contextmanager
+def _project_data_playbook(
+    working_dir: Path, playbook: Path, environment: str = "production"
+):
+    """Import data-operation playbooks from the project's group_vars root."""
+    if playbook.parent == working_dir:
+        yield playbook
+        return
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        prefix=".startup-data-",
+        suffix=".yml",
+        dir=working_dir,
+        delete=False,
+    ) as wrapper:
+        tasks = [
+            {"ansible.builtin.include_vars": {"file": str(path)}}
+            for path in (
+                working_dir / "group_vars" / "all.yml",
+                working_dir / "group_vars" / f"{environment}.yml",
+            )
+            if path.exists()
+        ]
+        wrapper.write(
+            yaml.safe_dump(
+                [
+                    {"hosts": "all", "gather_facts": False, "tasks": tasks},
+                    {"import_playbook": str(playbook)},
+                ]
+            )
+        )
+        wrapper_path = Path(wrapper.name)
+    try:
+        yield wrapper_path
+    finally:
+        wrapper_path.unlink(missing_ok=True)
+
+
 def run_backup(
     vault_password: str,
     environment: str,
@@ -1465,54 +1503,57 @@ def run_backup(
     )
 
     playbook_path = _resolve_playbook_path(working_dir, playbook, "Backup", shared_dir)
-    project_name = _resolve_project_name(working_dir)
-    resolved_backup_dir = (
-        Path(backup_dir).expanduser()
-        if backup_dir
-        else Path.home() / "Backups" / project_name
-    )
-    # k8s_namespace is deliberately not passed here. Ansible resolves it from
-    # `group_vars/`, and an --extra-vars copy would outrank that - so a project
-    # that sets the namespace anywhere but the top of `all.yml` would deploy
-    # into one namespace and back up from another.
-    backup_extra_vars = (
-        f"project_name={project_name} "
-        f"backup_environment={environment} "
-        f"local_backup_root={resolved_backup_dir}"
-    )
-    if _is_byos(working_dir):
-        _run_byos_playbook(
-            working_directory,
-            vault_password,
-            shared_dir,
-            playbook=str(playbook_path),
-            extra_vars=backup_extra_vars,
+    with _project_data_playbook(
+        working_dir, playbook_path, environment
+    ) as playbook_path:
+        project_name = _resolve_project_name(working_dir)
+        resolved_backup_dir = (
+            Path(backup_dir).expanduser()
+            if backup_dir
+            else Path.home() / "Backups" / project_name
         )
-        return
-    hcloud_token = get_hcloud_token(
-        working_directory, vault_password, environment, shared_dir
-    )
-    env = _ansible_env(working_dir, shared_dir)
-    env["HCLOUD_TOKEN"] = hcloud_token
-    _ensure_tailnet(working_dir, environment, shared_dir, env)
+        # k8s_namespace is deliberately not passed here. Ansible resolves it from
+        # `group_vars/`, and an --extra-vars copy would outrank that - so a project
+        # that sets the namespace anywhere but the top of `all.yml` would deploy
+        # into one namespace and back up from another.
+        backup_extra_vars = (
+            f"project_name={project_name} "
+            f"backup_environment={environment} "
+            f"local_backup_root={resolved_backup_dir}"
+        )
+        if _is_byos(working_dir):
+            _run_byos_playbook(
+                working_directory,
+                vault_password,
+                shared_dir,
+                playbook=str(playbook_path),
+                extra_vars=backup_extra_vars,
+            )
+            return
+        hcloud_token = get_hcloud_token(
+            working_directory, vault_password, environment, shared_dir
+        )
+        env = _ansible_env(working_dir, shared_dir)
+        env["HCLOUD_TOKEN"] = hcloud_token
+        _ensure_tailnet(working_dir, environment, shared_dir, env)
 
-    _run_command(
-        [
-            _find_uv(),
-            "run",
-            "--project",
-            str(working_dir),
-            ansible_bin("ansible-playbook"),
-            str(playbook_path),
-            "--vault-password-file",
-            "/bin/cat",
-            "--extra-vars",
-            backup_extra_vars,
-        ],
-        cwd=working_dir,
-        env=env,
-        input_text=vault_password,
-    )
+        _run_command(
+            [
+                _find_uv(),
+                "run",
+                "--project",
+                str(working_dir),
+                ansible_bin("ansible-playbook"),
+                str(playbook_path),
+                "--vault-password-file",
+                "/bin/cat",
+                "--extra-vars",
+                backup_extra_vars,
+            ],
+            cwd=working_dir,
+            env=env,
+            input_text=vault_password,
+        )
 
 
 def run_update_vms(
@@ -1696,74 +1737,79 @@ def run_restore(
     )
 
     playbook_path = _resolve_playbook_path(working_dir, playbook, "Restore", shared_dir)
-    project_name = _resolve_project_name(working_dir)
-    search_root = (
-        Path(backup_dir).expanduser().resolve()
-        if backup_dir
-        else (Path.home() / "Backups" / project_name).resolve()
-    )
-    if not search_root.exists():
-        raise click.ClickException(f"Backup directory not found: {search_root}")
-
-    resolved_db_file = None
-    if restore_db:
-        resolved_db_file = _resolve_restore_file(
-            db_file,
-            search_root=search_root,
-            pattern=f"{project_name}-db-*.sql*",
-            label="Database",
+    with _project_data_playbook(
+        working_dir, playbook_path, environment
+    ) as playbook_path:
+        project_name = _resolve_project_name(working_dir)
+        search_root = (
+            Path(backup_dir).expanduser().resolve()
+            if backup_dir
+            else (Path.home() / "Backups" / project_name).resolve()
         )
+        if not search_root.exists():
+            raise click.ClickException(f"Backup directory not found: {search_root}")
 
-    resolved_media_file = None
-    if restore_media:
-        resolved_media_file = _resolve_restore_file(
-            media_file,
-            search_root=search_root,
-            pattern=f"{project_name}-media-*.tar*",
-            label="Media",
+        resolved_db_file = None
+        if restore_db:
+            resolved_db_file = _resolve_restore_file(
+                db_file,
+                search_root=search_root,
+                pattern=f"{project_name}-db-*.sql*",
+                label="Database",
+            )
+
+        resolved_media_file = None
+        if restore_media:
+            resolved_media_file = _resolve_restore_file(
+                media_file,
+                search_root=search_root,
+                pattern=f"{project_name}-media-*.tar*",
+                label="Media",
+            )
+
+        # See the note in the backup command: the namespace comes from group_vars,
+        # not from an --extra-vars copy that would outrank it.
+        extra_vars = {
+            "project_name": project_name,
+            "restore_environment": environment,
+            "restore_db": restore_db,
+            "restore_media": restore_media,
+            "db_backup_file": str(resolved_db_file) if resolved_db_file else "",
+            "media_backup_file": str(resolved_media_file)
+            if resolved_media_file
+            else "",
+        }
+
+        if _is_byos(working_dir):
+            _run_byos_playbook(
+                working_directory,
+                vault_password,
+                shared_dir,
+                playbook=str(playbook_path),
+                extra_vars=json.dumps(extra_vars),
+            )
+            return
+        hcloud_token = get_hcloud_token(
+            working_directory, vault_password, environment, shared_dir
         )
+        env = _ansible_env(working_dir, shared_dir)
+        env["HCLOUD_TOKEN"] = hcloud_token
+        _ensure_tailnet(working_dir, environment, shared_dir, env)
 
-    # See the note in the backup command: the namespace comes from group_vars,
-    # not from an --extra-vars copy that would outrank it.
-    extra_vars = {
-        "project_name": project_name,
-        "restore_environment": environment,
-        "restore_db": restore_db,
-        "restore_media": restore_media,
-        "db_backup_file": str(resolved_db_file) if resolved_db_file else "",
-        "media_backup_file": str(resolved_media_file) if resolved_media_file else "",
-    }
-
-    if _is_byos(working_dir):
-        _run_byos_playbook(
-            working_directory,
-            vault_password,
-            shared_dir,
-            playbook=str(playbook_path),
-            extra_vars=json.dumps(extra_vars),
+        _run_command(
+            [
+                _find_uv(),
+                "run",
+                "--project",
+                str(working_dir),
+                ansible_bin("ansible-playbook"),
+                str(playbook_path),
+                "--vault-password-file",
+                "/bin/cat",
+                "--extra-vars",
+                json.dumps(extra_vars),
+            ],
+            cwd=working_dir,
+            env=env,
+            input_text=vault_password,
         )
-        return
-    hcloud_token = get_hcloud_token(
-        working_directory, vault_password, environment, shared_dir
-    )
-    env = _ansible_env(working_dir, shared_dir)
-    env["HCLOUD_TOKEN"] = hcloud_token
-    _ensure_tailnet(working_dir, environment, shared_dir, env)
-
-    _run_command(
-        [
-            _find_uv(),
-            "run",
-            "--project",
-            str(working_dir),
-            ansible_bin("ansible-playbook"),
-            str(playbook_path),
-            "--vault-password-file",
-            "/bin/cat",
-            "--extra-vars",
-            json.dumps(extra_vars),
-        ],
-        cwd=working_dir,
-        env=env,
-        input_text=vault_password,
-    )
