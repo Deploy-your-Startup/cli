@@ -56,6 +56,17 @@ named `django-backend-template` and `vue-django-template` with the pinned commit
 already present. Templates are fetched into temporary test checkouts; source
 clones and existing applications are left intact.
 
+## Ubuntu release upgrade integration checks
+
+`uv run --extra dev pytest tests/test_os_upgrade_integration.py` runs the real
+CLI, git repositories, Ansible Vault and Ansible playbooks with synthetic
+credentials. It checks preview defaults, execution requirements, immutable
+role selection and limits that cannot escape the selected environment.
+The shared deployment repository separately runs the actual OS upgrade driver
+and complete playbook against disposable Ubuntu Docker nodes. Those checks
+simulate the release upgrader, reboot and k3s boundaries; they do not qualify
+an Ubuntu release for production.
+
 ## Guided onboarding integration checks
 
 `uv run --extra dev pytest tests/test_onboarding_integration.py tests/test_vault_guard.py`
