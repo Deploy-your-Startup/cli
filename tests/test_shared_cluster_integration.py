@@ -437,19 +437,40 @@ def test_local_setup_uses_the_reviewed_workflow_ref_before_pinning(tmp_path):
 
 @pytest.mark.parametrize("operation", ["backup", "restore"])
 def test_data_playbooks_load_project_and_environment_group_vars(tmp_path, operation):
-    from cli.ansible_commands import _project_data_playbook, _run_command
+    from tests.test_vault_process_integration import encrypt
 
-    # GIVEN a shared playbook and inventory outside the project's variable root.
+    # GIVEN real project variables, an encrypted deploy key and a release repository.
     deployment = tmp_path / "deployment"
-    shared = deployment / ".shared-roles"
-    shared.mkdir(parents=True)
     variables = deployment / "group_vars"
-    variables.mkdir()
+    variables.mkdir(parents=True)
     (variables / "all.yml").write_text("k8s_namespace: all-startup\n")
     (variables / "production.yml").write_text("k8s_namespace: production-startup\n")
-    inventory = shared / "inventory.ini"
-    inventory.write_text("[production]\nlocalhost ansible_connection=local\n")
-    playbook = shared / f"{operation}-playbook.yml"
+    (deployment / "ci_ssh_key").write_text(
+        encrypt(tmp_path, b"synthetic-integration-key", password="integration-only")
+    )
+    (deployment / "inventory.byos.yml").write_text(
+        yaml.safe_dump(
+            {
+                "all": {
+                    "children": {
+                        "production": {
+                            "hosts": {
+                                "localhost": {
+                                    "ansible_connection": "local",
+                                    "ansible_python_interpreter": sys.executable,
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        )
+    )
+    source = tmp_path / "release"
+    (source / "roles").mkdir(parents=True)
+    (source / "roles/.keep").write_text("")
+    # This external shared-release fixture records the public CLI's selected namespace.
+    playbook = source / f"{operation}-playbook.yml"
     playbook.write_text(
         "- hosts: production\n  gather_facts: false\n  tasks:\n"
         "    - ansible.builtin.assert:\n"
@@ -458,19 +479,51 @@ def test_data_playbooks_load_project_and_environment_group_vars(tmp_path, operat
         f"        dest: '{tmp_path / 'result'}'\n"
         "        content: '{{ k8s_namespace }}'\n"
     )
-    # WHEN Ansible executes the real imported playbook through the CLI's wrapper.
-    with _project_data_playbook(deployment, playbook) as wrapper:
-        result = _run_command(
-            [
-                str(Path(sys.executable).parent / "ansible-playbook"),
-                str(wrapper),
-                "-i",
-                str(inventory),
-            ],
-            cwd=deployment,
-            capture_output=True,
-        )
-        assert result.returncode == 0, result.stdout + result.stderr
-    # THEN environment overrides apply and the temporary wrapper is removed.
+    subprocess.run(
+        ["git", "init", "-b", "main", str(source)], check=True, capture_output=True
+    )
+    subprocess.run(["git", "add", "."], cwd=source, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Integration",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "-m",
+            "release",
+        ],
+        cwd=source,
+        check=True,
+        capture_output=True,
+    )
+    arguments = []
+    if operation == "restore":
+        dump = tmp_path / "db.sql"
+        dump.write_text("SELECT 1;\n")
+        arguments = [
+            "--yes",
+            "--no-restore-media",
+            "--backup-dir",
+            str(tmp_path),
+            "--db-file",
+            str(dump),
+        ]
+    # WHEN the real public CLI refreshes the release and executes real Ansible.
+    result = launch(
+        "ansible",
+        operation,
+        "--working-directory",
+        str(deployment),
+        "--environment",
+        "production",
+        "--repo-url",
+        source.as_uri(),
+        *arguments,
+        cwd=tmp_path,
+    )
+    # THEN environment overrides apply and no temporary wrapper remains.
+    assert result.returncode == 0, result.stdout + result.stderr
     assert (tmp_path / "result").read_text() == "production-startup"
-    assert not wrapper.exists()
+    assert not list(deployment.glob(".startup-data-*.yml"))
