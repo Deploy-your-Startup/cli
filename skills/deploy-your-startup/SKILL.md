@@ -64,6 +64,10 @@ startup bootstrap --yes --kind pitch \
   --project-name my-startup --base-domain example.com
 ```
 
+Built-in full-stack and pitch templates use the tested releases pinned by the CLI.
+The launch plan shows the selected version. Use `--template-version <tag-or-commit>`
+to choose another version; custom `--template` sources default to HEAD.
+
 Use `--output-dir <dir>` when the user keeps projects in a specific folder.
 Run bootstrap outside a sandbox: the Hetzner and Cloudflare steps can open a
 real browser for the user to sign in. If no token is passed, that browser path
@@ -74,6 +78,20 @@ After an interruption, run the same command again rather than cleaning up by
 hand.
 
 ## 3. Verify the launch
+
+Hetzner full-stack bootstrap now verifies deployment by default (up to 900
+seconds). `--no-verify` requests background setup; `--verify-timeout` changes the
+wait. If verification fails, keep the configured project and rerun the read-only
+check after correcting DNS or the failed workflow:
+
+```bash
+startup verify --working-directory <project> --timeout 900
+```
+
+The command prints the required A record and checks Actions, DNS, TLS and
+application health. BYOS/custom infrastructure needs `--server-ip <IPv4>`;
+`--health-path` selects a custom JSON health endpoint. A nonzero exit means the
+site is not verified live.
 
 Bootstrap requests a deployment; it does not prove the site is live. Before
 reporting success:

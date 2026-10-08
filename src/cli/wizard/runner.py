@@ -37,7 +37,10 @@ BYOS_STEPS: list[type[WizardStep]] = [
     ProjectStep,
     FinalizeStep,
 ]
+# The generated deploy.yml calls deploy-pages.yml from the owner's shared
+# deployment repository, so a pitch needs it as much as a full-stack project.
 PITCH_STEPS: list[type[WizardStep]] = [
+    SharedDeploymentStep,
     CloudflareStep,
     DomainStep,
     PitchProjectStep,

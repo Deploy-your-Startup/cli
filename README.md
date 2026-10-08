@@ -52,10 +52,52 @@ The first-deploy path creates Django/FastAPI, Postgres and HTTPS on k3s in your
 own accounts. An existing shared deployment repository is preserved. Advanced
 options, including Vue templates, are available through `startup bootstrap --help`.
 
-Bootstrap requests a deployment; it does not prove the site is live. Follow the
-Actions link, point DNS at your server when needed, then verify your site over
-HTTPS. For local development, follow the generated project's README.
+Full-stack Hetzner bootstrap requests deployment, prints the required DNS A
+record once the server exists, and verifies the latest Actions runs, DNS, TLS
+and `/api/health`. It waits up to 900 seconds by default. Failed or unfinished
+checks return a nonzero exit code while preserving the configured project.
+Correct the DNS record at its authoritative provider, then repeat only the
+read-only verification:
 
+```bash
+startup verify --working-directory ./my-startup --timeout 900
+```
+
+Use `--verify-timeout <seconds>` to adjust bootstrap's wait, or `--no-verify` to
+request deployment in the background. Background setup is not proof that the
+site is live. For BYOS or custom infrastructure, pass `--server-ip <IPv4>` to
+verification; a custom application can use `--health-path` for an endpoint
+returning HTTP 200 with `{"status":"ok"}`. For local development, follow the
+generated project's README.
+
+### Landing page on Cloudflare Pages
+
+Validate an idea before building the application: the pitch template creates a
+static [Astro](https://astro.build) landing page that deploys to Cloudflare Pages
+on every push to `main`. It needs a GitHub account, a free Cloudflare account and
+a domain; no server is created. This flow requires CLI `v0.1.6` or later.
+
+```bash
+startup bootstrap --kind pitch --template-version v0.1.0
+```
+
+The wizard opens the Cloudflare dashboard and asks for an API token with these
+account permissions: **Cloudflare Pages: Edit**, **Account Settings: Read** and
+**Zone: Edit**. Cloudflare then has to serve DNS for the domain:
+
+- A subdomain of a zone already on Cloudflare needs no further changes.
+- A domain registered with Hetzner gets its nameservers switched in KonsoleH.
+- A domain at another registrar: set the displayed Cloudflare nameservers there.
+- Without a domain, the wizard opens Hetzner domain registration for you to
+  review and confirm.
+
+Bootstrap renders the
+[pitch template](https://github.com/Deploy-your-Startup/pitch-template), creates
+the GitHub repository, stores the Cloudflare token and account ID as repository
+secrets, pushes the code and connects the domain and its `www` subdomain to the
+Pages project. Nameserver changes can take a while to propagate; verify the site
+over HTTPS once the Actions run has finished. Edit `frontend/src/pages/index.astro`
+and run `./make.sh run` to work on the page locally.
 ## Use the CLI from a coding agent
 
 The CLI ships an agent skill that teaches Claude Code, Codex and OpenCode how
@@ -220,7 +262,7 @@ startup ansible os-upgrade --working-directory deployment --environment producti
 The command requires the release upgrader installed on each node, `Prompt=lts`
 in `/etc/update-manager/release-upgrades`, and a pinned shared deployment release
 containing `os-upgrade-playbook.yml`. After syncing such a release, use
-`startup ansible pin --working-directory deployment --version <release-tag>`
+`startup ansible pin --working-directory deployment --version <synced-commit-sha>`
 and review and commit both role pin files. Sync alone does not move an existing
 immutable project pin.
 

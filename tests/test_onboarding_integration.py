@@ -119,7 +119,7 @@ def test_launch_plan_shows_the_pinned_default_template(tmp_path):
     result = launch(tmp_path, "my-startup\nexample.com\n\n\n")
     # THEN the plan names the tested template release this CLI pins.
     assert result.returncode == 0, result.stderr
-    assert "Template  Django/FastAPI v0.1.0" in result.stdout
+    assert "Template  Django/FastAPI v0.1.2" in result.stdout
 
 
 def test_explicit_or_custom_templates_keep_their_version(tmp_path):
@@ -137,3 +137,31 @@ def test_explicit_or_custom_templates_keep_their_version(tmp_path):
     # THEN their choice wins, and a custom template follows its HEAD.
     assert "Template  Django/FastAPI main" in pinned.stdout, pinned.stderr
     assert "Template  vue-template HEAD" in custom.stdout, custom.stderr
+
+
+def test_pitch_launch_pins_builtin_and_preserves_explicit_templates(tmp_path):
+    # GIVEN a user choosing a landing page without creating external resources.
+    options = (
+        "--kind",
+        "pitch",
+        "--project-name",
+        "my-startup",
+        "--base-domain",
+        "example.com",
+    )
+    # WHEN they inspect the default, an explicit release and a custom template.
+    default = launch(tmp_path, "\n\n", *options)
+    explicit = launch(tmp_path, "\n\n", *options, "--template-version", "v2.0.0")
+    custom = launch(
+        tmp_path, "\n\n", *options, "--template", "https://example.com/pitch.git"
+    )
+    # THEN the plan names the pinned release, preserves overrides and cancels.
+    for result, version in [
+        (default, "v0.1.0"),
+        (explicit, "v2.0.0"),
+        (custom, "HEAD"),
+    ]:
+        assert result.returncode == 0, result.stderr
+        assert f"Template  Pitch {version}" in result.stdout
+        assert "Cancelled. No resources were created." in result.stdout
+    assert not (tmp_path / "projects").exists()
