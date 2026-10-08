@@ -106,8 +106,9 @@ def test_two_rendered_projects_keep_separate_data_and_reuse_cluster_inventory(tm
         configure_project_cluster(ctx)
         assert (ctx.deployment_dir / "cluster.yml").read_bytes() == before
         settings = yaml.safe_load(before)
-        variables = yaml.safe_load(
-            (ctx.deployment_dir / "group_vars/cluster.yml").read_text()
+        variables = yaml.load(
+            (ctx.deployment_dir / "group_vars/all.yml").read_text(),
+            Loader=yaml.BaseLoader,
         )
         if not owner:
             owner = settings
@@ -131,6 +132,18 @@ def test_two_rendered_projects_keep_separate_data_and_reuse_cluster_inventory(tm
                 check=True,
             )
             inventory = yaml.safe_load(result.stdout)
+            assert (
+                inventory["_meta"]["hostvars"]["cluster-owner-master-0"][
+                    "startup_cluster_id"
+                ]
+                == owner["id"]
+            )
+            assert (
+                inventory["_meta"]["hostvars"]["cluster-owner-master-0"][
+                    "startup_cluster_managed"
+                ]
+                is False
+            )
             assert inventory["hcloud_type_master"]["hosts"] == [
                 "cluster-owner-master-0"
             ]
@@ -138,7 +151,7 @@ def test_two_rendered_projects_keep_separate_data_and_reuse_cluster_inventory(tm
                 inventory["_meta"]["hostvars"]["cluster-owner-worker-0"]["ansible_host"]
                 == "203.0.113.11"
             )
-        assert variables["startup_namespace_policy"] is True
+        assert variables["startup_namespace_policy"] == "true"
         assert variables["startup_project_owner"] == ctx.full_repo
         assert (
             f'k8s_namespace: "{name}"'
@@ -237,7 +250,10 @@ def test_attached_launch_plan_cancels_without_provisioning(tmp_path):
     assert not (tmp_path / "apps").exists()
 
 
-def test_export_uses_real_inventory_and_publishes_only_public_fields(tmp_path):
+@pytest.mark.parametrize("provider", ["byos", "hetzner"])
+def test_export_uses_real_inventory_and_publishes_only_public_fields(
+    tmp_path, provider
+):
     # GIVEN an owner project and a real local shared-role Git repository.
     source = tmp_path / "shared-source"
     (source / "roles").mkdir(parents=True)
@@ -261,14 +277,19 @@ def test_export_uses_real_inventory_and_publishes_only_public_fields(tmp_path):
         check=True,
         capture_output=True,
     )
-    deployment = tmp_path / "deployment"
+    deployment = tmp_path / "cluster-owner" / "deployment"
     (deployment / "group_vars").mkdir(parents=True)
     settings = {**descriptor(), "managed": True}
     (deployment / "cluster.yml").write_text(yaml.safe_dump(settings))
     (deployment / "group_vars/all.yml").write_text(
         "project_name: cluster-owner\nsynthetic_secret: never-export-this\n"
     )
-    (deployment / "inventory.byos.yml").write_text(
+    inventory_path = (
+        deployment / "inventory.byos.yml"
+        if provider == "byos"
+        else source / "inventory.hcloud.yml"
+    )
+    inventory_path.write_text(
         yaml.safe_dump(
             {
                 "all": {
@@ -287,6 +308,12 @@ def test_export_uses_real_inventory_and_publishes_only_public_fields(tmp_path):
             }
         )
     )
+    if provider == "hetzner":
+        from tests.test_vault_process_integration import encrypt
+
+        (deployment / "hcloud_token_production").write_text(
+            encrypt(tmp_path, b"synthetic-cloud-token", password="integration-only")
+        )
     output = tmp_path / "connection.yml"
     # WHEN the real CLI sets up shared roles and exports through ansible-inventory.
     result = launch(
@@ -320,3 +347,76 @@ def test_export_uses_real_inventory_and_publishes_only_public_fields(tmp_path):
     )
     assert retry.returncode != 0
     assert output.read_bytes() == before
+
+
+def test_local_setup_uses_the_reviewed_workflow_ref_before_pinning(tmp_path):
+    # GIVEN real Git branches and a generated project recording a reviewed ref.
+    source = tmp_path / "shared-source"
+    role = source / "roles/sample/tasks/main.yml"
+    role.parent.mkdir(parents=True)
+    role.write_text("[]\n")
+    subprocess.run(
+        ["git", "init", "-b", "main", str(source)], check=True, capture_output=True
+    )
+    subprocess.run(["git", "add", "."], cwd=source, check=True)
+    git_env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "Integration",
+        "GIT_AUTHOR_EMAIL": "test@example.com",
+        "GIT_COMMITTER_NAME": "Integration",
+        "GIT_COMMITTER_EMAIL": "test@example.com",
+    }
+    subprocess.run(
+        ["git", "commit", "-m", "main"],
+        cwd=source,
+        env=git_env,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "checkout", "-b", "codex/reviewed"],
+        cwd=source,
+        check=True,
+        capture_output=True,
+    )
+    role.write_text(
+        "- name: Reviewed branch\n  ansible.builtin.debug:\n    msg: reviewed\n"
+    )
+    subprocess.run(["git", "add", "."], cwd=source, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "reviewed"],
+        cwd=source,
+        env=git_env,
+        check=True,
+        capture_output=True,
+    )
+    expected = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=source, text=True
+    ).strip()
+    remote = tmp_path / "remote.git"
+    subprocess.run(
+        ["git", "clone", "--bare", str(source), str(remote)],
+        check=True,
+        capture_output=True,
+    )
+    project = tmp_path / "app"
+    deployment = project / "deployment"
+    deployment.mkdir(parents=True)
+    (project / ".copier-answers.yml").write_text("deploy_ref: codex/reviewed\n")
+    # WHEN the real CLI sets up local deployment without a manual --version override.
+    result = launch(
+        "ansible",
+        "setup_ansible",
+        "--working-directory",
+        str(deployment),
+        "--repo-url",
+        remote.as_uri(),
+        cwd=tmp_path,
+    )
+    # THEN the local role checkout and pin match the workflow ref, rather than main.
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (deployment / "shared-roles.ref").read_text().strip() == expected
+    assert (
+        "Reviewed branch"
+        in (deployment / ".shared-roles/roles/sample/tasks/main.yml").read_text()
+    )

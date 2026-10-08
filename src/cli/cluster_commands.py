@@ -93,6 +93,7 @@ def configure_project_cluster(ctx) -> None:
     if not ctx.shared_cluster and not ctx.cluster_config:
         return
     path = ctx.deployment_dir / CLUSTER_FILE
+    existing = None
     if path.exists():
         existing = yaml.safe_load(path.read_text())
         expected_id = ctx.cluster_config["id"] if ctx.cluster_config else existing["id"]
@@ -102,14 +103,17 @@ def configure_project_cluster(ctx) -> None:
             raise click.ClickException(
                 "Project already belongs to another cluster or ownership mode."
             )
-        return
-    descriptor: dict = ctx.cluster_config or {
-        "schema": 1,
-        "id": uuid.uuid4().hex,
-        "owner": ctx.full_repo,
-        "environment": "production",
-        "nodes": [],
-    }
+    descriptor: dict = (
+        ctx.cluster_config
+        or existing
+        or {
+            "schema": 1,
+            "id": uuid.uuid4().hex,
+            "owner": ctx.full_repo,
+            "environment": "production",
+            "nodes": [],
+        }
+    )
     managed = ctx.cluster_config is None
     settings = {**descriptor, "managed": managed}
     path.write_text(yaml.safe_dump(settings, sort_keys=False))
@@ -120,10 +124,36 @@ def configure_project_cluster(ctx) -> None:
         "startup_project_owner": ctx.full_repo,
         "startup_namespace_policy": True,
     }
-    (ctx.deployment_dir / "group_vars" / "cluster.yml").write_text(
-        yaml.safe_dump(variables, sort_keys=False)
-    )
+    # group_vars/cluster.yml would only load for an inventory group named
+    # cluster. Put these values in the universally loaded all.yml instead.
+    all_vars = ctx.deployment_dir / "group_vars" / "all.yml"
+    content = all_vars.read_text()
+    values = yaml.load(content, Loader=yaml.BaseLoader)
+    for key in (
+        "startup_cluster_id",
+        "startup_cluster_owner",
+        "startup_cluster_managed",
+        "startup_project_owner",
+    ):
+        expected = (
+            str(variables[key]).lower()
+            if isinstance(variables[key], bool)
+            else str(variables[key])
+        )
+        if key in values and values[key] != expected:
+            raise click.ClickException(
+                "Cluster settings conflict with the existing project configuration."
+            )
+    missing = {key: value for key, value in variables.items() if key not in values}
+    if missing:
+        all_vars.write_text(
+            content.rstrip("\n")
+            + "\n\n# Shared-cluster ownership and namespace policies.\n"
+            + yaml.safe_dump(missing, sort_keys=False)
+        )
     if managed:
+        return
+    if existing and (ctx.deployment_dir / ansible.BYOS_INVENTORY).exists():
         return
     groups = {}
     for role in ("master", "worker"):
@@ -196,6 +226,10 @@ def export_cluster(working_directory, environment, output, repo_url, version, re
             working_directory, password, environment
         )
         inventory = working_dir / "inventory.hcloud.yml"
+        if not inventory.exists():
+            inventory = (
+                working_dir / ansible.DEFAULT_SHARED_DIR / "inventory.hcloud.yml"
+            )
     result = ansible._run_command(
         [
             ansible._find_uv(),
@@ -218,10 +252,10 @@ def export_cluster(working_directory, environment, output, repo_url, version, re
     nodes = []
     for name, values in sorted(hostvars.items()):
         labels = values.get("hcloud_labels", {})
-        role = labels.get("type")
+        role = ansible._normalize_inventory_value(labels.get("type"))
         if role not in ("master", "worker"):
             continue
-        if labels.get("network") == "private":
+        if ansible._normalize_inventory_value(labels.get("network")) == "private":
             raise click.ClickException(
                 "Shared-cluster bootstrap currently requires public SSH access."
             )
@@ -232,8 +266,10 @@ def export_cluster(working_directory, environment, output, repo_url, version, re
         nodes.append(
             {
                 "name": name,
-                "host": values["ansible_host"],
-                "ssh_user": values.get("ansible_user", "root"),
+                "host": ansible._normalize_inventory_value(values["ansible_host"]),
+                "ssh_user": ansible._normalize_inventory_value(
+                    values.get("ansible_user", "root")
+                ),
                 "role": role,
             }
         )

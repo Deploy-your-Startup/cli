@@ -514,6 +514,11 @@ def secrets():
     ),
 )
 @click.option(
+    "--file-stdin",
+    default=None,
+    help="Replace a full encrypted file with exact UTF-8 content read from stdin.",
+)
+@click.option(
     "--create-in",
     default=None,
     type=click.Path(),
@@ -589,6 +594,7 @@ def update_secrets(
     field_random,
     field_set,
     field_stdin,
+    file_stdin,
     create_in,
     file_rotate,
     file_content,
@@ -651,6 +657,8 @@ def update_secrets(
     # project the path belongs to. Before this, the password had to be passed on
     # the command line, where `ps` and the shell history can see it.
     #
+    if field_stdin and file_stdin:
+        raise click.UsageError("Use either --field-stdin or --file-stdin, not both.")
     vault_password = resolve_vault_password(vault_password, _password_scope(repo))
 
     # Merge new and old parameter names for backward compatibility
@@ -681,6 +689,12 @@ def update_secrets(
     merged_file_content = list(file_content) if file_content else []
     if set_file_content:  # Old parameter name
         merged_file_content.extend(set_file_content)
+
+    if file_stdin:
+        content = sys.stdin.read()
+        if not content:
+            raise click.ClickException("--file-stdin was given but stdin was empty.")
+        merged_file_content.append((file_stdin, content))
 
     # Convert to appropriate formats
     set_field_pairs = merged_field_set if merged_field_set else None
