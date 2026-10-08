@@ -1458,7 +1458,7 @@ def _project_data_playbook(
         delete=False,
     ) as wrapper:
         tasks = [
-            {"ansible.builtin.include_vars": {"file": str(path)}}
+            {"ansible.builtin.include_vars": {"file": str(path)}, "no_log": True}
             for path in (
                 working_dir / "group_vars" / "all.yml",
                 working_dir / "group_vars" / f"{environment}.yml",

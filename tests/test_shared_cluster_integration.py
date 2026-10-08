@@ -25,7 +25,7 @@ TEMPLATE_VERSION = (
 )
 
 
-def launch(*args, cwd):
+def launch(*args, cwd, env=None):
     return subprocess.run(
         [sys.executable, "-m", "cli.startup", *args],
         cwd=cwd,
@@ -34,6 +34,7 @@ def launch(*args, cwd):
             "PYTHONPATH": str(ROOT / "src"),
             "STARTUP_VAULT_PASSWORD": "integration-only",
             "NO_COLOR": "1",
+            **(env or {}),
         },
         input="n\nn\n",
         text=True,
@@ -173,6 +174,13 @@ def test_attached_project_rejects_cluster_operations_before_remote_work(
     (deployment / "cluster.yml").write_text(
         yaml.safe_dump({**descriptor(), "managed": False})
     )
+    # An external Keychain stand-in records any unauthorized credential lookup.
+    executable_dir = tmp_path / "bin"
+    executable_dir.mkdir()
+    accessed = tmp_path / "credential-accessed"
+    security = executable_dir / "security"
+    security.write_text(f"#!/bin/sh\ntouch '{accessed}'\nexit 1\n")
+    security.chmod(0o755)
     # WHEN its user invokes a cluster-changing CLI command.
     result = launch(
         "ansible",
@@ -182,7 +190,12 @@ def test_attached_project_rejects_cluster_operations_before_remote_work(
         "--environment",
         "production",
         cwd=tmp_path,
+        env={
+            "PATH": str(executable_dir) + os.pathsep + os.environ["PATH"],
+            "STARTUP_VAULT_PASSWORD": "",
+        },
     )
+    assert not accessed.exists()
     # THEN it fails before installing collections, cloning roles or contacting a server.
     assert result.returncode != 0
     assert "run it from example-owner/cluster-owner" in result.stderr
