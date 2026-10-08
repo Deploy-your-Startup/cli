@@ -18,6 +18,7 @@ from cli.template_commands import (
     default_template_version,
     template,
 )
+from cli.verification import verify
 
 
 def run_command(cmd, verbose=False):
@@ -52,10 +53,24 @@ cli.add_command(template)
 cli.add_command(auth0)
 cli.add_command(doctor)
 cli.add_command(skills)
+cli.add_command(verify)
 
 
 # === BOOTSTRAP COMMAND ===
 @cli.command("bootstrap")
+@click.option(
+    "--verify/--no-verify",
+    "verify_deployment",
+    default=True,
+    help="Verify the Hetzner full-stack deployment after setup.",
+)
+@click.option(
+    "--verify-timeout",
+    type=click.IntRange(min=0),
+    default=900,
+    show_default=True,
+    help="Seconds to wait for deployment and DNS verification.",
+)
 @click.option("--verbose", "-V", is_flag=True, help="Verbose output")
 @click.option(
     "--kind",
@@ -117,6 +132,8 @@ cli.add_command(skills)
     help="Run without questions — every answer must come from the options above.",
 )
 def bootstrap(
+    verify_deployment,
+    verify_timeout,
     verbose,
     kind,
     provider,
@@ -368,6 +385,10 @@ def bootstrap(
     )
 
     run_wizard(ctx)
+    if verify_deployment and ctx.kind == "fullstack" and ctx.provider == "hetzner":
+        from cli.verification import verify_project
+
+        verify_project(ctx.project_dir, timeout=verify_timeout)
 
 
 def _password_scope(repo: str) -> str:

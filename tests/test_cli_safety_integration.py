@@ -260,3 +260,39 @@ sys.exit(0 if ok else 1)
     assert token not in result.stdout + result.stderr
     if fail:
         assert "Ansible deployment failed" in result.stdout
+
+
+def test_bootstrap_reads_stdin_before_reporting_missing_options(tmp_path):
+    # GIVEN a synthetic token on stdin, WHEN the real CLI lacks the next required
+    # answer, THEN it accepts the token and names the missing option without
+    # exposing the token or creating resources.
+    token = "synthetic-stdin-token"
+    result = run_cli(
+        tmp_path,
+        "bootstrap",
+        "--yes",
+        "--kind",
+        "fullstack",
+        "--provider",
+        "hetzner",
+        "--hetzner-token-stdin",
+        input=token,
+    )
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "--project-name" in result.stderr
+    assert "No Hetzner token" not in result.stderr
+    assert token not in result.stdout + result.stderr
+    assert not (tmp_path / "deployment").exists()
+    empty = run_cli(
+        tmp_path,
+        "bootstrap",
+        "--yes",
+        "--kind",
+        "fullstack",
+        "--provider",
+        "hetzner",
+        "--hetzner-token-stdin",
+        input="",
+    )
+    assert empty.returncode == 1
+    assert "No Hetzner token" in empty.stderr

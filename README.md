@@ -52,9 +52,23 @@ The first-deploy path creates Django/FastAPI, Postgres and HTTPS on k3s in your
 own accounts. An existing shared deployment repository is preserved. Advanced
 options, including Vue templates, are available through `startup bootstrap --help`.
 
-Bootstrap requests a deployment; it does not prove the site is live. Follow the
-Actions link, point DNS at your server when needed, then verify your site over
-HTTPS. For local development, follow the generated project's README.
+Full-stack Hetzner bootstrap requests deployment, prints the required DNS A
+record once the server exists, and verifies the latest Actions runs, DNS, TLS
+and `/api/health`. It waits up to 900 seconds by default. Failed or unfinished
+checks return a nonzero exit code while preserving the configured project.
+Correct the DNS record at its authoritative provider, then repeat only the
+read-only verification:
+
+```bash
+startup verify --working-directory ./my-startup --timeout 900
+```
+
+Use `--verify-timeout <seconds>` to adjust bootstrap's wait, or `--no-verify` to
+request deployment in the background. Background setup is not proof that the
+site is live. For BYOS or custom infrastructure, pass `--server-ip <IPv4>` to
+verification; a custom application can use `--health-path` for an endpoint
+returning HTTP 200 with `{"status":"ok"}`. For local development, follow the
+generated project's README.
 
 ### Landing page on Cloudflare Pages
 
