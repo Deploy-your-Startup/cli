@@ -393,6 +393,21 @@ def clone_or_update_shared_roles(
 ) -> Path:
     working_dir = _resolve_working_dir(working_directory)
     pin_file = working_dir / "shared-roles.ref"
+    if not pin_file.exists() and version == DEFAULT_VERSION:
+        answers = working_dir.parent / ".copier-answers.yml"
+        if answers.exists():
+            values = yaml.safe_load(answers.read_text())
+            deployment_ref = (
+                values.get("deploy_ref") if isinstance(values, dict) else None
+            )
+            if deployment_ref:
+                if (
+                    not isinstance(deployment_ref, str)
+                    or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]*", deployment_ref)
+                    or ".." in deployment_ref
+                ):
+                    raise click.ClickException("Invalid deploy_ref in Copier answers.")
+                version = deployment_ref
     if pin_file.exists():
         pinned = pin_file.read_text().strip()
         if not re.fullmatch(r"[0-9a-f]{40}", pinned):

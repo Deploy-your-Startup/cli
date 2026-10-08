@@ -164,6 +164,10 @@ macOS Keychain when `-p` is omitted — always omit it.
   read -rs "?Secret: " s && printf '%s' "$s" | startup secrets update -r "$PWD/deployment/group_vars/production.yml" --field-stdin <name> --create-in "$PWD/deployment/group_vars/production.yml"; unset s
   ```
 
+- Replace an encrypted whole-file secret through stdin:
+  `startup secrets update -r deployment --file-stdin <filename> --dry-run`,
+  then repeat without `--dry-run`. Never put its value in process arguments.
+
 - Rotating the vault password (`startup secrets rotate-password`) is
   destructive for anyone holding the old password; confirm first.
 

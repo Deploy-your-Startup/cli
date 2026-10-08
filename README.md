@@ -205,7 +205,8 @@ namespace and infrastructure unless explicitly migrated with backup/restore.
 
 For reviewing an unpublished shared deployment branch, use
 `--deployment-ref <reviewed-ref>` during bootstrap with a template supporting
-`deploy_ref`. This affects the new project's workflow references only.
+`deploy_ref`. The generated workflows and initial local shared-role checkout use that ref;
+an explicit local role pin remains authoritative.
 
 ## Manage secrets
 
@@ -340,3 +341,11 @@ Include your OS, command and redacted error output. Keep passwords, tokens and
 decrypted configuration out of reports.
 
 MIT (as declared in `pyproject.toml`).
+
+For an encrypted whole-file secret, pipe its contents to
+`startup secrets update -r deployment --file-stdin <filename> --dry-run`,
+then repeat without `--dry-run`. Exact UTF-8 contents are preserved.
+
+Saved Hetzner tokens are reused only for their recorded project. For isolated
+automation, set `HETZNER_BOOTSTRAP_TOKEN_FILE` to a dedicated absolute path.
+An explicitly supplied token takes precedence over saved credentials.
