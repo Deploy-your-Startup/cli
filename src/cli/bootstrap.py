@@ -18,10 +18,8 @@ from cli.sync_commands import (
 )
 from cli.template_commands import render_project
 
-TEMPLATE_OWNER = "Deploy-your-Startup"
 TEMPLATE_REPO = "django-backend-template"
 TEMPLATE_VAULT_PASSWORD = "ranhah-ceqZu9-fihfez"
-PITCH_TEMPLATE_REPO = "pitch-template"
 
 
 def template_replacements(

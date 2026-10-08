@@ -15,9 +15,11 @@ from cli.preflight import doctor
 from cli.skill_commands import skills
 from cli.template_commands import (
     DEFAULT_TEMPLATE,
+    PITCH_TEMPLATE,
     default_template_version,
     template,
 )
+from cli.verification import verify
 
 
 def run_command(cmd, verbose=False):
@@ -53,10 +55,24 @@ cli.add_command(auth0)
 cli.add_command(cluster)
 cli.add_command(doctor)
 cli.add_command(skills)
+cli.add_command(verify)
 
 
 # === BOOTSTRAP COMMAND ===
 @cli.command("bootstrap")
+@click.option(
+    "--verify/--no-verify",
+    "verify_deployment",
+    default=True,
+    help="Verify the Hetzner full-stack deployment after setup.",
+)
+@click.option(
+    "--verify-timeout",
+    type=click.IntRange(min=0),
+    default=900,
+    show_default=True,
+    help="Seconds to wait for deployment and DNS verification.",
+)
 @click.option("--verbose", "-V", is_flag=True, help="Verbose output")
 @click.option(
     "--kind",
@@ -77,13 +93,13 @@ cli.add_command(skills)
 @click.option(
     "--template",
     "template_source",
-    default=DEFAULT_TEMPLATE,
-    help="Full-stack Copier template Git URL or local repository.",
+    help="Copier template Git URL or local repository "
+    "(default: the Django template, or the pitch template with --kind pitch).",
 )
 @click.option(
     "--template-version",
-    help="Full-stack template tag, branch or commit "
-    "(default: the tested release of the default template, HEAD for others).",
+    help="Template tag, branch or commit "
+    "(default: the tested release of built-in templates, HEAD for others).",
 )
 @click.option(
     "--domain-owned/--buy-domain",
@@ -135,6 +151,8 @@ cli.add_command(skills)
     help="Run without questions — every answer must come from the options above.",
 )
 def bootstrap(
+    verify_deployment,
+    verify_timeout,
     verbose,
     kind,
     provider,
@@ -238,6 +256,9 @@ def bootstrap(
             ],
         )
         kind = "fullstack" if choice == 1 else "pitch"
+
+    if template_source is None:
+        template_source = PITCH_TEMPLATE if kind == "pitch" else DEFAULT_TEMPLATE
 
     # ── Provider selection (full-stack only) ─────────────────────
 
@@ -381,6 +402,8 @@ def bootstrap(
             else template_source.rstrip("/").removesuffix(".git").rsplit("/", 1)[-1]
         )
         summary["Template"] = f"{template_name} {template_version}"
+    else:
+        summary["Template"] = f"Pitch {template_version}"
     ui.input_summary(summary)
 
     if not assume_yes:
@@ -425,6 +448,10 @@ def bootstrap(
     )
 
     run_wizard(ctx)
+    if verify_deployment and ctx.kind == "fullstack" and ctx.provider == "hetzner":
+        from cli.verification import verify_project
+
+        verify_project(ctx.project_dir, timeout=verify_timeout)
 
 
 def _password_scope(repo: str) -> str:
@@ -911,7 +938,7 @@ def deploy():
     "--source-version",
     default="main",
     show_default=True,
-    help="Source template branch or tag to sync",
+    help="Source template branch, tag or full commit SHA to sync",
 )
 @click.option("--private/--public", default=True, show_default=True)
 @click.option("--dry-run", is_flag=True, help="Preview sync without commit/push")
