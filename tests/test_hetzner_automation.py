@@ -1,45 +1,78 @@
-"""Regression checks for an expired Hetzner Console browser session."""
+"""GIVEN real login flows and HTTP pages, WHEN sessions expire, THEN require login."""
 
 import asyncio
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
+
+import httpx
+import pytest
+from playwright.async_api import TimeoutError as BrowserTimeout
 
 from cli.hetzner import config
 from cli.hetzner.automation import HetznerAutomation
 
 
-def test_login_does_not_trust_projects_url_when_session_expired(monkeypatch):
+@pytest.mark.parametrize("expired", [True, False])
+def test_login_uses_rendered_projects_not_url(monkeypatch, capsys, expired):
+    # GIVEN a local provider showing either a login form or a visible project.
+    requests = []
+
+    class Provider(BaseHTTPRequestHandler):
+        def do_GET(self):
+            requests.append(self.path)
+            self.send_response(200)
+            self.end_headers()
+            if expired and self.path == "/projects":
+                self.wfile.write(b'<input name="email">')
+            else:
+                self.wfile.write(b'<a data-projectname="sample">sample</a>')
+
+        def log_message(self, format, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Provider)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    root = f"http://127.0.0.1:{server.server_port}"
+    monkeypatch.setattr(config, "HETZNER_PROJECTS_URL", root + "/projects")
+    monkeypatch.setattr(config, "HETZNER_LOGIN_URL", root + "/login")
+
+    class BrowserPage:
+        """Only the browser boundary is replaced, backed by real HTTP responses."""
+
+        def __init__(self):
+            self.content = ""
+            self.url = ""
+
+        async def goto(self, url, *, wait_until):
+            self.url = url
+            async with httpx.AsyncClient() as client:
+                self.content = (await client.get(url)).text
+
+        def locator(self, selector):
+            assert selector == config.SELECTORS_PROJECTS_READY
+            return self
+
+        @property
+        def first(self):
+            return self
+
+        async def wait_for(self, *, state, timeout):
+            if 'data-projectname="sample"' not in self.content:
+                raise BrowserTimeout("No visible project")
+
     bot = HetznerAutomation()
-    wait_for_projects = AsyncMock()
-    locator = MagicMock()
-    locator.first.wait_for = wait_for_projects
-    goto = AsyncMock()
-    monkeypatch.setattr(
-        bot,
-        "_page",
-        SimpleNamespace(
-            url=config.HETZNER_PROJECTS_URL,
-            goto=goto,
-            locator=MagicMock(return_value=locator),
-        ),
-    )
-    monkeypatch.setattr(bot, "_projects_page_ready", AsyncMock(return_value=False))
-
-    assert asyncio.run(bot.login()) is True
-    assert [call.args[0] for call in goto.await_args_list] == [
-        config.HETZNER_PROJECTS_URL,
-        config.HETZNER_LOGIN_URL,
-    ]
-    wait_for_projects.assert_awaited_once()
-
-
-def test_login_reuses_session_only_when_projects_are_visible(monkeypatch):
-    bot = HetznerAutomation()
-    goto = AsyncMock()
-    monkeypatch.setattr(bot, "_page", SimpleNamespace(goto=goto))
-    monkeypatch.setattr(bot, "_projects_page_ready", AsyncMock(return_value=True))
-
-    assert asyncio.run(bot.login()) is True
-    goto.assert_awaited_once_with(
-        config.HETZNER_PROJECTS_URL, wait_until="domcontentloaded"
-    )
+    monkeypatch.setattr(bot, "_page", BrowserPage())
+    try:
+        # WHEN the public login entrypoint inspects the actual provider pages.
+        result = asyncio.run(bot.login())
+        # THEN expired sessions require login even when the URL stays /projects.
+        assert result is True
+        assert requests == (["/projects", "/login"] if expired else ["/projects"])
+        output = capsys.readouterr().out
+        assert ("Please log in via the browser" in output) is expired
+        assert ("Already logged in" in output) is not expired
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()

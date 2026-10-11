@@ -1954,6 +1954,26 @@ def hetzner_setup(headless, project, token_name, register, email):
         raise SystemExit(1)
 
 
+@hetzner.command("domain-check")
+@click.argument("domain")
+def hetzner_domain_check(domain):
+    """Check availability and Hetzner's public annual domain rate, without buying.
+
+    Exit codes: 0 = free, 1 = registered, 2 = unknown/error (including invalid input).
+    Registration estimates include 19% German VAT; renewal/premium prices may be unknown.
+    A free registry result does not guarantee Hetzner can sell the domain.
+    """
+    from cli.hetzner.domain_check import check_domain
+
+    try:
+        result = check_domain(domain)
+    except ValueError as exc:
+        click.echo(f"Invalid domain: {exc}", err=True)
+        raise SystemExit(2) from exc
+    click.echo(result.output())
+    raise SystemExit(result.exit_code)
+
+
 @hetzner.command("domain")
 @click.option(
     "--headless",

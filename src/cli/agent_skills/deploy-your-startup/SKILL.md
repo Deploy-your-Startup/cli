@@ -48,6 +48,12 @@ Ask **one** bundled question with only what is missing:
 Optional, ask only if the user brings it up: extra domains, a Sentry DSN, the
 Vue template, Auth0 login (`--auth0-tenant`; otherwise pass `--without-auth`).
 
+Before domain registration, run `startup hetzner domain-check <domain>` (read-only).
+Exit codes: 0 free, 1 registered, 2 unknown/error. The published standard
+registration estimate includes 19% German VAT; renewal and premium prices may
+be unknown. Review the final price in Hetzner before confirming. Bootstrap
+checks before buying and asks to continue; `--yes` never buys a domain.
+
 Before running anything, state the cost: servers and domains are billed by the
 user's providers. Then prefer the unattended form — every question has an
 option, and `--yes` turns missing answers into errors naming the option:
