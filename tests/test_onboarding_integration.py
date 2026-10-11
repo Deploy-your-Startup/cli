@@ -185,3 +185,6 @@ def test_shared_owner_launch_uses_the_compatible_published_default(tmp_path):
     assert "Template  Django/FastAPI v0.1.6" in result.stdout
     assert "Cancelled. No resources were created." in result.stdout
     assert not (tmp_path / "projects").exists()
+    readme = (ROOT / "README.md").read_text()
+    assert "CLI `v0.1.11` pins the compatible Django template `v0.1.6`" in readme
+    assert "startup bootstrap --kind pitch --template-version v0.1.1" in readme

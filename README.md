@@ -88,7 +88,7 @@ on every push to `main`. It needs a GitHub account, a free Cloudflare account an
 a domain; no server is created. This flow requires CLI `v0.1.6` or later.
 
 ```bash
-startup bootstrap --kind pitch --template-version v0.1.0
+startup bootstrap --kind pitch --template-version v0.1.1
 ```
 
 The wizard opens the Cloudflare dashboard and asks for an API token with these
@@ -228,14 +228,14 @@ production environment. Review the selected target version before running them.
 
 ## Deploy several startups to one cluster
 
-CLI `v0.1.10` pins the compatible Django template `v0.1.4`. Create one cluster
+CLI `v0.1.11` pins the compatible Django template `v0.1.6`. Create one cluster
 owner with `startup bootstrap --kind fullstack --provider hetzner --shared-cluster`.
 This provisions infrastructure in your account and puts the owner's application
 in its own namespace. Verify Actions, DNS and HTTPS before attaching another
 startup. Cluster failures and upgrades affect every application using it.
 
 For Vue, select `--template https://github.com/Deploy-your-Startup/vue-django-template.git
---template-version v0.1.2`. Older templates without shared-cluster support are
+--template-version v0.1.5`. Older templates without shared-cluster support are
 rejected before account or server setup.
 
 From the owner's project, export its public connection settings:
