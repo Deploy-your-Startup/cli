@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import webbrowser
 from pathlib import Path
+from uuid import uuid4
 
 import click
 
@@ -58,6 +59,7 @@ def template_replacements(
         "§§deploy_your_startup.k8s_namespace§§": k8s_namespace,
         "§§deploy_your_startup.ci_key§§": ci_public_key,
         "§§deploy_your_startup.user_key§§": user_public_key,
+        "§§deploy_your_startup.kpis_website_id§§": str(uuid4()),
     }
 
 
