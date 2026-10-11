@@ -86,3 +86,11 @@ missing prices and HTTP failures against a local Hetzner API stand-in.
 The macOS bootstrap process checks use local Git repositories and stand-ins for
 GitHub and Keychain; they verify cancellation prevents workflow dispatch.
 They do not verify live pricing or provisioning.
+
+## Domain checks
+
+`uv run --extra dev pytest tests/test_domain_check_integration.py` drives real
+CLI subprocesses and the domain wizard against local TCP WHOIS and HTTP RDAP
+and pricing servers. The pricing fixture is Hetzner’s public EUR feed; browser
+launch is replaced only at the Playwright boundary. These checks place no
+orders and do not verify authenticated KonsoleH screens.

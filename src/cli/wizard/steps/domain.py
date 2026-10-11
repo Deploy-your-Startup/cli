@@ -25,6 +25,8 @@ class DomainStep(WizardStep):
         if ctx.kind == "pitch":
             return False
         if ctx.domain_owned is not None:
+            if ctx.domain_owned:
+                self._warn_if_free(ctx)
             return ctx.domain_owned
         if ctx.non_interactive:
             # Never buy a domain unattended — that spends money. Registering one
@@ -38,6 +40,8 @@ class DomainStep(WizardStep):
                 "No, register it through Hetzner",
             ],
         )
+        if choice == 1:
+            self._warn_if_free(ctx)
         return choice == 1
 
     def run(self, ctx: BootstrapContext) -> None:
@@ -88,8 +92,10 @@ class DomainStep(WizardStep):
         if choice == 3:
             self._buy(ctx, nameservers=nameservers)
         elif choice == 1:
+            self._warn_if_free(ctx)
             self._switch_hetzner_nameservers(ctx, nameservers)
         else:
+            self._warn_if_free(ctx)
             self._manual_nameservers(ctx, nameservers)
 
     def _switch_hetzner_nameservers(
@@ -127,7 +133,41 @@ class DomainStep(WizardStep):
 
     # ── Buy a fresh domain at Hetzner ────────────────────────────────
 
+    def _warn_if_free(self, ctx: BootstrapContext) -> None:
+        from cli.hetzner.domain_check import check_domain
+
+        try:
+            result = check_domain(ctx.base_domain, include_price=False)
+        except ValueError as exc:
+            ui.warning(f"Could not check domain ownership: {exc}")
+            return
+        if result.availability == "free":
+            ui.warning(
+                f"{result.domain} does not appear to be registered; verify that you own it."
+            )
+
     def _buy(self, ctx: BootstrapContext, nameservers: list[str] | None = None) -> None:
+        from cli.hetzner.domain_check import check_domain
+
+        try:
+            result = check_domain(ctx.base_domain)
+        except ValueError as exc:
+            raise click.ClickException(str(exc)) from exc
+        if result.availability == "registered":
+            raise click.ClickException(
+                f"{result.domain} is already registered; choose another domain or answer that you own it."
+            )
+        if result.availability == "unknown":
+            ui.warning(result.output())
+        else:
+            ui.info(result.output())
+        # --buy-domain with --yes is an explicit choice; the user still confirms
+        # the order and its price in Hetzner's browser flow.
+        if not ctx.non_interactive and not ui.confirm(
+            "Continue to Hetzner to review the domain order?", default=True
+        ):
+            raise click.ClickException("Cancelled.")
+        ctx.base_domain = result.domain
         ui.info(
             "Opening domain registration in your browser. "
             "Sign in to Hetzner and review and confirm the purchase yourself. "

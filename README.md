@@ -189,6 +189,21 @@ Use `startup <command> --help` to inspect options. The guided bootstrap is the
 complete first-deploy flow; lower-level repository creation is also available
 through `startup deploy create --repo-name my-startup`.
 
+Before registering a domain, check it without opening a browser or placing an order:
+
+```bash
+startup hetzner domain-check example.com
+```
+
+The command checks DENIC WHOIS for `.de` and IANA-discovered RDAP for other
+registrable domains. Exit codes are **0** free, **1** registered and **2**
+unknown/error. Hetzner's public TLD feed supplies a standard annual registration
+estimate in EUR, including 19% German VAT. Renewal prices are unknown because
+the feed does not list them separately; premium domains and your tax location
+may change the final price. If prices cannot be read, Hetzner shows them before
+you confirm the order. Bootstrap checks before buying and asks before opening
+registration; an availability check does not reserve the domain.
+
 ## Deploy and operate
 
 Run from your generated project's root. Local commands retrieve the project's
