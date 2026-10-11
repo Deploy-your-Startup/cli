@@ -228,7 +228,7 @@ production environment. Review the selected target version before running them.
 
 ## Deploy several startups to one cluster
 
-CLI `v0.1.9` pins the compatible Django template `v0.1.3`. Create one cluster
+CLI `v0.1.10` pins the compatible Django template `v0.1.4`. Create one cluster
 owner with `startup bootstrap --kind fullstack --provider hetzner --shared-cluster`.
 This provisions infrastructure in your account and puts the owner's application
 in its own namespace. Verify Actions, DNS and HTTPS before attaching another
