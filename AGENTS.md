@@ -1,8 +1,9 @@
 # Startup CLI contributor instructions
 
-## Tests: integration tests only, never unit tests
+## Tests: integration and E2E tests only, never unit tests
 
-**Every change ships with integration tests. Do not write unit tests.** This
+**Every change ships with integration tests, plus an E2E test when a user flow
+changes. Do not write unit tests.** This
 rule has no exceptions and applies to agents and humans alike.
 
 - An integration test drives the real thing: the real CLI process or public
@@ -19,8 +20,11 @@ rule has no exceptions and applies to agents and humans alike.
   subprocess (`python -m cli.startup ...`) or call a public entrypoint. For
   GitHub, put a fake `gh` on PATH backed by bare git repositories; see
   `tests/test_sync_versioning_integration.py` for the pattern.
+- E2E: when a command talks to servers over SSH, run it against a real SSH
+  server in a local Docker container (skipped without Docker) and replace only
+  Kubernetes with a stand-in; see `tests/test_shared_cluster_data_integration.py`.
 
-Again, because it matters: **integration tests, never unit tests.**
+Again, because it matters: **integration and E2E tests, never unit tests.**
 
 ### Ansible Vault compatibility
 
