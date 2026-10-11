@@ -34,6 +34,7 @@ PUBLIC_FIELDS = {
     "k8s_namespace",
     "ci_key",
     "user_key",
+    "kpis_website_id",
 }
 PROTECTED = ("deployment/group_vars/**",)
 
@@ -83,6 +84,19 @@ def template_authentication(source: str, version: str) -> str | None:
         if provider not in (None, "auth0"):
             raise click.ClickException("Unsupported template authentication provider.")
         return provider
+
+
+def template_kpis(source: str, version: str) -> bool:
+    """Inspect whether a template requests shared KPI tracking at bootstrap."""
+    require_committed_template(source, version)
+    with Worker(
+        src_path=source, vcs_ref=version, skip_tasks=True, quiet=True
+    ) as worker:
+        manifest = worker.template.local_abspath / "startup-template.yml"
+        if not manifest.is_file():
+            return False
+        values = yaml.safe_load(manifest.read_text())
+        return isinstance(values, dict) and values.get("kpis") is True
 
 
 def git(project: Path, *args: str) -> str:

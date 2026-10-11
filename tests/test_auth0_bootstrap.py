@@ -6,47 +6,6 @@ import pytest
 from cli import auth0_commands as auth
 
 
-def test_auth0_credentials_stay_in_stdin_and_cookie_survives_resume(
-    monkeypatch, tmp_path
-):
-    (tmp_path / "oauth2-proxy" / "deployment").mkdir(parents=True)
-    calls = []
-    responses = iter(
-        [
-            [],
-            {"client_id": "client-id", "client_secret": "private-client-secret"},
-            [{"identifier": "https://demo.example/private_api"}],
-        ]
-    )
-    monkeypatch.setattr(auth, "auth0_json", lambda *args: next(responses))
-
-    def run(command, **kwargs):
-        calls.append((command, kwargs))
-        if "get-field" in command:
-            return CompletedProcess(
-                command,
-                0 if command[-1] == "oauth2_proxy_cookie_secret" else 1,
-                "existing-cookie"
-                if command[-1] == "oauth2_proxy_cookie_secret"
-                else "",
-                "",
-            )
-        return CompletedProcess(command, 0, "", "")
-
-    monkeypatch.setattr(auth.subprocess, "run", run)
-    auth.configure_auth0(tmp_path, "demo", "demo.example", "tenant.eu.auth0.com")
-    updates = [(cmd, options) for cmd, options in calls if "update" in cmd]
-    secret_updates = [
-        (cmd, options)
-        for cmd, options in updates
-        if options["input"] == "private-client-secret"
-    ]
-    assert len(secret_updates) == 2
-    assert "--dry-run" in secret_updates[0][0]
-    assert all("private-client-secret" not in cmd for cmd, _ in calls)
-    assert not any("oauth2_proxy_cookie_secret" in cmd for cmd, _ in updates)
-
-
 def test_auth0_failure_does_not_print_provider_secrets(monkeypatch):
     monkeypatch.setattr(
         auth.subprocess,

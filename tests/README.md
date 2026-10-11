@@ -94,3 +94,13 @@ CLI subprocesses and the domain wizard against local TCP WHOIS and HTTP RDAP
 and pricing servers. The pricing fixture is Hetzner’s public EUR feed; browser
 launch is replaced only at the Playwright boundary. These checks place no
 orders and do not verify authenticated KonsoleH screens.
+
+## KPI bootstrap integration checks
+
+`test_kpis_bootstrap_integration.py` runs real Copier, project bootstrap, Git
+pinning and Ansible Vault encryption/rotation/decryption. A disposable owner
+repository and external GitHub/Auth0/Keychain stand-ins keep it local. It covers
+three independent secrets, a stable UUID and pin, no changes on resume, old
+owner copies missing shared roles, and idempotent Auth0 setup for both toggle
+names. The template revision is fixed in the test; set
+`STARTUP_KPIS_TEMPLATE_ROOT` to a local clone containing that revision.
