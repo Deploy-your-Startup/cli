@@ -74,6 +74,10 @@ cli.add_command(verify)
     show_default=True,
     help="Seconds to wait for deployment and DNS verification.",
 )
+@click.option(
+    "--max-monthly-cost",
+    help="Maximum gross Hetzner monthly estimate in the project currency; abort if exceeded or unavailable.",
+)
 @click.option("--verbose", "-V", is_flag=True, help="Verbose output")
 @click.option(
     "--kind",
@@ -152,6 +156,7 @@ cli.add_command(verify)
     help="Run without questions — every answer must come from the options above.",
 )
 def bootstrap(
+    max_monthly_cost,
     verify_deployment,
     verify_timeout,
     verbose,
@@ -195,6 +200,11 @@ def bootstrap(
     import sys
 
     from cli import wizard_output as ui
+    from cli.wizard.steps.cost import monthly_cost
+
+    max_monthly_cost = (
+        monthly_cost(max_monthly_cost) if max_monthly_cost is not None else None
+    )
 
     if hetzner_token_stdin:
         if hetzner_token:
@@ -451,6 +461,7 @@ def bootstrap(
         hetzner_token=hetzner_token,
         cloudflare_api_token=cloudflare_token,
         cloudflare_account_id=cloudflare_account_id,
+        max_monthly_cost=max_monthly_cost,
         non_interactive=assume_yes,
         domain_owned=domain_owned,
     )
@@ -1941,6 +1952,26 @@ def hetzner_setup(headless, project, token_name, register, email):
     else:
         click.echo("\n  No token obtained.", err=True)
         raise SystemExit(1)
+
+
+@hetzner.command("domain-check")
+@click.argument("domain")
+def hetzner_domain_check(domain):
+    """Check availability and Hetzner's public annual domain rate, without buying.
+
+    Exit codes: 0 = free, 1 = registered, 2 = unknown/error (including invalid input).
+    Registration estimates include 19% German VAT; renewal/premium prices may be unknown.
+    A free registry result does not guarantee Hetzner can sell the domain.
+    """
+    from cli.hetzner.domain_check import check_domain
+
+    try:
+        result = check_domain(domain)
+    except ValueError as exc:
+        click.echo(f"Invalid domain: {exc}", err=True)
+        raise SystemExit(2) from exc
+    click.echo(result.output())
+    raise SystemExit(result.exit_code)
 
 
 @hetzner.command("domain")

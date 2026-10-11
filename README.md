@@ -52,6 +52,16 @@ The first-deploy path creates Django/FastAPI, Postgres and HTTPS on k3s in your
 own accounts. An existing shared deployment repository is preserved. Advanced
 options, including Vue templates, are available through `startup bootstrap --help`.
 
+Before provisioning, full-stack Hetzner bootstrap shows the planned resources and
+a monthly estimate including VAT from your project’s Hetzner pricing. Confirm
+the estimate to continue; the default is No. `--yes` accepts the estimate. Add
+`--max-monthly-cost <amount>` to enforce a gross monthly cap in the displayed
+currency; bootstrap stops if the estimate exceeds it or pricing is unavailable.
+Without a cap, unavailable pricing requires interactive confirmation or `--yes`.
+Domain registration is billed yearly, with the price shown by Hetzner before
+you confirm the purchase. Shared-cluster attachments create no infrastructure
+and skip this preview.
+
 Full-stack Hetzner bootstrap requests deployment, prints the required DNS A
 record once the server exists, and verifies the latest Actions runs, DNS, TLS
 and `/api/health`. It waits up to 900 seconds by default. Failed or unfinished
@@ -178,6 +188,21 @@ front; browser account setup may still require a person to sign in.
 Use `startup <command> --help` to inspect options. The guided bootstrap is the
 complete first-deploy flow; lower-level repository creation is also available
 through `startup deploy create --repo-name my-startup`.
+
+Before registering a domain, check it without opening a browser or placing an order:
+
+```bash
+startup hetzner domain-check example.com
+```
+
+The command checks DENIC WHOIS for `.de` and IANA-discovered RDAP for other
+registrable domains. Exit codes are **0** free, **1** registered and **2**
+unknown/error. Hetzner's public TLD feed supplies a standard annual registration
+estimate in EUR, including 19% German VAT. Renewal prices are unknown because
+the feed does not list them separately; premium domains and your tax location
+may change the final price. If prices cannot be read, Hetzner shows them before
+you confirm the order. Bootstrap checks before buying and asks before opening
+registration; an availability check does not reserve the domain.
 
 ## Deploy and operate
 

@@ -48,6 +48,12 @@ Ask **one** bundled question with only what is missing:
 Optional, ask only if the user brings it up: extra domains, a Sentry DSN, the
 Vue template, Auth0 login (`--auth0-tenant`; otherwise pass `--without-auth`).
 
+Before domain registration, run `startup hetzner domain-check <domain>` (read-only).
+Exit codes: 0 free, 1 registered, 2 unknown/error. The published standard
+registration estimate includes 19% German VAT; renewal and premium prices may
+be unknown. Review the final price in Hetzner before confirming. Bootstrap
+checks before buying and asks to continue; `--yes` never buys a domain.
+
 Before running anything, state the cost: servers and domains are billed by the
 user's providers. Then prefer the unattended form — every question has an
 option, and `--yes` turns missing answers into errors naming the option:
@@ -74,6 +80,14 @@ Use `--output-dir <dir>` when the user keeps projects in a specific folder.
 Run bootstrap outside a sandbox: the Hetzner and Cloudflare steps can open a
 real browser for the user to sign in. If no token is passed, that browser path
 is used. Pass tokens via `--hetzner-token-stdin`, never as an argument.
+
+Full-stack Hetzner bootstrap previews monthly net/gross resource prices before
+provisioning and asks for confirmation (default No). `--yes` accepts the estimate;
+use `--max-monthly-cost <amount>` for a user-approved gross cap in the project
+currency. The cap aborts if prices are unavailable or exceed it. Without a cap,
+`--yes` proceeds with a warning if pricing is unavailable. Domain prices are
+shown by Hetzner before purchase and billed yearly. Shared-cluster attachments
+skip the resource estimate because they provision no infrastructure.
 
 Bootstrap is resumable — every step checks whether its outcome already exists.
 After an interruption, run the same command again rather than cleaning up by
