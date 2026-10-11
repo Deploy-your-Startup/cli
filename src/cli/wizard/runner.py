@@ -14,6 +14,7 @@ from .context import BootstrapContext
 from .steps.auth0 import Auth0Step
 from .steps.byos import ByosStep
 from .steps.cloudflare import CloudflareStep
+from .steps.cost import CostStep
 from .steps.domain import DomainStep
 from .steps.finalize import FinalizeStep
 from .steps.hetzner import HetznerStep
@@ -27,6 +28,7 @@ FULLSTACK_STEPS: list[type[WizardStep]] = [
     DomainStep,
     HetznerStep,
     ProjectStep,
+    CostStep,
     FinalizeStep,
 ]
 # Bring-your-own-server: no Hetzner token and no domain-registrar step — the user
@@ -52,6 +54,8 @@ def steps_for(ctx: BootstrapContext) -> list[type[WizardStep]]:
     if ctx.kind == "pitch":
         return PITCH_STEPS
     steps = list(BYOS_STEPS if ctx.provider == "byos" else FULLSTACK_STEPS)
+    if ctx.cluster_config:
+        steps = [step for step in steps if step is not CostStep]
     if ctx.auth0_tenant:
         steps.insert(-1, Auth0Step)
     return steps
