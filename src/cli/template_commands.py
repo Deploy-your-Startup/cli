@@ -18,8 +18,8 @@ PITCH_TEMPLATE = "https://github.com/Deploy-your-Startup/pitch-template.git"
 # The tested release of DEFAULT_TEMPLATE that this CLI release bootstraps. This
 # is the only place the default template version is pinned; installers and
 # docs call `startup bootstrap` without --template-version.
-DEFAULT_TEMPLATE_VERSION = "v0.1.4"
-PITCH_TEMPLATE_VERSION = "v0.1.0"
+DEFAULT_TEMPLATE_VERSION = "v0.1.5"
+PITCH_TEMPLATE_VERSION = "v0.1.1"
 
 ANSWERS_FILE = ".copier-answers.yml"
 PUBLIC_FIELDS = {
