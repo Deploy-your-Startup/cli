@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 
 from cli.template_commands import DEFAULT_TEMPLATE
@@ -41,6 +42,7 @@ class BootstrapContext:
     non_interactive: bool = False
     # None means "ask"; True/False answer the domain-ownership question.
     domain_owned: bool | None = None
+    max_monthly_cost: Decimal | None = None
 
     # Populated by steps
     hetzner_token: str | None = None

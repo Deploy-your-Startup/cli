@@ -4,7 +4,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
 
-import httpx
 import pytest
 
 from cli.hetzner import config
@@ -40,15 +39,7 @@ def test_saved_token_is_used_only_for_the_requested_project(
     server = ThreadingHTTPServer(("127.0.0.1", 0), Provider)
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    real_get = httpx.get
-    # Replace only the provider boundary; our credential and wizard code stays real.
-    monkeypatch.setattr(
-        httpx,
-        "get",
-        lambda _url, **kwargs: real_get(
-            f"http://127.0.0.1:{server.server_port}", **kwargs
-        ),
-    )
+    monkeypatch.setenv("HCLOUD_API_URL", f"http://127.0.0.1:{server.server_port}/v1")
     monkeypatch.setattr(config, "TOKEN_FILE", tmp_path / "credentials/hetzner.env")
     save_token("saved-synthetic-token", saved_project)
     ctx = BootstrapContext(
