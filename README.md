@@ -52,6 +52,12 @@ The first-deploy path creates Django/FastAPI, Postgres and HTTPS on k3s in your
 own accounts. An existing shared deployment repository is preserved. Advanced
 options, including Vue templates, are available through `startup bootstrap --help`.
 
+If your account already has a shared deployment repository, preview
+`startup sync --source-version v0.1.6 --dry-run`, review it, then run
+`startup sync --source-version v0.1.6` before generating another full-stack
+project. The current templates require that release's coverage workflow input.
+Sync preserves existing application pins; advance those only after review.
+
 Before provisioning, full-stack Hetzner bootstrap shows the planned resources and
 a monthly estimate including VAT from your project’s Hetzner pricing. Confirm
 the estimate to continue; the default is No. `--yes` accepts the estimate. Add
@@ -88,7 +94,7 @@ on every push to `main`. It needs a GitHub account, a free Cloudflare account an
 a domain; no server is created. This flow requires CLI `v0.1.6` or later.
 
 ```bash
-startup bootstrap --kind pitch --template-version v0.1.0
+startup bootstrap --kind pitch --template-version v0.1.1
 ```
 
 The wizard opens the Cloudflare dashboard and asks for an API token with these
@@ -228,14 +234,14 @@ production environment. Review the selected target version before running them.
 
 ## Deploy several startups to one cluster
 
-CLI `v0.1.10` pins the compatible Django template `v0.1.4`. Create one cluster
+CLI `v0.1.11` pins the compatible Django template `v0.1.6`. Create one cluster
 owner with `startup bootstrap --kind fullstack --provider hetzner --shared-cluster`.
 This provisions infrastructure in your account and puts the owner's application
 in its own namespace. Verify Actions, DNS and HTTPS before attaching another
 startup. Cluster failures and upgrades affect every application using it.
 
 For Vue, select `--template https://github.com/Deploy-your-Startup/vue-django-template.git
---template-version v0.1.2`. Older templates without shared-cluster support are
+--template-version v0.1.5`. Older templates without shared-cluster support are
 rejected before account or server setup.
 
 From the owner's project, export its public connection settings:

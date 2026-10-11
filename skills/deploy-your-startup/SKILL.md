@@ -48,6 +48,12 @@ Ask **one** bundled question with only what is missing:
 Optional, ask only if the user brings it up: extra domains, a Sentry DSN, the
 Vue template, Auth0 login (`--auth0-tenant`; otherwise pass `--without-auth`).
 
+If your account already has a shared deployment repository, preview
+`startup sync --source-version v0.1.6 --dry-run`, review it, then run
+`startup sync --source-version v0.1.6` before generating another full-stack
+project. The current templates require that release's coverage workflow input.
+Sync preserves existing application pins; advance those only after review.
+
 Before domain registration, run `startup hetzner domain-check <domain>` (read-only).
 Exit codes: 0 free, 1 registered, 2 unknown/error. The published standard
 registration estimate includes 19% German VAT; renewal and premium prices may
@@ -172,9 +178,9 @@ Bootstrap additional applications with `--cluster <file> --kind fullstack`,
 unique project names and domains. Point their DNS at the same ingress; attachment
 creates no servers. Each project has its own namespace, database, media and Vault.
 
-CLI v0.1.10 pins the compatible Django template v0.1.4, so shared mode works
+CLI v0.1.11 pins the compatible Django template v0.1.6, so shared mode works
 without an extra template option. Vue requires its template source and
---template-version v0.1.2. Older templates without the capability are rejected
+--template-version v0.1.5. Older templates without the capability are rejected
 before account or server setup.
 
 Use the following sequence; do not attach applications until the owner is verified:

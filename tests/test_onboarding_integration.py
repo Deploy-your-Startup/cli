@@ -119,7 +119,7 @@ def test_launch_plan_shows_the_pinned_default_template(tmp_path):
     result = launch(tmp_path, "my-startup\nexample.com\n\n\n")
     # THEN the plan names the tested template release this CLI pins.
     assert result.returncode == 0, result.stderr
-    assert "Template  Django/FastAPI v0.1.4" in result.stdout
+    assert "Template  Django/FastAPI v0.1.6" in result.stdout
 
 
 def test_explicit_or_custom_templates_keep_their_version(tmp_path):
@@ -157,7 +157,7 @@ def test_pitch_launch_pins_builtin_and_preserves_explicit_templates(tmp_path):
     )
     # THEN the plan names the pinned release, preserves overrides and cancels.
     for result, version in [
-        (default, "v0.1.0"),
+        (default, "v0.1.1"),
         (explicit, "v2.0.0"),
         (custom, "HEAD"),
     ]:
@@ -182,6 +182,10 @@ def test_shared_owner_launch_uses_the_compatible_published_default(tmp_path):
     )
     # THEN no unpublished template ref or cloud resources are needed for the plan.
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "Template  Django/FastAPI v0.1.4" in result.stdout
+    assert "Template  Django/FastAPI v0.1.6" in result.stdout
     assert "Cancelled. No resources were created." in result.stdout
     assert not (tmp_path / "projects").exists()
+    readme = (ROOT / "README.md").read_text()
+    assert "CLI `v0.1.11` pins the compatible Django template `v0.1.6`" in readme
+    assert "startup bootstrap --kind pitch --template-version v0.1.1" in readme
+    assert "startup sync --source-version v0.1.6 --dry-run" in readme
