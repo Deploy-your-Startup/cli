@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import shlex
 import subprocess
 import tempfile
@@ -216,6 +217,24 @@ class ProjectStep(WizardStep):
                 )
         ui.action_done("Project configured")
 
+        has_kpis = all(
+            any(
+                f"{field}:" in path.read_text()
+                for path in (ctx.deployment_dir / "group_vars").glob("*.yml")
+            )
+            for field in ("kpis_db_password", "kpis_app_secret", "kpis_admin_password")
+        )
+        if has_kpis:
+            from cli.ansible_commands import run_pin
+
+            # Resolve the owner copy after sync, before the first push can deploy.
+            run_pin(
+                working_directory=str(ctx.deployment_dir),
+                version=ctx.deployment_ref,
+                repo_url=os.environ.get("STARTUP_ANSIBLE_REPO_URL")
+                or f"https://github.com/{ctx.github_username}/deploy-your-startup.git",
+            )
+
         # 3d. Vault secrets
         ui.action_start("Encrypting secrets...")
         from cli.update_vault_secrets import update_secrets as update_vault_secrets
@@ -232,6 +251,10 @@ class ProjectStep(WizardStep):
             for path in (ctx.deployment_dir / "group_vars").glob("*.yml")
         ):
             field_random.append("backend_secret_key")
+        if has_kpis:
+            field_random.extend(
+                ["kpis_db_password", "kpis_app_secret", "kpis_admin_password"]
+            )
         field_set = [
             ("postgres_admin_username", "admin"),
             ("docker_config_json_b64", docker_config_b64),

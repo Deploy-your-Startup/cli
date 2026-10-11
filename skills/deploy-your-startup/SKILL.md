@@ -249,3 +249,16 @@ never pass them as command-line arguments.
   "fix" it; update it with `startup template update`.
 - If a command fails, read its message — the CLI names the missing option,
   prerequisite or next step — and fix that before retrying.
+
+## KPI-capable application templates
+
+Templates with `kpis: true` request the shared authentication and KPI roles at
+bootstrap. The CLI checks the owner's deployment copy, pins its role revision
+and checksum, generates a stable public website UUID, and encrypts
+`kpis_db_password`, `kpis_app_secret` and `kpis_admin_password`. Resuming a
+configured project preserves them. No analytics credentials belong in Copier
+answers. Existing projects must explicitly enable `kpis_enabled` and approve
+production deployment. Disabling tracking preserves analytics data.
+
+Auth0 setup accepts the shared `oauth2_proxy_enabled` setting while preserving
+`oauth_enabled` for legacy project-owned roles.
