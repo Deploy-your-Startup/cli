@@ -172,7 +172,7 @@ Bootstrap additional applications with `--cluster <file> --kind fullstack`,
 unique project names and domains. Point their DNS at the same ingress; attachment
 creates no servers. Each project has its own namespace, database, media and Vault.
 
-CLI v0.1.9 pins the compatible Django template v0.1.3, so shared mode works
+CLI v0.1.10 pins the compatible Django template v0.1.4, so shared mode works
 without an extra template option. Vue requires its template source and
 --template-version v0.1.2. Older templates without the capability are rejected
 before account or server setup.
