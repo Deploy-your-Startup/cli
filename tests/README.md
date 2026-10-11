@@ -76,3 +76,11 @@ created by these checks.
 
 `tests/test_launch_animation_integration.py` uses a real pseudo-terminal to check
 a single launch, stationary prompts, motion opt-out and cursor restoration on interruption.
+
+`test_kpis_bootstrap_integration.py` runs real Copier, project bootstrap, Git
+pinning and Ansible Vault encryption/rotation/decryption. A disposable owner
+repository and external GitHub/Auth0/Keychain stand-ins keep it local. It covers
+three independent secrets, a stable UUID and pin, no changes on resume, old
+owner copies missing shared roles, and idempotent Auth0 setup for both toggle
+names. The template revision is fixed in the test; set
+`STARTUP_KPIS_TEMPLATE_ROOT` to a local clone containing that revision.
