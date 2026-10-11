@@ -11,6 +11,7 @@ from uuid import UUID
 import pytest
 import yaml
 
+from cli.bootstrap import TEMPLATE_VAULT_PASSWORD
 from tests.vault_support import RealVault
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,11 +37,38 @@ def bootstrap_environment(tmp_path):
     # GIVEN a committed real template and a real local shared deployment repo.
     template = tmp_path / "template"
     source = os.environ.get("STARTUP_KPIS_TEMPLATE_ROOT", TEMPLATE_SOURCE)
-    subprocess.run(["git", "clone", "--quiet", source, str(template)], check=True)
-    subprocess.run(
-        ["git", "-C", str(template), "checkout", "--quiet", TEMPLATE_REVISION],
-        check=True,
-    )
+    if os.environ.get("STARTUP_KPIS_TEMPLATE_ROOT"):
+        # Include unpublished template fixes in a disposable committed fixture.
+        shutil.copytree(
+            source,
+            template,
+            ignore=shutil.ignore_patterns(
+                ".git", ".venv", "node_modules", "__pycache__", ".pytest_cache"
+            ),
+        )
+        subprocess.run(["git", "-C", str(template), "init", "-q"], check=True)
+        subprocess.run(["git", "-C", str(template), "add", "."], check=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(template),
+                "-c",
+                "user.name=Integration",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "-qm",
+                "template fixture",
+            ],
+            check=True,
+        )
+    else:
+        subprocess.run(["git", "clone", "--quiet", source, str(template)], check=True)
+        subprocess.run(
+            ["git", "-C", str(template), "checkout", "--quiet", TEMPLATE_REVISION],
+            check=True,
+        )
     shared = tmp_path / "shared"
     for role in ("oauth2-proxy", "kpis"):
         path = shared / "roles" / role / "tasks"
@@ -174,7 +202,12 @@ def test_bootstrap_generates_secrets_uuid_pin_and_preserves_them_on_resume(
         (deployment / "group_vars/all.yml").read_text(), Loader=yaml.BaseLoader
     )
     website = UUID(values["kpis_website_id"])
-    assert website.version == 4 and values["kpis_enabled"] == "true"
+    template_settings = yaml.load(
+        (template / "template/deployment/group_vars/all.yml").read_text(),
+        Loader=yaml.BaseLoader,
+    )
+    assert website.version == 4
+    assert values["kpis_enabled"] == template_settings["kpis_enabled"]
     password = keychain.read_text()
     vault = RealVault(password)
     production = yaml.load(
@@ -184,6 +217,19 @@ def test_bootstrap_generates_secrets_uuid_pin_and_preserves_them_on_resume(
         vault.decrypt(production[name])
         for name in ("kpis_db_password", "kpis_app_secret", "kpis_admin_password")
     ]
+    seed_values = yaml.load(
+        (template / "template/deployment/group_vars/production.yml").read_text(),
+        Loader=yaml.BaseLoader,
+    )
+    seed_vault = RealVault(TEMPLATE_VAULT_PASSWORD)
+    public_seeds = [
+        seed_vault.decrypt(seed_values[name])
+        for name in ("kpis_db_password", "kpis_app_secret", "kpis_admin_password")
+    ]
+    # THEN values themselves change, rather than only re-encrypting public seeds.
+    assert all(secret not in public_seeds for secret in secrets)
+    with pytest.raises(subprocess.CalledProcessError):
+        seed_vault.decrypt(production["kpis_admin_password"])
     # THEN all three credentials are random, encrypted and absent from output/answers.
     assert len(set(secrets)) == 3 and all(len(secret) == 32 for secret in secrets)
     visible = (
