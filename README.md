@@ -443,3 +443,18 @@ then repeat without `--dry-run`. Exact UTF-8 contents are preserved.
 Saved Hetzner tokens are reused only for their recorded project. For isolated
 automation, set `HETZNER_BOOTSTRAP_TOKEN_FILE` to a dedicated absolute path.
 An explicitly supplied token takes precedence over saved credentials.
+
+### Templates with shared KPI tracking
+
+Templates declaring `kpis: true` in `startup-template.yml` request shared
+`oauth2-proxy` and `kpis` roles before project setup. Bootstrap syncs an older
+owner deployment copy when those roles are missing, records its immutable role
+revision and checksum, creates a stable public website UUID, and encrypts three
+independent credentials: `kpis_db_password`, `kpis_app_secret` and
+`kpis_admin_password`. Resuming a configured project preserves the UUID and
+credentials. Templates without this capability retain their existing behavior.
+
+Read the admin password with `startup secrets get-field -f deployment/group_vars/production.yml --field kpis_admin_password`. Use the
+project's `kpis_enabled` setting to stop frontend tracking, without deleting
+stored analytics. Auth0 setup supports the shared `oauth2_proxy_enabled` toggle
+and retains `oauth_enabled` for older templates with a local proxy role.

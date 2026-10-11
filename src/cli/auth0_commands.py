@@ -130,8 +130,24 @@ def validate_live_login(origin: str, tenant: str, timeout: int) -> None:
 def configure_auth0(
     project_dir: Path, project_name: str, base_domain: str, tenant: str
 ) -> None:
-    if not (project_dir / "oauth2-proxy" / "deployment").is_dir():
+    playbook = project_dir / "deployment" / "playbook.yml"
+    has_shared_proxy = (
+        playbook.is_file() and "name: oauth2-proxy" in playbook.read_text()
+    )
+    if (
+        not (project_dir / "oauth2-proxy" / "deployment").is_dir()
+        and not has_shared_proxy
+    ):
         raise click.ClickException("This template has no oauth2-proxy role.")
+    configuration = "\n".join(
+        path.read_text()
+        for path in (project_dir / "deployment" / "group_vars").glob("*.yml")
+    )
+    proxy_toggle = (
+        "oauth2_proxy_enabled"
+        if "oauth2_proxy_enabled:" in configuration
+        else "oauth_enabled"
+    )
     origin = f"https://{base_domain}"
     callback = f"{origin}/oauth2/callback"
     apps = auth0_json("apps", "list", "--tenant", tenant)
@@ -221,7 +237,7 @@ def configure_auth0(
         "oauth2_proxy_cookie_secret": cookie_secret,
         "auth_domain": f"https://{tenant}",
         "auth_audience": audience,
-        "oauth_enabled": "true",
+        proxy_toggle: "true",
     }
     for field, value in values.items():
         current = subprocess.run(
