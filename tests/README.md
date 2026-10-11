@@ -76,3 +76,13 @@ created by these checks.
 
 `tests/test_launch_animation_integration.py` uses a real pseudo-terminal to check
 a single launch, stationary prompts, motion opt-out and cursor restoration on interruption.
+
+## Bootstrap cost integration checks
+
+`uv run --extra dev pytest tests/test_bootstrap_cost_integration.py` exercises
+real group_vars (including Vault scalars), decimal estimates, consent, caps,
+missing prices and HTTP failures against a local Hetzner API stand-in.
+`HCLOUD_API_URL` overrides the Cloud API base URL for isolated provider tests.
+The macOS bootstrap process checks use local Git repositories and stand-ins for
+GitHub and Keychain; they verify cancellation prevents workflow dispatch.
+They do not verify live pricing or provisioning.

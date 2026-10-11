@@ -9,13 +9,14 @@ from cli import wizard_output as ui
 
 from ..base import WizardStep
 from ..context import BootstrapContext
+from .cost import api_url
 
 
 def validate_hetzner_token(token: str) -> bool:
     """Validate a project-scoped Hetzner API token with a lightweight read."""
     try:
         resp = httpx.get(
-            "https://api.hetzner.cloud/v1/servers",
+            f"{api_url()}/servers",
             headers={"Authorization": f"Bearer {token}"},
             params={"per_page": 1},
             timeout=10,

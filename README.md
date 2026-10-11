@@ -52,6 +52,16 @@ The first-deploy path creates Django/FastAPI, Postgres and HTTPS on k3s in your
 own accounts. An existing shared deployment repository is preserved. Advanced
 options, including Vue templates, are available through `startup bootstrap --help`.
 
+Before provisioning, full-stack Hetzner bootstrap shows the planned resources and
+a monthly estimate including VAT from your project’s Hetzner pricing. Confirm
+the estimate to continue; the default is No. `--yes` accepts the estimate. Add
+`--max-monthly-cost <amount>` to enforce a gross monthly cap in the displayed
+currency; bootstrap stops if the estimate exceeds it or pricing is unavailable.
+Without a cap, unavailable pricing requires interactive confirmation or `--yes`.
+Domain registration is billed yearly, with the price shown by Hetzner before
+you confirm the purchase. Shared-cluster attachments create no infrastructure
+and skip this preview.
+
 Full-stack Hetzner bootstrap requests deployment, prints the required DNS A
 record once the server exists, and verifies the latest Actions runs, DNS, TLS
 and `/api/health`. It waits up to 900 seconds by default. Failed or unfinished

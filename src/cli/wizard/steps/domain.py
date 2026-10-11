@@ -130,7 +130,8 @@ class DomainStep(WizardStep):
     def _buy(self, ctx: BootstrapContext, nameservers: list[str] | None = None) -> None:
         ui.info(
             "Opening domain registration in your browser. "
-            "Sign in to Hetzner and review and confirm the purchase yourself."
+            "Sign in to Hetzner and review and confirm the purchase yourself. "
+            "Hetzner shows the domain price before you confirm; it is billed yearly."
         )
         from cli.hetzner import register_domain
 
