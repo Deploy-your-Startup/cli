@@ -52,6 +52,12 @@ The first-deploy path creates Django/FastAPI, Postgres and HTTPS on k3s in your
 own accounts. An existing shared deployment repository is preserved. Advanced
 options, including Vue templates, are available through `startup bootstrap --help`.
 
+If your account already has a shared deployment repository, preview
+`startup sync --source-version v0.1.6 --dry-run`, review it, then run
+`startup sync --source-version v0.1.6` before generating another full-stack
+project. The current templates require that release's coverage workflow input.
+Sync preserves existing application pins; advance those only after review.
+
 Before provisioning, full-stack Hetzner bootstrap shows the planned resources and
 a monthly estimate including VAT from your project’s Hetzner pricing. Confirm
 the estimate to continue; the default is No. `--yes` accepts the estimate. Add
