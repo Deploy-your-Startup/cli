@@ -263,10 +263,10 @@ class ProjectStep(WizardStep):
             field_set.append(("backend_sentry_dsn", ctx.sentry_dsn))
 
         # ci_ssh_key doubles as the deploy key for byos (the local/CI deploy reads
-        # it from the vault to SSH into the VPS). The hcloud token only exists for
-        # the Hetzner provider.
+        # it from the vault to SSH into the VPS). The hcloud token exists for the
+        # Hetzner provider and for attached startups whose DNS lives at Hetzner.
         file_content = [("ci_ssh_key", ci_private_key)]
-        if ctx.provider == "hetzner":
+        if ctx.hetzner_token:
             file_content.append(("hcloud_token_production", ctx.hetzner_token))
 
         ok, _, pw_failed = update_vault_secrets(
