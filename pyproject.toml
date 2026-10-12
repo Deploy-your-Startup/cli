@@ -38,6 +38,7 @@ dev = [
     # Pinned to a minor series on purpose: `ruff>=` plus `uvx ruff` meant every
     # developer and CI run could pick up a different ruff whose default rule set
     # had grown. Bump this deliberately, then run `./make.sh format`.
+    "pytest-xdist==3.8.0",
     "ruff>=0.16.0,<0.17",
     # Exact pin, not a range: ty is 0.0.x and explicitly has no stable API —
     # diagnostics can change between any two releases. Since `./make.sh lint`

@@ -48,6 +48,9 @@ def project(tmp_path):
         "STARTUP_VAULT_PASSWORD": PASSWORD,
         "STARTUP_DISABLE_KEYCHAIN_VAULT": "1",
         "UV_PROJECT_ENVIRONMENT": str(Path(sys.executable).parent.parent),
+        # Use the test environment as-is; syncing it to the project would remove
+        # packages that tests running in parallel depend on.
+        "UV_NO_SYNC": "1",
         "GIT_AUTHOR_NAME": "Integration",
         "GIT_AUTHOR_EMAIL": "test@example.com",
         "GIT_COMMITTER_NAME": "Integration",
