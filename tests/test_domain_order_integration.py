@@ -4,6 +4,7 @@ browser, THEN it picks the owner and only places the binding order when told to.
 import html
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
+from typing import Any
 from urllib.parse import parse_qs
 
 import pytest
@@ -101,7 +102,7 @@ def summary_page(contact):
 @pytest.fixture
 def konsoleh(monkeypatch, tmp_path):
     """A stand-in for Hetzner's KonsoleH order pages, reached over real HTTP."""
-    state = {"contacts": list(CONTACTS), "owner": None, "orders": []}
+    state: dict[str, Any] = {"contacts": list(CONTACTS), "owner": None, "orders": []}
 
     class KonsoleH(BaseHTTPRequestHandler):
         def respond(self, body):
