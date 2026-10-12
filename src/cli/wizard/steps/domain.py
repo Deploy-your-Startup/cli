@@ -161,21 +161,26 @@ class DomainStep(WizardStep):
             ui.warning(result.output())
         else:
             ui.info(result.output())
-        # --buy-domain with --yes is an explicit choice; the user still confirms
-        # the order and its price in Hetzner's browser flow.
+        # --buy-domain with --yes is an explicit choice; the binding order still
+        # needs a terminal confirmation, --confirm-domain-order or the browser.
         if not ctx.non_interactive and not ui.confirm(
             "Continue to Hetzner to review the domain order?", default=True
         ):
             raise click.ClickException("Cancelled.")
         ctx.base_domain = result.domain
         ui.info(
-            "Opening domain registration in your browser. "
-            "Sign in to Hetzner and review and confirm the purchase yourself. "
-            "Hetzner shows the domain price before you confirm; it is billed yearly."
+            "Opening domain registration in your browser. Sign in to Hetzner; "
+            "the CLI shows Hetzner's order summary and price before ordering. "
+            "Domains are billed yearly."
         )
         from cli.hetzner import register_domain
 
-        ok = register_domain(domain=ctx.base_domain, nameservers=nameservers)
+        ok = register_domain(
+            domain=ctx.base_domain,
+            nameservers=nameservers,
+            contact_email=ctx.domain_contact,
+            confirm_order=True if ctx.confirm_domain_order else None,
+        )
         if ok:
             ui.action_done("Domain registered")
         else:

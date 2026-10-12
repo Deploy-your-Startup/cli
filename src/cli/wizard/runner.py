@@ -56,6 +56,10 @@ def steps_for(ctx: BootstrapContext) -> list[type[WizardStep]]:
     steps = list(BYOS_STEPS if ctx.provider == "byos" else FULLSTACK_STEPS)
     if ctx.cluster_config:
         steps = [step for step in steps if step is not CostStep]
+        if ctx.domain_owned is False:
+            # Attaching creates no servers, but the new startup's domain can
+            # still be bought through Hetzner before the project is set up.
+            steps.insert(steps.index(ProjectStep), DomainStep)
     if ctx.auth0_tenant:
         steps.insert(-1, Auth0Step)
     return steps
