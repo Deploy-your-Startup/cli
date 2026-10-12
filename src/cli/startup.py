@@ -251,10 +251,11 @@ def bootstrap(
             shared_cluster
             or provider not in (None, "byos")
             or byos_host
-            or hetzner_token
+            or (hetzner_token and domain_owned is not False)
         ):
             raise click.ClickException(
-                "--cluster cannot be combined with --shared-cluster, Hetzner provisioning or --byos-host."
+                "--cluster cannot be combined with --shared-cluster, Hetzner provisioning, "
+                "--byos-host or a Hetzner token (except for the DNS of --buy-domain)."
             )
         cluster_config = read_descriptor(cluster_path)
         provider = "byos"
@@ -477,6 +478,20 @@ def bootstrap(
         domain_contact=domain_contact,
         confirm_domain_order=confirm_domain_order,
     )
+
+    if cluster_config and domain_owned is False:
+        # The attach flow creates the project before ordering, so a taken
+        # domain must stop it here rather than after the repository exists.
+        from cli.hetzner.domain_check import check_domain
+
+        try:
+            availability = check_domain(base_domain, include_price=False).availability
+        except ValueError as exc:
+            raise click.ClickException(str(exc)) from exc
+        if availability == "registered":
+            raise click.ClickException(
+                f"{base_domain} is already registered; choose another domain or use --domain-owned."
+            )
 
     run_wizard(ctx)
     if verify_deployment and ctx.kind == "fullstack" and ctx.provider == "hetzner":
@@ -1480,6 +1495,66 @@ def ansible_backup(
         working_directory=working_directory,
         backup_dir=backup_dir,
         playbook=playbook,
+        shared_dir=shared_dir,
+        version=version,
+        refresh=refresh,
+        repo_url=repo_url,
+    )
+
+
+@ansible.command("dns")
+@click.option(
+    "--vault-password",
+    "--vault_password",
+    "vault_password",
+    help="Vault password",
+)
+@click.option("--environment", required=True, help="Target environment")
+@click.option(
+    "--working-directory",
+    "--working_directory",
+    "working_directory",
+    default=".",
+    show_default=True,
+)
+@click.option(
+    "--shared-dir", "--shared_dir", default=".shared-roles", show_default=True
+)
+@click.option("--version", default="main", show_default=True)
+@click.option(
+    "--refresh/--no-refresh",
+    default=True,
+    show_default=True,
+    help="Refresh `.shared-roles` from git instead of reusing an existing exported copy",
+)
+@click.option(
+    "--repo-url",
+    "--repo_url",
+    default=None,
+    help="Override shared roles repository URL",
+)
+def ansible_dns(
+    vault_password,
+    environment,
+    working_directory,
+    shared_dir,
+    version,
+    refresh,
+    repo_url,
+):
+    """Point the domains at the cluster through Hetzner DNS, without provisioning.
+
+    For startups attached to a shared cluster (or on their own server) whose
+    Vault holds a Hetzner token for the project that owns the DNS zone.
+    """
+    from cli.ansible_commands import resolve_vault_password, run_dns
+
+    run_dns(
+        vault_password=resolve_vault_password(
+            vault_password=vault_password, working_directory=working_directory
+        ),
+        environment=environment,
+        working_directory=working_directory,
         shared_dir=shared_dir,
         version=version,
         refresh=refresh,
