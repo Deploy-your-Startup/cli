@@ -7,7 +7,10 @@ separate from the Cloud Console but using the same Hetzner account.
 
 from __future__ import annotations
 
+import sys
 from urllib.parse import urlparse
+
+import click
 
 from ..playwright_errors import playwright_error
 from . import _output as ui
@@ -82,11 +85,7 @@ class HetznerKonsoleHAutomation:
         # Check if already logged in
         try:
             await self.page.goto(target_url, wait_until="networkidle")
-            if (
-                "konsoleh.hetzner.com" in self.page.url
-                and "accounts.hetzner" not in self.page.url
-                and "/404" not in self.page.url
-            ):
+            if _is_konsoleh(self.page.url) and "/404" not in self.page.url:
                 ui.success("Already logged in to KonsoleH (saved session).")
                 return True
         except playwright_error():
@@ -114,7 +113,7 @@ class HetznerKonsoleHAutomation:
                 )
                 await self.page.goto(target_url, wait_until="networkidle")
 
-            return "konsoleh.hetzner.com" in self.page.url
+            return _is_konsoleh(self.page.url)
         except playwright_error():
             return False
 
@@ -131,7 +130,11 @@ class HetznerKonsoleHAutomation:
     # ── Domain Registration ──────────────────────────────────────────
 
     async def register_domain(
-        self, domain: str, nameservers: list[str] | None = None
+        self,
+        domain: str,
+        nameservers: list[str] | None = None,
+        contact_email: str | None = None,
+        confirm_order: bool | None = None,
     ) -> bool:
         """
         Register a domain via KonsoleH order page.
@@ -143,6 +146,13 @@ class HetznerKonsoleHAutomation:
         ``nameservers`` overrides the default Hetzner nameservers — pass the
         Cloudflare-assigned NS here to delegate DNS to Cloudflare directly at
         registration time. Falls back to manual instructions if automation fails.
+
+        The domain owner is an existing KonsoleH contact: the only one, the one
+        whose e-mail matches ``contact_email``, or the one the user picks. New
+        contacts are never created here. ``confirm_order`` True places the
+        binding order without asking; False never clicks it; None asks in an
+        interactive terminal. Without that click the user orders in the browser
+        and the flow waits until Hetzner has accepted the order.
         """
         nameservers = nameservers or config.HETZNER_NAMESERVERS
         ui.info(f'Registering domain "{domain}"...')
@@ -163,23 +173,160 @@ class HetznerKonsoleHAutomation:
         except playwright_error():
             ui.warning(f"Could not pre-fill domain — please enter '{domain}' manually.")
 
+        if await self._choose_domain_owner(contact_email):
+            await self._continue_to_order_summary()
+
+        if not await self._wait_for_order_summary():
+            ui.error(
+                "Hetzner's order summary did not appear. No order was placed; "
+                "finish or cancel it in the browser."
+            )
+            return False
+
+        summary = await self._read_order_summary()
         ui.info(
-            "Please complete the domain order in the browser:\n"
-            "     1. Verify the domain name is correct\n"
-            "     2. Select/create contact handles if needed\n"
-            "     3. Verify nameservers:\n"
-            f"        {', '.join(nameservers)}\n"
-            "     4. Complete the order"
+            "Order summary from Hetzner:\n"
+            f"     Domain: {summary.get('domain') or domain}\n"
+            f"     Owner:  {summary.get('owner') or 'unknown'}"
+            f" <{summary.get('email') or 'unknown'}>\n"
+            f"     Price:  {summary.get('price') or 'unknown'}"
+            f" ({summary.get('period') or 'billing period unknown'})"
         )
 
-        ui.info("Press Enter in the terminal once the order is submitted.")
-        ui.ask("Press Enter to continue", default="")
+        if confirm_order is None and sys.stdin.isatty():
+            confirm_order = ui.confirm(
+                "Place this binding order now (accepts Hetzner's terms)?",
+                default=False,
+            )
+        if confirm_order:
+            return await self._place_order(domain)
 
+        ui.info(
+            "Review the order in the browser, accept Hetzner's terms and click "
+            "'Zahlungspflichtig bestellen' yourself. Waiting for the order…"
+        )
+        if not await self._wait_for_order_placed(config.ORDER_WAIT_TIMEOUT):
+            ui.error("No order was placed before the timeout.")
+            return False
         ui.success(
-            f"Domain order for '{domain}' initiated.\n"
-            "     Note: Domain will be reachable within 12-24 hours."
+            f"Domain order for '{domain}' placed.\n"
+            "     Note: Registration usually completes within minutes."
         )
         return True
+
+    async def _choose_domain_owner(self, contact_email: str | None) -> bool:
+        """Select an existing contact as domain owner. Returns whether one was set."""
+        owners = self.page.locator(config.SELECTORS_KONSOLEH_DOMAIN_OWNERS)
+        try:
+            await owners.first.wait_for(state="attached", timeout=10000)
+        except playwright_error():
+            ui.warning("Hetzner did not show the domain owner step.")
+            return False
+
+        contacts = await self.page.evaluate(_READ_CONTACTS_JS)
+        if not contacts:
+            ui.warning(
+                "No KonsoleH contact exists yet. Create the domain owner in the "
+                "browser and continue the order there."
+            )
+            return False
+
+        chosen = None
+        if contact_email:
+            matches = [
+                contact
+                for contact in contacts
+                if contact["email"].lower() == contact_email.strip().lower()
+            ]
+            if not matches:
+                known = ", ".join(contact["email"] for contact in contacts)
+                raise click.ClickException(
+                    f"No KonsoleH contact uses {contact_email}. Existing contacts: {known}."
+                )
+            chosen = matches[0]
+        elif len(contacts) == 1:
+            chosen = contacts[0]
+        elif sys.stdin.isatty():
+            for number, contact in enumerate(contacts, start=1):
+                ui.info(f"{number}. {_describe_contact(contact)}")
+            choice = click.prompt(
+                "  Domain owner",
+                type=click.IntRange(1, len(contacts)),
+            )
+            chosen = contacts[choice - 1]
+        else:
+            known = ", ".join(contact["email"] for contact in contacts)
+            raise click.ClickException(
+                f"Several KonsoleH contacts can own the domain ({known}); "
+                "choose one with --contact-email."
+            )
+
+        await owners.first.select_option(index=chosen["index"])
+        await owners.first.dispatch_event("change")
+        ui.success(f"Domain owner: {_describe_contact(chosen)}")
+        return True
+
+    async def _continue_to_order_summary(self) -> None:
+        try:
+            await self.page.locator(config.SELECTORS_KONSOLEH_OWNER_NEXT).first.click(
+                timeout=5000
+            )
+            await self.page.wait_for_load_state("networkidle")
+        except playwright_error():
+            pass
+
+    async def _wait_for_order_summary(self) -> bool:
+        """Wait until the binding order form is shown, e.g. after manual steps."""
+        try:
+            await self.page.locator(
+                config.SELECTORS_KONSOLEH_ORDER_FORM
+            ).first.wait_for(state="attached", timeout=config.ORDER_WAIT_TIMEOUT)
+            return True
+        except playwright_error():
+            return False
+
+    async def _read_order_summary(self) -> dict:
+        try:
+            return await self.page.evaluate(_READ_SUMMARY_JS)
+        except playwright_error():
+            return {}
+
+    async def _place_order(self, domain: str) -> bool:
+        """Accept the terms and submit the order form Hetzner just summarised."""
+        try:
+            await self.page.locator(config.SELECTORS_KONSOLEH_ACCEPT_TERMS).first.check(
+                timeout=5000
+            )
+            await self.page.locator(config.SELECTORS_KONSOLEH_PLACE_ORDER).first.click(
+                timeout=5000
+            )
+        except playwright_error():
+            ui.error("Could not submit the order; finish it in the browser.")
+            return await self._wait_for_order_placed(config.ORDER_WAIT_TIMEOUT)
+        if not await self._wait_for_order_placed(30_000):
+            ui.error(
+                "Hetzner did not accept the order. Check the browser for a message."
+            )
+            return False
+        ui.success(
+            f"Domain order for '{domain}' placed.\n"
+            "     Note: Registration usually completes within minutes."
+        )
+        return True
+
+    async def _wait_for_order_placed(self, timeout: int) -> bool:
+        """The order is placed once Hetzner replaces the order form."""
+        try:
+            await self.page.wait_for_function(
+                """(selector) => document.readyState === 'complete'
+                    && !document.querySelector(selector)""",
+                arg=config.SELECTORS_KONSOLEH_ORDER_FORM,
+                timeout=timeout,
+                polling=1000,
+            )
+            return True
+        except playwright_error():
+            return False
 
     # ── Nameserver change (existing domain) ──────────────────────────
 
@@ -479,3 +626,62 @@ def _split_domain(domain: str) -> tuple[str, str]:
     if len(parts) >= 2:
         return ".".join(parts[:-1]), f".{parts[-1]}"
     return host, ""
+
+
+def _is_konsoleh(url: str) -> bool:
+    return urlparse(url).netloc == urlparse(config.KONSOLEH_BASE_URL).netloc
+
+
+def _describe_contact(contact: dict) -> str:
+    name = " ".join(
+        part for part in (contact["first_name"], contact["surname"]) if part
+    )
+    return f"{name or contact['label']} <{contact['email']}>, {contact['city']}"
+
+
+# KonsoleH fills the owner form from a per-option script on "change"; reading the
+# filled fields is the only way to tell contacts with the same name apart.
+_READ_CONTACTS_JS = """
+() => {
+    const select = document.querySelector('#domain_owners');
+    if (!select) return [];
+    const field = (id) => (document.getElementById(id) || {}).value || '';
+    const contacts = [];
+    const original = select.selectedIndex;
+    for (let index = 0; index < select.options.length; index++) {
+        const value = select.options[index].value;
+        if (value === 'chooseContact' || value === 'createNew') continue;
+        select.selectedIndex = index;
+        select.dispatchEvent(new Event('change', {bubbles: true}));
+        contacts.push({
+            index,
+            label: select.options[index].text.trim(),
+            first_name: field('first_name'),
+            surname: field('surname'),
+            email: field('emails'),
+            city: field('city'),
+        });
+    }
+    select.selectedIndex = original;
+    select.dispatchEvent(new Event('change', {bubbles: true}));
+    return contacts;
+}
+"""
+
+_READ_SUMMARY_JS = """
+() => {
+    const rows = {};
+    for (const row of document.querySelectorAll('table.order-summary tr')) {
+        const cells = row.querySelectorAll('td');
+        if (cells.length === 2) rows[cells[0].innerText.trim()] = cells[1].innerText.trim();
+    }
+    const text = (selector) => (document.querySelector(selector) || {}).innerText || '';
+    return {
+        domain: rows['Domain:'] || '',
+        owner: rows['Kontaktperson:'] || '',
+        email: rows['E-Mailadresse:'] || '',
+        price: text('table.order-summary .priceFull').trim(),
+        period: text('table.order-summary .pricePeriod').trim(),
+    };
+}
+"""
