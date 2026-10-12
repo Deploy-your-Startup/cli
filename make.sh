@@ -33,7 +33,7 @@ fi
 
 if [ "$1" == "test" ]; then
   echo "Running tests..."
-  uv run --extra dev pytest
+  uv run --extra dev pytest -n auto
 fi
 
 if [ "$1" == "test_vault" ]; then

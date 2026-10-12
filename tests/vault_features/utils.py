@@ -4,23 +4,18 @@ Utility functions for vault feature tests.
 
 import random
 import string
-import subprocess
 from pathlib import Path
+
+from cli.ansible_bin import ansible_bin
 
 
 def get_ansible_vault_cmd():
+    """Run the ansible-vault of the environment running the tests.
+
+    `uv run` would re-sync the CLI's virtualenv to its default dependencies,
+    which deletes files that tests running in parallel are using.
     """
-    Determine how to run ansible-vault commands.
-    Returns a list of command parts.
-    """
-    # Check if we should use uv run or direct command
-    try:
-        # Try running a simple uv command to check if it's available
-        subprocess.run(["uv", "--version"], check=False, capture_output=True)
-        return ["uv", "run", "ansible-vault"]
-    except FileNotFoundError:
-        # If uv is not found, use ansible-vault directly
-        return ["ansible-vault"]
+    return [ansible_bin("ansible-vault")]
 
 
 def generate_random_string(length=16):
