@@ -74,6 +74,8 @@ def register_domain(
     domain: str,
     headless: bool = False,
     nameservers: list[str] | None = None,
+    contact_email: str | None = None,
+    confirm_order: bool | None = None,
 ) -> bool:
     """
     Run the Robot browser flow to register a domain.
@@ -85,14 +87,21 @@ def register_domain(
         headless: Run browser in headless mode (not recommended).
         nameservers: Override the default Hetzner nameservers (e.g. the
             Cloudflare-assigned NS) to delegate DNS at registration time.
+        contact_email: E-mail of the existing KonsoleH contact that owns the domain.
+        confirm_order: True places the binding order, False leaves it to the
+            browser, None asks in an interactive terminal.
 
     Returns:
-        True if the registration was initiated, False otherwise.
+        True if the order was placed, False otherwise.
     """
     _require_playwright()
     return asyncio.run(
         _async_register_domain(
-            domain=domain, headless=headless, nameservers=nameservers
+            domain=domain,
+            headless=headless,
+            nameservers=nameservers,
+            contact_email=contact_email,
+            confirm_order=confirm_order,
         )
     )
 
@@ -193,6 +202,8 @@ async def _async_register_domain(
     domain: str,
     headless: bool,
     nameservers: list[str] | None = None,
+    contact_email: str | None = None,
+    confirm_order: bool | None = None,
 ) -> bool:
     from . import _output as ui
     from .robot import HetznerKonsoleHAutomation
@@ -210,9 +221,14 @@ async def _async_register_domain(
 
         # Step 2: Register domain
         ui.step(2, "Register Domain")
-        ok = await bot.register_domain(domain, nameservers=nameservers)
+        ok = await bot.register_domain(
+            domain,
+            nameservers=nameservers,
+            contact_email=contact_email,
+            confirm_order=confirm_order,
+        )
         if ok:
-            ui.success(f'Domain "{domain}" registration initiated!')
+            ui.success(f'Domain "{domain}" ordered!')
         else:
             ui.error("Domain registration failed.")
 

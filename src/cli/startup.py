@@ -112,6 +112,15 @@ cli.add_command(verify)
     help="Whether the domain already belongs to you (skips that question).",
 )
 @click.option(
+    "--domain-contact",
+    help="E-mail of the KonsoleH contact that owns a domain bought with --buy-domain.",
+)
+@click.option(
+    "--confirm-domain-order",
+    is_flag=True,
+    help="With --buy-domain: place Hetzner's binding domain order without asking.",
+)
+@click.option(
     "--auth0-tenant",
     help="Create a dedicated Auth0 app/API for a template with oauth2-proxy.",
 )
@@ -173,6 +182,8 @@ def bootstrap(
     auth0_tenant,
     without_auth,
     domain_owned,
+    domain_contact,
+    confirm_domain_order,
     hetzner_token,
     hetzner_token_stdin,
     shared_cluster,
@@ -241,10 +252,9 @@ def bootstrap(
             or provider not in (None, "byos")
             or byos_host
             or hetzner_token
-            or domain_owned is False
         ):
             raise click.ClickException(
-                "--cluster cannot be combined with --shared-cluster, Hetzner provisioning, --byos-host or --buy-domain."
+                "--cluster cannot be combined with --shared-cluster, Hetzner provisioning or --byos-host."
             )
         cluster_config = read_descriptor(cluster_path)
         provider = "byos"
@@ -464,6 +474,8 @@ def bootstrap(
         max_monthly_cost=max_monthly_cost,
         non_interactive=assume_yes,
         domain_owned=domain_owned,
+        domain_contact=domain_contact,
+        confirm_domain_order=confirm_domain_order,
     )
 
     run_wizard(ctx)
@@ -1981,15 +1993,36 @@ def hetzner_domain_check(domain):
     default=False,
     help="Run browser in headless mode (not recommended)",
 )
+@click.option(
+    "--contact-email",
+    help="E-mail of the existing KonsoleH contact that becomes the domain owner.",
+)
+@click.option(
+    "--confirm-order",
+    is_flag=True,
+    default=None,
+    help="Place the binding order after showing its summary, without asking.",
+)
 @click.argument("domain", required=False)
-def hetzner_domain(headless, domain):
-    """Register a domain via Hetzner Robot."""
+def hetzner_domain(headless, contact_email, confirm_order, domain):
+    """Register a domain via Hetzner KonsoleH.
+
+    Selects an existing contact as owner and shows Hetzner's order summary with
+    the price. An interactive terminal then asks before the binding order;
+    otherwise the order is placed only with --confirm-order or by you in the
+    browser, which this command waits for.
+    """
     from cli.hetzner import register_domain as do_register
 
     if not domain:
         domain = click.prompt("  Domain to register (e.g. example.com)")
 
-    ok = do_register(domain=domain, headless=headless)
+    ok = do_register(
+        domain=domain,
+        headless=headless,
+        contact_email=contact_email,
+        confirm_order=confirm_order,
+    )
     if not ok:
         raise SystemExit(1)
 
