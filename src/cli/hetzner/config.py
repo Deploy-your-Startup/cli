@@ -31,6 +31,13 @@ def konsoleh_nameserver_url(domain_number: str) -> str:
 # input[name="newdns[]"] selector matches nothing.
 SELECTORS_KONSOLEH_NS_FIELD = "#ns1, #ns2, #ns3, #ns4, #ns5, input[name='newdns[]']"
 
+# Domain order: owner step, then the binding order summary ("Bestellung bestätigen").
+SELECTORS_KONSOLEH_DOMAIN_OWNERS = "#domain_owners"
+SELECTORS_KONSOLEH_OWNER_NEXT = "#btnNextStep"
+SELECTORS_KONSOLEH_ORDER_FORM = "form[name='billing_form']"
+SELECTORS_KONSOLEH_ACCEPT_TERMS = "#accept_terms_and_conditions"
+SELECTORS_KONSOLEH_PLACE_ORDER = "a.btn-primary:has-text('Zahlungspflichtig bestellen')"
+
 # ── Hetzner Default Nameservers ──────────────────────────────────────
 HETZNER_NAMESERVERS = [
     "hydrogen.ns.hetzner.com",
@@ -65,6 +72,7 @@ def chrome_launch_args() -> list[str]:
 DEFAULT_TIMEOUT = 60_000
 LOGIN_WAIT_TIMEOUT = 300_000  # 5 min for manual login/2FA
 NAVIGATION_TIMEOUT = 30_000
+ORDER_WAIT_TIMEOUT = int(os.environ.get("HETZNER_ORDER_WAIT_TIMEOUT_MS", "900000"))
 
 # ── Cloud Console CSS Selectors ──────────────────────────────────────
 # Collected here so Hetzner UI changes only require a single-file update.

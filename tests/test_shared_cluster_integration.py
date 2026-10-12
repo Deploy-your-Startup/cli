@@ -234,7 +234,6 @@ def test_attached_project_rejects_cluster_operations_before_remote_work(
     [
         ("--provider", "hetzner"),
         ("--shared-cluster",),
-        ("--buy-domain",),
         ("--byos-host", "203.0.113.20"),
     ],
 )
@@ -248,6 +247,28 @@ def test_attach_conflicts_fail_before_creating_a_project(tmp_path, extra):
     # THEN no wizard or provider mutation runs.
     assert result.returncode != 0
     assert "--cluster cannot be combined" in result.stderr
+    assert list(tmp_path.iterdir()) == [path]
+
+
+def test_attach_accepts_buying_the_new_startups_domain(tmp_path):
+    # GIVEN a valid descriptor.
+    path = tmp_path / "cluster.yml"
+    path.write_text(yaml.safe_dump(descriptor()))
+    # WHEN an unattended attach also asks to buy its domain but lacks a name.
+    result = launch(
+        "bootstrap",
+        "--yes",
+        "--kind",
+        "fullstack",
+        "--cluster",
+        str(path),
+        "--buy-domain",
+        cwd=tmp_path,
+    )
+    # THEN the combination is accepted and only the missing input stops it.
+    assert result.returncode != 0
+    assert "--cluster cannot be combined" not in result.stderr
+    assert "--yes needs --project-name" in result.stderr
     assert list(tmp_path.iterdir()) == [path]
 
 

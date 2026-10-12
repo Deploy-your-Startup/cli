@@ -42,6 +42,10 @@ class BootstrapContext:
     non_interactive: bool = False
     # None means "ask"; True/False answer the domain-ownership question.
     domain_owned: bool | None = None
+    # --buy-domain: owning KonsoleH contact, and whether the CLI may place the
+    # binding order itself instead of asking or leaving it to the browser.
+    domain_contact: str | None = None
+    confirm_domain_order: bool = False
     max_monthly_cost: Decimal | None = None
 
     # Populated by steps

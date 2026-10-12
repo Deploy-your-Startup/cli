@@ -64,8 +64,8 @@ the estimate to continue; the default is No. `--yes` accepts the estimate. Add
 `--max-monthly-cost <amount>` to enforce a gross monthly cap in the displayed
 currency; bootstrap stops if the estimate exceeds it or pricing is unavailable.
 Without a cap, unavailable pricing requires interactive confirmation or `--yes`.
-Domain registration is billed yearly, with the price shown by Hetzner before
-you confirm the purchase. Shared-cluster attachments create no infrastructure
+Domain registration is billed yearly; the CLI shows Hetzner's price before
+the order is placed. Shared-cluster attachments create no infrastructure
 and skip this preview.
 
 Full-stack Hetzner bootstrap requests deployment, prints the required DNS A
@@ -209,6 +209,22 @@ the feed does not list them separately; premium domains and your tax location
 may change the final price. If prices cannot be read, Hetzner shows them before
 you confirm the order. Bootstrap checks before buying and asks before opening
 registration; an availability check does not reserve the domain.
+
+To register a domain, sign in to Hetzner in the browser that opens:
+
+```bash
+startup hetzner domain example.com --contact-email owner@example.com
+```
+
+The command selects an existing Hetzner contact as domain owner: the only one,
+the one matching `--contact-email`, or the one you choose in the terminal. It
+never creates contacts; create one in the browser if none exists. It then shows
+Hetzner's order summary with owner and price. An interactive terminal asks
+before the binding order (default No). Without a terminal, `--confirm-order`
+accepts Hetzner's terms and places the order; otherwise the command waits until
+you order in the browser. `startup bootstrap --buy-domain` accepts the same
+choices as `--domain-contact` and `--confirm-domain-order`, including when
+attaching to a shared cluster.
 
 ## Deploy and operate
 
