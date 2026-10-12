@@ -274,7 +274,12 @@ startup bootstrap --yes --kind fullstack \
   --project-name second-startup --base-domain second.example.com --without-auth
 ```
 
-Point the second domain at the same cluster ingress. Its Vault, deployment SSH
+Point the second domain at the same cluster ingress. With `--buy-domain`, the
+attached startup instead gets its own Hetzner project used only for DNS: its
+token is stored in the startup's Vault, and bootstrap creates the zone and A
+records through the shared `hetzner-dns` role before ordering the domain. Later
+DNS changes run with `startup ansible dns --working-directory deployment
+--environment production`, which provisions nothing. Its Vault, deployment SSH
 key, namespace, database and media volumes are independent. Deploy normally with
 `startup ansible deploy`; cluster provisioning, package updates, Ubuntu release upgrades and cluster
 upgrades must run from the owner project. Attached projects cannot perform these

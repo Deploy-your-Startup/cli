@@ -11,6 +11,7 @@ from cli import wizard_output as ui
 
 from .base import WizardStep
 from .context import BootstrapContext
+from .steps.attached_dns import AttachedDnsStep
 from .steps.auth0 import Auth0Step
 from .steps.byos import ByosStep
 from .steps.cloudflare import CloudflareStep
@@ -57,9 +58,12 @@ def steps_for(ctx: BootstrapContext) -> list[type[WizardStep]]:
     if ctx.cluster_config:
         steps = [step for step in steps if step is not CostStep]
         if ctx.domain_owned is False:
-            # Attaching creates no servers, but the new startup's domain can
-            # still be bought through Hetzner before the project is set up.
-            steps.insert(steps.index(ProjectStep), DomainStep)
+            # Attaching creates no servers. A bought domain gets its own Hetzner
+            # project (DNS only) and its zone before the order, so the registry
+            # finds the nameservers serving it.
+            steps.insert(steps.index(ByosStep), HetznerStep)
+            finalize = steps.index(FinalizeStep)
+            steps[finalize:finalize] = [AttachedDnsStep, DomainStep]
     if ctx.auth0_tenant:
         steps.insert(-1, Auth0Step)
     return steps

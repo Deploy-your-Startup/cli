@@ -37,6 +37,7 @@ ROOT_SHARED_FILES = [
     "update-vms-playbook.yml",
     "os-upgrade-playbook.yml",
     "k3s-upgrade-playbook.yml",
+    "dns-playbook.yml",
     "inventory.ini",
     "inventory.hcloud.yml",
 ]
@@ -1551,6 +1552,97 @@ def run_backup(
                 "/bin/cat",
                 "--extra-vars",
                 backup_extra_vars,
+            ],
+            cwd=working_dir,
+            env=env,
+            input_text=vault_password,
+        )
+
+
+def _dns_target_ip(working_dir: Path) -> str:
+    """The public address of the first master in the project's static inventory."""
+    inventory_path = working_dir / BYOS_INVENTORY
+    if not inventory_path.exists():
+        raise click.ClickException(
+            "startup ansible dns needs a static inventory (shared-cluster attachment "
+            "or own server). Hetzner-provisioned projects manage DNS through "
+            "startup ansible infrastructure."
+        )
+    inventory = yaml.safe_load(inventory_path.read_text()) or {}
+
+    def masters(group: dict) -> list[str]:
+        found = []
+        for name, child_group in (group.get("children") or {}).items():
+            child = child_group or {}
+            if name == "hcloud_type_master":
+                found += [
+                    str(host.get("ansible_host") or host_name)
+                    for host_name, host in (child.get("hosts") or {}).items()
+                ]
+            found += masters(child)
+        return found
+
+    hosts = masters(inventory.get("all") or {})
+    if not hosts:
+        raise click.ClickException(f"No master node in {inventory_path}.")
+    return hosts[0]
+
+
+def run_dns(
+    vault_password: str,
+    environment: str,
+    *,
+    working_directory: str = ".",
+    playbook: str = "dns-playbook.yml",
+    shared_dir: str = DEFAULT_SHARED_DIR,
+    version: str = DEFAULT_VERSION,
+    repo_url: str | None = None,
+    refresh: bool = True,
+) -> None:
+    """Point the project's domains at its cluster through Hetzner DNS only.
+
+    Touches no server, so startups attached to a shared cluster may run it with
+    the DNS token in their own Vault.
+    """
+    _validated_environment(environment)
+    working_dir = _resolve_working_dir(working_directory)
+    target_ip = _dns_target_ip(working_dir)
+    setup_ansible(
+        working_directory=working_directory,
+        shared_dir=shared_dir,
+        version=version,
+        repo_url=repo_url,
+        refresh=refresh,
+    )
+    playbook_path = _resolve_playbook_path(working_dir, playbook, "DNS", shared_dir)
+    env = _ansible_env(working_dir, shared_dir)
+    env["HCLOUD_TOKEN"] = get_hcloud_token(
+        working_directory, vault_password, environment, shared_dir
+    )
+    with _project_data_playbook(
+        working_dir, playbook_path, environment
+    ) as playbook_path:
+        _run_command(
+            [
+                _find_uv(),
+                "run",
+                "--project",
+                str(working_dir),
+                ansible_bin("ansible-playbook"),
+                str(playbook_path),
+                "-i",
+                "localhost,",
+                "--connection",
+                "local",
+                "--vault-password-file",
+                "/bin/cat",
+                "--extra-vars",
+                json.dumps(
+                    {
+                        "dns_target_ip": target_ip,
+                        "ansible_python_interpreter": "{{ ansible_playbook_python }}",
+                    }
+                ),
             ],
             cwd=working_dir,
             env=env,
