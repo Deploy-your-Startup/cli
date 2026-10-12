@@ -258,9 +258,7 @@ def test_update_multiple_encrypted_files_with_random_values():
 
         subprocess.run(
             [
-                "uv",
-                "run",
-                "ansible-vault",
+                *get_ansible_vault_cmd(),
                 "encrypt",
                 "--vault-password-file",
                 str(password_file),

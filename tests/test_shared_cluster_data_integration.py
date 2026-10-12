@@ -258,6 +258,9 @@ def attached(tmp_path, master):
         "STARTUP_VAULT_PASSWORD": TEMPLATE_VAULT_PASSWORD,
         "STARTUP_DISABLE_KEYCHAIN_VAULT": "1",
         "UV_PROJECT_ENVIRONMENT": str(Path(sys.executable).parent.parent),
+        # Use the test environment as-is; syncing it to the project would remove
+        # packages that tests running in parallel depend on.
+        "UV_NO_SYNC": "1",
         "NO_COLOR": "1",
         # Real clusters listen on 22; the local master only differs in its port
         # and in keeping host keys out of the developer's known_hosts.
