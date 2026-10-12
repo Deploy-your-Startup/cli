@@ -39,5 +39,9 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
+      # Domain-order integration tests drive a real headless browser against
+      # a local KonsoleH stand-in.
+      - name: Install headless browser
+        run: uv run --extra dev playwright install --with-deps chromium-headless-shell
       - name: Run tests
         run: ./make.sh test
