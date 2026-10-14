@@ -1195,6 +1195,126 @@ def run_infrastructure(
     )
 
 
+def run_firewall(
+    working_directory: str,
+    environment: str,
+    *,
+    dry_run: bool = True,
+    repo_url: str | None = None,
+    refresh: bool = True,
+    version: str = DEFAULT_VERSION,
+    inspect: bool = False,
+) -> None:
+    """Apply only the pinned firewall role, using the project's own group_vars."""
+    from cli.cluster_commands import require_cluster_owner
+
+    working_dir = _resolve_working_dir(working_directory)
+    require_cluster_owner(working_dir, "firewall")
+    _validated_environment(environment)
+    if _is_byos(working_dir):
+        raise click.ClickException(
+            "Hetzner firewall changes must run from the cluster owner with a cloud inventory."
+        )
+    password = resolve_vault_password(None, working_directory)
+    roles = setup_ansible(
+        working_directory=working_directory,
+        repo_url=repo_url,
+        refresh=refresh,
+        version=version,
+    )
+    env = _ansible_env(working_dir)
+    env["HCLOUD_TOKEN"] = get_hcloud_token(working_directory, password, environment)
+    if inspect:
+        from hcloud import Client
+
+        client = Client(
+            token=env["HCLOUD_TOKEN"],
+            api_endpoint=os.environ.get(
+                "HCLOUD_ENDPOINT", "https://api.hetzner.cloud/v1"
+            ),
+        )
+        firewalls = client.firewalls.get_all()
+        click.echo(
+            json.dumps(
+                [
+                    {
+                        "name": firewall.name,
+                        "id": firewall.id,
+                        "rules": [
+                            {
+                                "direction": rule.direction,
+                                "protocol": rule.protocol,
+                                "port": rule.port,
+                                "source_ips": rule.source_ips,
+                            }
+                            for rule in (firewall.rules or [])
+                        ],
+                        "servers": [
+                            resource.server.id
+                            for resource in (firewall.applied_to or [])
+                            if resource.server is not None
+                        ],
+                    }
+                    for firewall in firewalls
+                ],
+                indent=2,
+            )
+        )
+        return
+    env["ANSIBLE_ROLES_PATH"] = str(roles / "roles")
+    inventories = []
+    for name in ("inventory.hcloud.yml", "inventory.ini"):
+        path = working_dir / name
+        inventories += ["-i", str(path if path.exists() else roles / name)]
+    play = [
+        {
+            "hosts": "provision-infrastructure",
+            "connection": "local",
+            "gather_facts": False,
+            "pre_tasks": [
+                {
+                    "name": "Read pinned network defaults without provisioning",
+                    "ansible.builtin.include_vars": {
+                        "file": str(roles / "roles/hetzner-network/defaults/main.yml"),
+                        "name": "startup_network_defaults",
+                    },
+                },
+                {
+                    "name": "Use the pinned network range when the project has no override",
+                    "ansible.builtin.set_fact": {
+                        "network_ip_range": "{{ startup_network_defaults.network_ip_range }}",
+                    },
+                    "when": "network_ip_range is not defined",
+                },
+            ],
+            "roles": ["hetzner-firewall"],
+        }
+    ]
+    # The playbook must sit beside group_vars, not inside the shared checkout.
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".yml", prefix=".startup-firewall-", dir=working_dir
+    ) as stream:
+        stream.write(yaml.safe_dump(play))
+        stream.flush()
+        _run_command(
+            [
+                _find_uv(),
+                "run",
+                "--project",
+                str(working_dir),
+                ansible_bin("ansible-playbook"),
+                stream.name,
+                *inventories,
+                "--vault-password-file",
+                "/bin/cat",
+                *(["--check", "--diff"] if dry_run else []),
+            ],
+            cwd=working_dir,
+            env=env,
+            input_text=password,
+        )
+
+
 def _extract_master_host(inventory_data: dict) -> str | None:
     for group_name in ("k3s_masters", "masters", "control_plane"):
         hosts = inventory_data.get(group_name, {}).get("hosts", [])
@@ -1242,8 +1362,7 @@ def _configure_kubeconfig_context(
             context_config["cluster"] = context
         if context_config.get("user") == "default":
             context_config["user"] = context
-        if namespace != "default":
-            context_config["namespace"] = namespace
+        context_config["namespace"] = namespace
     if kubeconfig.get("current-context") == "default":
         kubeconfig["current-context"] = context
 
@@ -1264,6 +1383,9 @@ def run_kubeconfig(
     version: str = DEFAULT_VERSION,
     repo_url: str | None = None,
     refresh: bool = True,
+    direct: bool = False,
+    ssh_identity: str | None = None,
+    ssh_port: int = 22,
 ) -> Path:
     working_dir = _resolve_working_dir(working_directory)
     setup_ansible(
@@ -1347,8 +1469,8 @@ def run_kubeconfig(
 
     # On byos, scp/ssh authenticate with the deploy key decrypted from the vault.
     ssh_key_path: str | None = None
-    ssh_key_opts: list[str] = []
-    if byos:
+    ssh_key_opts: list[str] = ["-i", ssh_identity] if ssh_identity else []
+    if byos and not ssh_identity:
         ssh_key = get_byos_ssh_key(working_directory, vault_password, shared_dir)
         fd, ssh_key_path = tempfile.mkstemp(prefix="byos-deploy-key-")
         os.fchmod(fd, 0o600)
@@ -1360,6 +1482,8 @@ def run_kubeconfig(
         _run_command(
             [
                 "scp",
+                "-P",
+                str(ssh_port),
                 *ssh_key_opts,
                 "-o",
                 "StrictHostKeyChecking=accept-new",
@@ -1386,6 +1510,8 @@ def run_kubeconfig(
                 _run_command(
                     [
                         "ssh",
+                        "-p",
+                        str(ssh_port),
                         *ssh_key_opts,
                         "-o",
                         "StrictHostKeyChecking=accept-new",
@@ -1402,9 +1528,22 @@ def run_kubeconfig(
 
         _configure_kubeconfig_context(kubeconfig, context, k8s_namespace)
 
-        output_path.write_text(
-            yaml.safe_dump(kubeconfig, sort_keys=False), encoding="utf-8"
-        )
+        from cli.kube_access import configure_access, private_write
+
+        if not direct:
+            kubeconfig = configure_access(
+                kubeconfig,
+                context,
+                master_ip,
+                ssh_user,
+                ssh_port,
+                identity=ssh_identity,
+            )
+            # Do not import redundant direct credentials alongside the managed user.
+            kubeconfig["clusters"] = kubeconfig["clusters"][-1:]
+            kubeconfig["users"] = kubeconfig["users"][-1:]
+
+        private_write(output_path, kubeconfig)
 
         if not shutil.which("kubectl"):
             raise click.ClickException(
@@ -1415,25 +1554,30 @@ def run_kubeconfig(
         kube_dir.mkdir(parents=True, exist_ok=True)
         main_config = kube_dir / "config"
 
-        if main_config.exists():
-            for delete_target in ("context", "cluster", "user"):
-                subprocess.run(
-                    ["kubectl", "config", f"delete-{delete_target}", context],
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                )
+        from cli.kube_access import access_lock
 
-        merged = _run_command(
-            ["kubectl", "config", "view", "--flatten"],
-            cwd=working_dir,
-            env={**os.environ, "KUBECONFIG": f"{main_config}:{output_path}"},
-            capture_output=True,
-        )
-        main_config.write_text(merged.stdout, encoding="utf-8")
-
-        if make_current:
-            _run_command(["kubectl", "config", "use-context", context], cwd=working_dir)
+        with access_lock(kube_dir / "config.startup.lock"):
+            merged: dict = (
+                yaml.safe_load(main_config.read_text())
+                if main_config.exists()
+                else {
+                    "apiVersion": "v1",
+                    "kind": "Config",
+                    "contexts": [],
+                    "clusters": [],
+                    "users": [],
+                }
+            )
+            for kind in ("contexts", "clusters", "users"):
+                names = {entry["name"] for entry in kubeconfig[kind]}
+                merged[kind] = [
+                    entry
+                    for entry in merged.get(kind, [])
+                    if entry["name"] not in names
+                ] + kubeconfig[kind]
+            if make_current or not merged.get("current-context"):
+                merged["current-context"] = context
+            private_write(main_config, merged)
 
         click.echo(f"Wrote kubeconfig to: {output_path}")
         click.echo(f"Imported context into ~/.kube/config as: {context}")
