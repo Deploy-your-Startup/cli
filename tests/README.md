@@ -130,3 +130,8 @@ web/SSH/internal rules and the attached-project owner guard. It requires a sibli
 `deploy-template` checkout; Docker or kubectl absence is reported as a skip.
 Live cloud firewall attachment, changing networks and sleep/wake remain separate
 operational verification; interrupted streaming sessions can require a retry.
+
+Public policy configuration: `uv run --extra dev pytest tests/test_site_policy_integration.py`
+drives real CLI validation, renders a Copier project, verifies policy installation
+and resume preservation, and rejects incompatible template capabilities before
+provider setup. This validates configuration, not legal sufficiency.
