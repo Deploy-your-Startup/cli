@@ -1,0 +1,16 @@
+name: Portable testing policy
+on:
+  pull_request:
+    paths: ['**/AGENTS.md', '**/CLAUDE.md', 'docs/**', 'tests/test_testing_policy_integration.py', '.github/workflows/testing-policy.yml']
+  push:
+    branches: [main]
+    paths: ['**/AGENTS.md', '**/CLAUDE.md', 'docs/**', 'tests/test_testing_policy_integration.py', '.github/workflows/testing-policy.yml']
+permissions:
+  contents: read
+jobs:
+  instructions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Follow the real standalone agent instructions
+        run: python3 tests/test_testing_policy_integration.py
