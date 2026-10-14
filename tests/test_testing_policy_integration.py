@@ -1,6 +1,7 @@
 """GIVEN portable instructions, WHEN following their link, THEN the test policy is explicit."""
-from pathlib import Path
+
 import re
+from pathlib import Path
 
 
 def test_portable_testing_policy():
@@ -8,7 +9,9 @@ def test_portable_testing_policy():
     root = Path(__file__).resolve().parents[1]
     instructions = (root / "AGENTS.md").read_text()
     # WHEN a contributor follows the test-policy link.
-    target = re.search(r"\[Testing policy and completion evidence\]\(([^)]+)\)", instructions)
+    target = re.search(
+        r"\[Testing policy and completion evidence\]\(([^)]+)\)", instructions
+    )
     assert target is not None
     policy = (root / target.group(1)).read_text()
     # THEN required flow coverage, the limited exception and honest evidence survive.
