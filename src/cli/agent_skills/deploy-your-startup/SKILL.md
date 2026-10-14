@@ -37,8 +37,12 @@ hand-written scaffolding, raw `ansible-vault` or ad-hoc `ansible-playbook` runs.
 
 ## 2. Create a new startup
 
-Interactive `startup bootstrap` asks for name and folder, then a stack
-(Django/FastAPI, Vue + Django/FastAPI, or Astro) and its deployment target.
+Interactive `startup bootstrap` asks for name, template (Django/FastAPI,
+Vue + Django/FastAPI, or Astro), parent folder and deployment target, then
+confirms the signed-in GitHub account before final approval. Declining the
+account runs native `gh auth login`; environment tokens must be changed in the
+environment instead. `--github-username` keeps an explicit owner/organization
+without this prompt, and `--yes` remains unattended.
 `--kind fullstack` skips the stack menu and keeps the Django/FastAPI default;
 use `--template` to select Vue in an unattended run. Known templates default to
 pinned releases; explicit `--template-version` overrides them.

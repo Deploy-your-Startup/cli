@@ -1,8 +1,9 @@
 # Optional startup onboarding
 
 The installer finishes CLI/GitHub setup before offering to create a project.
-Project creation then asks for a name, folder, stack and compatible deployment
-target. An SSH key or cloud account cannot block installation completion.
+Project creation asks for a name, template, parent folder, compatible deployment
+target, GitHub account confirmation and final approval, in that order. An SSH
+key or cloud account cannot block installation completion.
 
 ## Before
 
@@ -36,17 +37,22 @@ flowchart TD
     F -->|Pass| G[Setup complete; optional agent skill]
     G --> H{Create a startup now?}
     H -->|Later| Z[Exit successfully; later run startup bootstrap]
-    H -->|Yes| J[Project name and parent folder]
+    H -->|Yes| J[Startup name]
     L[Later: startup bootstrap] --> J
-    J --> K{Choose stack}
-    K -->|Django/FastAPI or Vue + Django/FastAPI| M{Deployment target}
-    K -->|Astro landing page| N[Cloudflare Pages]
-    M -->|Hetzner| O[Domain: owned or register]
-    M -->|Existing server| P[Owned domain; no Hetzner account]
-    N --> Q[Domain]
-    O --> S[Review launch plan]
-    P --> S
-    Q --> S
+    J --> K{Choose template}
+    K --> FOLDER[Choose parent folder; show project path]
+    FOLDER --> M{Compatible deployment target}
+    M -->|Django or Vue: existing server| P[Owned domain; user manages DNS and server access]
+    M -->|Django or Vue: Hetzner| O[Domain: owned or register]
+    M -->|Astro: Cloudflare Pages| Q[Domain]
+    O --> ACCOUNT{Confirm signed-in GitHub account}
+    P --> ACCOUNT
+    Q --> ACCOUNT
+    ACCOUNT -->|Yes| S[Review launch plan]
+    ACCOUNT -->|No or not connected| LOGIN[Native gh auth login; confirm new account]
+    LOGIN -->|Success| ACCOUNT
+    LOGIN -->|Cancelled or failed| STOP[Exit; no project resources created]
+    ACCOUNT -->|Environment token needs changing| TOKEN[Explain token override; exit without project resources]
     S --> T{Create project?}
     T -->|No| U[Exit successfully; no resources created]
     T -->|Yes| V[Check chosen target requirements and server public key]
@@ -60,10 +66,19 @@ flowchart TD
 - Plain `startup doctor` checks Git, Git identity, GitHub CLI/auth/scopes and uv.
   Add `--provider hetzner` or `--provider byos` for deployment prerequisites.
   Chrome is checked for the Hetzner browser path, not BYOS/basic setup.
-- `startup bootstrap` asks for name/folder before the stack and target. Built-in
+- `startup bootstrap` asks for name, template, parent folder, deployment target,
+  GitHub account confirmation and final approval. Built-in
   templates use pinned releases: Django/FastAPI v0.1.6, Vue v0.1.5, Astro v0.1.1.
   Existing explicit flags remain supported; `--kind fullstack` bypasses the
   picker and keeps the Django/FastAPI default. `--yes` stays unattended.
+- GitHub confirmation shows the signed-in username and proposed repository.
+  Declining runs native `gh auth login`, configures Git credentials, then asks
+  again using the newly authenticated identity. Missing authentication also
+  starts native login. Environment tokens are reused, never silently removed;
+  changing their account requires updating/unsetting `GH_TOKEN`/`GITHUB_TOKEN`.
+  `--github-username` preserves an explicit owner/organization without another
+  account prompt; `--yes` remains unattended. No project/provider resources are
+  created before final approval. Login may update the local credential store.
 - Server keys are separate from GitHub OAuth/tokens and generated CI keys.
   `--ssh-public-key <path.pub>` supports custom paths. New projects select and
   validate the operator public key before any provider resources are created.

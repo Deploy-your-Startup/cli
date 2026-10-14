@@ -78,7 +78,9 @@ select a custom public-key path without Chrome or a Hetzner account.
 
 `uv run --extra dev pytest tests/test_onboarding_integration.py tests/test_vault_guard.py`
 exercises the actual CLI prompts, the domain ownership choice, optional settings,
-cancellation, all three stack choices, prompt order, explicit flag compatibility,
+cancellation, all three stack choices, name/template/folder/target/account prompt
+order, native GitHub re-login and cancellation, environment-token reuse and
+account-change guidance, explicit flag compatibility,
 BYOS domain guidance and real vault files. `test_ssh_key_selection_integration.py`
 validates real OpenSSH keys and rejects private/malformed files without leaking
 contents. Cloud accounts and paid infrastructure are not
