@@ -90,6 +90,11 @@ cli.add_command(verify)
     type=click.Choice(["hetzner", "byos"]),
     help="Where to deploy (full-stack only).",
 )
+@click.option(
+    "--site-policy",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Reviewed public operator/privacy JSON; no account required.",
+)
 @click.option("--project-name", help="Project name in kebab-case.")
 @click.option("--base-domain", help="Domain the project is served under.")
 @click.option("--additional-domains", help="Comma-separated extra domains.")
@@ -171,6 +176,7 @@ cli.add_command(verify)
     help="Run without questions — every answer must come from the options above.",
 )
 def bootstrap(
+    site_policy,
     max_monthly_cost,
     verify_deployment,
     verify_timeout,
@@ -217,6 +223,10 @@ def bootstrap(
     """
     import re
     import sys
+
+    from cli.site_policy import read_policy
+
+    policy_data = read_policy(site_policy) if site_policy else None
 
     from cli import wizard_output as ui
     from cli.wizard.steps.cost import monthly_cost
@@ -489,6 +499,7 @@ def bootstrap(
     # ── Run wizard ───────────────────────────────────────────────
 
     ctx = BootstrapContext(
+        site_policy=policy_data,
         project_name=project_name,
         base_domain=base_domain,
         additional_domains=additional_domains,

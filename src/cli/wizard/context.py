@@ -26,6 +26,7 @@ class BootstrapContext:
     docker_registry_host: str = "ghcr.io"
     template_source: str = DEFAULT_TEMPLATE
     template_version: str = "HEAD"
+    site_policy: dict | None = None
     auth0_tenant: str | None = None
     without_auth: bool = False
 

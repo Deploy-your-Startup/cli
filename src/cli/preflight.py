@@ -88,8 +88,22 @@ def check_local_prerequisites(*, browser: bool = True, ssh_key: bool = True) -> 
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     help="Public key to check instead of the default SSH key paths.",
 )
-def doctor(provider, ssh_public_key):
-    """Check CLI and GitHub setup; optionally check a deployment target."""
+@click.option(
+    "--project-dir",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help="Check project legal/consent configuration instead of machine prerequisites.",
+)
+def doctor(provider=None, ssh_public_key=None, project_dir: Path | None = None):
+    """Check CLI setup, a deployment target, or a project's policy."""
+    if project_dir is not None:
+        if provider is not None or ssh_public_key is not None:
+            raise click.UsageError(
+                "Use --project-dir separately from --provider and --ssh-public-key."
+            )
+        from cli.site_policy import check_project_policy
+
+        check_project_policy(project_dir.resolve())
+        return
     if ssh_public_key and provider is None:
         raise click.UsageError(
             "Use --ssh-public-key with --provider hetzner or --provider byos."

@@ -160,6 +160,10 @@ class ProjectStep(WizardStep):
 
         if ctx.shared_cluster or ctx.cluster_config:
             configure_project_cluster(ctx)
+        if ctx.site_policy is not None:
+            from cli.site_policy import install_policy
+
+            install_policy(ctx.project_dir, ctx.site_policy)
         ctx.vault_password = keychain_password
         ui.skip_indicator(f"Project {ctx.project_name} already configured")
         return True
@@ -217,6 +221,14 @@ class ProjectStep(WizardStep):
                 raise click.ClickException(
                     "This template does not support --deployment-ref; use a template with the deploy_ref Copier answer."
                 )
+        from cli.site_policy import install_policy
+
+        if ctx.site_policy is not None:
+            install_policy(ctx.project_dir, ctx.site_policy)
+        else:
+            ui.warning(
+                "Review site-policy.json before public launch; optional analytics stays disabled until reviewed."
+            )
         ui.action_done("Project configured")
 
         has_kpis = all(
