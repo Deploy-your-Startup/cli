@@ -104,3 +104,16 @@ three independent secrets, a stable UUID and pin, no changes on resume, old
 owner copies missing shared roles, and idempotent Auth0 setup for both toggle
 names. The template revision is fixed in the test; set
 `STARTUP_KPIS_TEMPLATE_ROOT` to a local clone containing that revision.
+
+## Kubernetes SSH access
+
+`uv run --extra dev pytest tests/test_kube_tunnel_e2e.py tests/test_firewall_integration.py`
+uses a real Docker SSH server, mutually authenticated TLS and real kubectl clients.
+It covers on-demand reconnect, simultaneous clients, separate namespaces, repeated
+setup, rejected SSH credentials and TLS identity, and private file permissions.
+The firewall integration runs the real CLI, immutable role checkout and Ansible
+against a local Hetzner HTTP stand-in, checking preview, API closure, preserved
+web/SSH/internal rules and the attached-project owner guard. It requires a sibling
+`deploy-template` checkout; Docker or kubectl absence is reported as a skip.
+Live cloud firewall attachment, changing networks and sleep/wake remain separate
+operational verification; interrupted streaming sessions can require a retry.

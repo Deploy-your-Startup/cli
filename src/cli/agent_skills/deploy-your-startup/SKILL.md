@@ -138,7 +138,9 @@ password comes from the Keychain.
 |---|---|
 | Deploy all or one service | `startup ansible deploy … [--service <tag>]` |
 | Provision or change servers | `startup ansible infrastructure …` |
-| Fetch the cluster kubeconfig | `startup ansible kubeconfig …` |
+| Fetch kubeconfig with automatic SSH access | `startup ansible kubeconfig …` |
+| Connect an existing context over SSH | `startup cluster connect --context <context> --host <master> --namespace <namespace>` |
+| Preview/apply only the cloud firewall | `startup ansible firewall --dry-run` / `--execute` |
 | Check playbook syntax offline | `startup ansible validate --playbook <file> --inventory <file>` |
 | Back up / restore | `startup ansible backup …` / `startup ansible restore …` |
 | Update server packages | `startup ansible update-vms … [--reboot]` |
@@ -268,3 +270,5 @@ production deployment. Disabling tracking preserves analytics data.
 
 Auth0 setup accepts the shared `oauth2_proxy_enabled` setting while preserving
 `oauth_enabled` for legacy project-owned roles.
+
+Kubernetes access uses an on-demand SSH tunnel by default. Keep the CLI installed and use an unlocked SSH agent or a persistent identity file; never persist a decrypted deployment key for reconnecting. After verifying all attached startup contexts, the cluster owner can set `firewall_api_source_ips: []`, preview `startup ansible firewall --dry-run`, then apply with `--execute`. Check SSH, Kubernetes and public HTTPS after the change. `startup ansible kubeconfig --direct` explicitly opts out of tunnels.

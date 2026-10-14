@@ -11,6 +11,7 @@ import click
 import yaml
 
 from cli import ansible_commands as ansible
+from cli.kube_access import connect
 
 CLUSTER_FILE = "cluster.yml"
 
@@ -184,6 +185,9 @@ def configure_project_cluster(ctx) -> None:
 @click.group()
 def cluster():
     """Connect independently deployed startups to an owner-managed k3s cluster."""
+
+
+cluster.add_command(connect)
 
 
 @cluster.command("export")
