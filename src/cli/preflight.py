@@ -9,11 +9,13 @@ from pathlib import Path
 
 import click
 
+from cli import wizard_output as ui
+
 
 def local_checks(*, browser: bool = True) -> list[tuple[bool, str]]:
     checks = [(sys.platform == "darwin", "macOS (full-stack bootstrap uses Keychain)")]
     for name in ("git", "gh", "uv", "ssh-keygen"):
-        checks.append((shutil.which(name) is not None, f"{name} is installed"))
+        checks.append((shutil.which(name) is not None, f"{name} executable on PATH"))
     if shutil.which("git"):
         result = subprocess.run(
             ["git", "var", "GIT_AUTHOR_IDENT"], capture_output=True, check=False
@@ -21,14 +23,14 @@ def local_checks(*, browser: bool = True) -> list[tuple[bool, str]]:
         checks.append(
             (
                 result.returncode == 0,
-                "Git author configured (git config --global user.name / user.email)",
+                "Git author configuration (git config --global user.name / user.email)",
             )
         )
     keys = [Path.home() / ".ssh" / name for name in ("id_ed25519.pub", "id_rsa.pub")]
     checks.append(
         (
             any(path.is_file() for path in keys),
-            "SSH public key exists (ssh-keygen -t ed25519)",
+            "SSH public key (ssh-keygen -t ed25519)",
         )
     )
     if browser:
@@ -39,7 +41,7 @@ def local_checks(*, browser: bool = True) -> list[tuple[bool, str]]:
         checks.append(
             (
                 any(path.is_file() for path in paths),
-                "Google Chrome installed for browser setup",
+                "Google Chrome for browser setup",
             )
         )
     return checks
@@ -81,7 +83,10 @@ def doctor():
                 )
             )
     for ok, label in checks:
-        click.echo(f"{'OK' if ok else 'MISSING'}  {label}")
+        if ok:
+            ui.success(label)
+        else:
+            ui.error(f"Missing: {label}")
     click.echo(
         "You also need a Hetzner Cloud account and a domain whose DNS you can edit. Infrastructure is billed to your account."
     )
