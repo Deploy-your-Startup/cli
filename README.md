@@ -37,11 +37,15 @@ now. Choose **No** to finish successfully and run `startup bootstrap` later.
 If GitHub login is cancelled, the CLI stays installed and the message explicitly
 says that GitHub is not connected.
 
-The interactive wizard asks for the project name and parent folder, then the
-stack: Django/FastAPI, Vue with Django/FastAPI, or an Astro landing page.
+The interactive wizard asks for the startup name, template (Django/FastAPI,
+Vue with Django/FastAPI, or Astro), then the parent folder and deployment target.
 Server applications offer Hetzner or your existing server (BYOS); Astro uses
 Cloudflare Pages. Only then does it ask for domain/provider settings and show
-a launch plan before creating resources. Extra domains and error tracking
+the signed-in GitHub account and proposed repository for confirmation. Decline
+that account to sign in again through `gh auth login`; environment tokens must
+be changed in the environment instead. An explicit `--github-username` keeps
+its owner/organization without an account prompt. Finally, approve the launch
+plan before any project resources are created. Extra domains and error tracking
 remain optional. Explicit `--kind`, `--provider`, `--template` and
 `--template-version` options still support scripted setup; `--kind fullstack`
 keeps the Django/FastAPI default and skips the stack picker.

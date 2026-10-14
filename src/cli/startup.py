@@ -204,8 +204,9 @@ def bootstrap(
 ):
     """Bootstrap a new startup — guided wizard.
 
-    Choose a project name, folder, stack and deployment target, then configure
-    the required accounts and create your repository, secrets and first push.
+    Choose a project name, stack, folder and deployment target, then confirm
+    the GitHub account. Configure the required accounts and create your
+    repository, secrets and first push.
 
     Each step checks if its outcome already exists, so you can safely
     re-run after an interruption.
@@ -290,17 +291,6 @@ def bootstrap(
         _require(project_name, "--project-name")
         project_name = ui.text_input("Project name (for example, my-startup)")
 
-    # Output directory
-    if not output_dir:
-        output_dir = (
-            str(Path.home() / "Projects")
-            if assume_yes
-            else ui.text_input(
-                "Project folder",
-                default=str(Path.home() / "Projects"),
-            )
-        )
-
     # ── Mode selection ───────────────────────────────────────────
 
     if kind is None:
@@ -326,6 +316,19 @@ def bootstrap(
     if template_source is None:
         template_source = PITCH_TEMPLATE if kind == "pitch" else DEFAULT_TEMPLATE
 
+    # Output directory
+    if not output_dir:
+        output_dir = (
+            str(Path.home() / "Projects")
+            if assume_yes
+            else ui.text_input(
+                "Project folder",
+                default=str(Path.home() / "Projects"),
+            )
+        )
+
+    ui.info(f"Project path: {Path(output_dir).expanduser().resolve() / project_name}")
+
     # ── Provider selection (full-stack only) ─────────────────────
 
     if kind != "fullstack":
@@ -337,11 +340,11 @@ def bootstrap(
             provider_choice = ui.numbered_choice(
                 "Where should it run?",
                 [
-                    "Hetzner Cloud — provision servers in your account",
-                    "Your existing server — connect over SSH",
+                    "Your existing server — you manage DNS and provide SSH access",
+                    "Hetzner Cloud — provision servers and guide domain setup",
                 ],
             )
-            provider = "hetzner" if provider_choice == 1 else "byos"
+            provider = "byos" if provider_choice == 1 else "hetzner"
 
     if (shared_cluster or cluster_config) and kind != "fullstack":
         raise click.ClickException("Cluster options require --kind fullstack.")
@@ -414,15 +417,23 @@ def bootstrap(
                 "Sentry DSN (Enter to skip)", default="", show_default=False
             )
 
-    # Auto-detect GitHub username
+    # An explicit owner may be an organization; preserve it without changing
+    # the authenticated user. Unattended callers must never receive a prompt.
     if not github_username:
-        try:
+        if assume_yes:
             github_username = _github_owner(None)
-            ui.info(f"GitHub account: {github_username}")
-        except (click.ClickException, subprocess.SubprocessError, OSError):
-            # gh missing, logged out, or offline — fall back to asking.
-            _require(github_username, "--github-username")
-            github_username = ui.text_input("GitHub username/org")
+        else:
+            from cli.github_setup import confirm_github_owner
+
+            try:
+                github_username = confirm_github_owner(project_name)
+            except FileNotFoundError as exc:
+                raise click.ClickException(
+                    "GitHub CLI is missing. Install gh, then rerun startup bootstrap. "
+                    "No project resources were created."
+                ) from exc
+    else:
+        ui.info(f"GitHub repository owner: {github_username}")
 
     # ── Summary + confirmation ───────────────────────────────────
 
