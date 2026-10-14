@@ -101,6 +101,14 @@ created by these checks.
 `tests/test_launch_animation_integration.py` uses a real pseudo-terminal to check
 a single launch, stationary prompts, motion opt-out and cursor restoration on interruption.
 
+`tests/test_prompt_editing_integration.py` sends actual Backspace/Delete bytes,
+Ctrl+U and cursor keys through a pseudo-terminal into the real bootstrap process.
+It tests both common terminal erase settings and checks that the edited project
+name reaches the launch plan without creating resources. This covers local
+terminal editing, not installation or live provider setup. On Python builds
+without the optional standard-library readline module, basic terminal editing
+remains dependent on the terminal's configured erase key.
+
 ## Bootstrap cost integration checks
 
 `uv run --extra dev pytest tests/test_bootstrap_cost_integration.py` exercises
