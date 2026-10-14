@@ -9,6 +9,18 @@ mise run test
 mise run lint
 ```
 
+The full suite uses pytest-xdist with small scheduling batches so long scenarios
+do not queue behind other long scenarios on one worker. It prints the 20 slowest
+tests. CI runs three independent runners with `./make.sh test --shard 1/3`
+(and `2/3`, `3/3`); sorted test IDs are distributed round-robin, including
+parametrized cases. The default local command still runs every test. The `test`
+check requires every shard to succeed, including on cancellation or skips. Every worker has
+its own temporary Ansible home and collection directory: concurrent real Galaxy
+installs cannot overwrite each other or modify the developer's collections.
+`test_ansible_isolation_integration.py` verifies this with two real pytest workers
+and Ansible's effective configuration. CI checks Docker and kubectl before
+starting the suite; SSH and browser scenarios remain enabled.
+
 For focused runs:
 
 ```bash

@@ -33,7 +33,8 @@ fi
 
 if [ "$1" == "test" ]; then
   echo "Running tests..."
-  uv run --extra dev pytest -n auto
+  shift
+  uv run --extra dev pytest -n auto --maxschedchunk=1 --durations=20 "$@"
 fi
 
 if [ "$1" == "test_vault" ]; then
