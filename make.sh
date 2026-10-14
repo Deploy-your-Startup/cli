@@ -33,7 +33,7 @@ fi
 
 if [ "$1" == "test" ]; then
   echo "Running tests..."
-  uv run --extra dev pytest -n auto
+  uv run --extra dev pytest -n auto --dist worksteal --durations=20
 fi
 
 if [ "$1" == "test_vault" ]; then
