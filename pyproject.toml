@@ -15,11 +15,11 @@ authors = [
 ]
 dependencies = [
     "copier==9.18.2",
-    "ansible==14.4.0",
+    "ansible==14.5.0",
     "click>=8.4.2",
     # Runtime requirement of the hetzner.hcloud Ansible collection (the deploy
     # playbooks import it); not imported by the CLI code directly.
-    "hcloud==2.25.1",
+    "hcloud==2.27.0",
     "httpx>=0.28.1",
     # Browser automation for `startup bootstrap` / `startup hetzner` (Cloudflare +
     # Hetzner console). Kept as a core dep so a direct CLI install has the FULL
@@ -44,7 +44,7 @@ dev = [
     # diagnostics can change between any two releases. Since `./make.sh lint`
     # gates CI, an unpinned bump would turn every pipeline red at once. Bump
     # deliberately, then run `./make.sh lint`.
-    "ty==0.0.84",
+    "ty==0.0.85",
 ]
 server = [
     "fastapi>=0.141.1",
