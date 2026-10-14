@@ -48,6 +48,10 @@ startup doctor
 startup bootstrap --kind fullstack --provider hetzner
 ```
 
+`startup doctor` marks satisfied prerequisites with a green `✓` and missing ones
+with a red `✗ Missing:` followed by the requirement and available setup guidance.
+Redirected output keeps the symbols without terminal color codes.
+
 The first-deploy path creates Django/FastAPI, Postgres and HTTPS on k3s in your
 own accounts. An existing shared deployment repository is preserved. Advanced
 options, including Vue templates, are available through `startup bootstrap --help`.
