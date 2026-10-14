@@ -49,6 +49,9 @@ class BootstrapContext:
     confirm_domain_order: bool = False
     max_monthly_cost: Decimal | None = None
 
+    ssh_public_key_path: Path | None = None
+    user_public_key: str | None = None
+
     # Populated by steps
     hetzner_token: str | None = None
     vault_password: str | None = None

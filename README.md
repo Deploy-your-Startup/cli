@@ -22,19 +22,38 @@ while keeping ownership and room to grow.
 
 ## Your first startup
 
-Start on macOS with Git, Chrome, a GitHub account and a Hetzner Cloud account.
-Bring a domain or register one during setup. Servers and domains are billed by
-your providers.
+Start on macOS with Git and a GitHub account. Server access, browser automation
+and provider credentials are needed only after choosing a project and target.
+Servers and domains are billed by your providers.
 
 ```bash
 curl -fsSL https://deploy-your-startup.com/install.sh | bash -s -- --onboard
 ```
 
-The installer provides Python 3.14 and the latest stable CLI release, connects
-GitHub and checks your setup. The wizard asks for your project name and whether
-you already own a domain; without one it offers to register it through Hetzner.
-It then shows a launch plan before creating anything. Extra domains and error
-tracking are optional.
+The companion installer flow installs GitHub CLI when missing, reuses an existing
+GitHub login or environment token, and otherwise runs `gh auth login`. After the
+basic checks it reports **Setup complete** and asks whether to create a startup
+now. Choose **No** to finish successfully and run `startup bootstrap` later.
+If GitHub login is cancelled, the CLI stays installed and the message explicitly
+says that GitHub is not connected.
+
+The interactive wizard asks for the startup name, template (Django/FastAPI,
+Vue with Django/FastAPI, or Astro), then the parent folder and deployment target.
+Server applications offer Hetzner or your existing server (BYOS); Astro uses
+Cloudflare Pages. Only then does it ask for domain/provider settings and show
+the signed-in GitHub account and proposed repository for confirmation. Decline
+that account to sign in again through `gh auth login`; environment tokens must
+be changed in the environment instead. An explicit `--github-username` keeps
+its owner/organization without an account prompt. Finally, approve the launch
+plan before any project resources are created. Extra domains and error tracking
+remain optional. Explicit `--kind`, `--provider`, `--template` and
+`--template-version` options still support scripted setup; `--kind fullstack`
+keeps the Django/FastAPI default and skips the stack picker.
+
+See [the onboarding flow and rollout](docs/onboarding-flow.md). The website must
+publish its companion installer only after a CLI release containing this flow;
+merging this CLI change alone does not update the public installer.
+
 Interactive terminals show a brief launch animation once, then stop. Set
 `STARTUP_NO_ANIMATION=1` to disable it; redirected output, CI and `NO_COLOR` stay static.
 Each CLI release bootstraps a tested release of the default application
@@ -45,16 +64,28 @@ missing prerequisites. To resume the wizard after installation:
 
 ```bash
 startup doctor
-startup bootstrap --kind fullstack --provider hetzner
+startup bootstrap
 ```
 
 `startup doctor` marks satisfied prerequisites with a green `✓` and missing ones
 with a red `✗ Missing:` followed by the requirement and available setup guidance.
 Redirected output keeps the symbols without terminal color codes.
 
-The first-deploy path creates Django/FastAPI, Postgres and HTTPS on k3s in your
-own accounts. An existing shared deployment repository is preserved. Advanced
-options, including Vue templates, are available through `startup bootstrap --help`.
+`startup doctor` checks CLI/GitHub setup without requiring a server, an SSH key,
+a cloud account or Chrome. Use `startup doctor --provider hetzner` or
+`startup doctor --provider byos` for target-specific checks. Custom public keys
+can be supplied to both doctor and bootstrap with `--ssh-public-key ~/.ssh/work.pub`.
+This is your **server-access public key**, separate from GitHub authentication and
+the generated CI deploy key. Bootstrap validates it before creating resources for
+a new project. For BYOS, its private counterpart must be available through your
+normal SSH configuration or agent. Create a key with `ssh-keygen -t ed25519` if
+needed; existing keys are never overwritten.
+
+Server templates include Postgres and HTTPS on k3s in your own accounts. An
+existing shared deployment repository is preserved. BYOS uses a domain you
+already own and does not ask for a Hetzner account. Register a domain separately
+with your preferred registrar if needed. Advanced options remain available
+through `startup bootstrap --help`.
 
 If your account already has a shared deployment repository, preview
 `startup sync --source-version v0.1.6 --dry-run`, review it, then run
