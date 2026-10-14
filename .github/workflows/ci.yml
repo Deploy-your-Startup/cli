@@ -36,6 +36,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: Deploy-your-Startup/deploy-template
+          ref: v0.1.6
+          path: .test-deploy-template
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
@@ -45,3 +50,9 @@ jobs:
         run: uv run --extra dev playwright install --with-deps chromium-headless-shell
       - name: Run tests
         run: ./make.sh test
+        env:
+          STARTUP_TEST_DEPLOY_TEMPLATE: ${{ github.workspace }}/.test-deploy-template
+      - name: Require SSH access E2E prerequisites
+        run: |
+          command -v kubectl
+          docker info >/dev/null

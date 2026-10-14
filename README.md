@@ -238,6 +238,54 @@ startup ansible backup --working-directory deployment --environment production
 startup ansible update-vms --working-directory deployment --environment production
 ```
 
+### Kubernetes access over SSH
+
+`startup ansible kubeconfig` configures an automatic SSH tunnel by default.
+Continue using `kubectl` and `k9s` normally: their kubeconfig credential helper
+starts the local tunnel on demand, including after a reboot. SSH must work
+without a password prompt, using your SSH agent/config or `--ssh-identity`.
+An encrypted key must be unlocked in your agent. The CLI does not save Vault
+passwords or decrypted deployment SSH keys for reconnecting.
+
+To migrate an existing context or connect directly to a known master:
+
+```bash
+startup cluster connect --context my-startup-production --host 203.0.113.10 --namespace my-startup
+kubectl --context my-startup-production get pods
+k9s --context my-startup-production
+```
+
+Verify the server's SSH host key before connecting. `cluster connect` preserves
+other contexts and the selected context; an existing namespace is retained
+unless `--namespace` is supplied. Each context has its own loopback port and
+owner-readable credential file under `~/.kube/startup`. Keep the CLI installed:
+the kubeconfig calls the Python environment that configured it. Re-run connect
+after moving or replacing that installation. `--ssh-port` and `--identity-file`
+support custom SSH setups; `--kubeconfig` selects a single configuration file.
+
+Kubernetes CA and hostname verification remain enabled through the tunnel.
+Clients check the tunnel when credentials refresh (every 20 seconds); a network
+interruption can briefly interrupt watches or exec sessions. New client
+processes reconnect automatically. An idle tunnel exits after two minutes.
+Use `startup ansible kubeconfig --direct` for an explicitly configured direct
+or private-network API endpoint instead.
+
+After verifying SSH access for every startup on a cluster, set
+`firewall_api_source_ips: []` in the owner's production group vars. Preview and
+apply only the pinned firewall role:
+
+```bash
+startup ansible firewall --working-directory deployment --dry-run
+startup ansible firewall --working-directory deployment --execute
+startup ansible firewall --working-directory deployment --inspect
+```
+
+This keeps the role's website, SSH and cluster-internal rules while removing
+the administrator API allowlist. It does not provision or upgrade servers.
+Only the cluster owner can apply the shared firewall. Verify SSH, Kubernetes
+and public HTTPS again after applying it. Existing tunnels do not themselves
+remove an old public API firewall rule.
+
 For restore, verify the backup artifacts and explicitly confirm with `--yes`.
 Without an explicit backup directory, the CLI selects the latest matching
 database and media artifacts under `~/Backups/<project>`; use `--backup-dir`,
