@@ -272,3 +272,31 @@ Auth0 setup accepts the shared `oauth2_proxy_enabled` setting while preserving
 `oauth_enabled` for legacy project-owned roles.
 
 Kubernetes access uses an on-demand SSH tunnel by default. Keep the CLI installed and use an unlocked SSH agent or a persistent identity file; never persist a decrypted deployment key for reconnecting. After verifying all attached startup contexts, the cluster owner can set `firewall_api_source_ips: []`, preview `startup ansible firewall --dry-run`, then apply with `--execute`. Check SSH, Kubernetes and public HTTPS after the change. `startup ansible kubeconfig --direct` explicitly opts out of tunnels.
+
+## Public legal information and analytics
+
+Compatible templates ship public `site-policy.json` configuration and legal pages.
+Before launch, run `startup doctor --project-dir <project>` and review the actual
+providers, purposes, legal bases, retention, transfers and rights with the owner.
+Bootstrap can take `--site-policy <reviewed-public-json>`; this contains public
+operator data, never secrets. Do not invent an address or claim that a passing
+configuration check establishes compliance. Optional analytics requires review
+and opt-in; use the locally bundled CookieConsent, with no extra account.
+When adding tracking or external services, update disclosures, consent categories
+and revision, and test no collection before acceptance or after withdrawal.
+
+### Required onboarding before public launch
+
+When creating any startup for a user, include legal setup in onboarding before
+public launch: collect only missing, publication-approved operator name, postal
+address and contact details, and prepare a privacy notice matching the actual
+hosting, login, analytics and other data processing. Generic template text is a
+draft, not a completed notice. Ask for missing details together; never infer a
+private address or reuse another operator's information. Keep optional analytics
+disabled until disclosures are completed and reviewed. Track missing information
+explicitly and do not describe a startup as ready for public launch while this
+work is outstanding. This applies to portfolio startups and external users,
+including pitch sites even when their template has no built-in legal pages.
+Use supported site-policy configuration and checks where available; otherwise
+add the required project pages and record the gap. No extra consent-service
+account is required by the standard workflow.
