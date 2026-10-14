@@ -44,6 +44,10 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
+      - name: Require SSH access E2E prerequisites
+        run: |
+          command -v kubectl
+          docker info >/dev/null
       # Domain-order integration tests drive a real headless browser against
       # a local KonsoleH stand-in.
       - name: Install headless browser
@@ -52,7 +56,3 @@ jobs:
         run: ./make.sh test
         env:
           STARTUP_TEST_DEPLOY_TEMPLATE: ${{ github.workspace }}/.test-deploy-template
-      - name: Require SSH access E2E prerequisites
-        run: |
-          command -v kubectl
-          docker info >/dev/null

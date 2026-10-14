@@ -9,6 +9,14 @@ mise run test
 mise run lint
 ```
 
+The full suite uses pytest-xdist work stealing so idle workers can pick up queued
+scenarios from busy workers, and prints the 20 slowest tests. Every worker has
+its own temporary Ansible home and collection directory: concurrent real Galaxy
+installs cannot overwrite each other or modify the developer's collections.
+`test_ansible_isolation_integration.py` verifies this with two real pytest workers
+and Ansible's effective configuration. CI checks Docker and kubectl before
+starting the suite; SSH and browser scenarios remain enabled.
+
 For focused runs:
 
 ```bash
