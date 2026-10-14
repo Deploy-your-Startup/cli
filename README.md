@@ -593,3 +593,31 @@ Read the admin password with `startup secrets get-field -f deployment/group_vars
 project's `kpis_enabled` setting to stop frontend tracking, without deleting
 stored analytics. Auth0 setup supports the shared `oauth2_proxy_enabled` toggle
 and retains `oauth_enabled` for older templates with a local proxy role.
+
+## Public legal information and consent
+
+Use `startup doctor --project-dir ./my-startup` to check the generated public
+policy configuration without contacting accounts or checking machine prerequisites.
+It fails on missing operator details, pending review and invalid analytics settings;
+it does not certify legal compliance or live behaviour.
+
+New compatible templates contain `site-policy.json` under `frontend/src/data/`
+(Vue) or `backend/project/` (Django). Complete the operator name, postal address,
+contact email and project-specific privacy notice; set `reviewed: true` only
+after review. `additionalImprint` holds applicable registration/representation
+information. `analytics` accepts `off` or `consent`, and `revision` is a positive
+integer increased when consent purposes change. Django currently supports `off`
+only. These are public values; never place secrets in this file.
+
+Bootstrap accepts `--site-policy /absolute/path/to/operator.json` to install an
+already reviewed configuration in a compatible template before the first commit.
+It preserves a matching configuration on resume and rejects conflicting operator
+data. Without this option the generated pages remain explicit drafts and optional
+analytics stays off. Older template releases do not support this option; select a
+reviewed compatible revision explicitly until a compatible release is published.
+
+Vue uses locally bundled CookieConsent (`vanilla-cookieconsent`, MIT), with no
+account or hosted consent service. Analytics needs both valid runtime Umami
+configuration and a reviewed policy with `analytics: consent`. Accept, reject and
+withdraw are available; withdrawing reloads the page to discard tracker listeners.
+Shared-role sync alone cannot add these application pages or consent controls.

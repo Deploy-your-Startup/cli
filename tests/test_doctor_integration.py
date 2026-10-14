@@ -13,6 +13,31 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_project_policy_and_server_checks_are_separate_profiles(tmp_path):
+    # GIVEN a project directory and two different doctor profiles.
+    # WHEN combining project checks with a deployment provider.
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "cli.startup",
+            "doctor",
+            "--project-dir",
+            str(tmp_path),
+            "--provider",
+            "byos",
+        ],
+        env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=30,
+    )
+    # THEN neither profile is silently ignored or confused with installation.
+    assert result.returncode == 2
+    assert "Use --project-dir separately" in result.stderr
+
+
 @pytest.fixture
 def doctor_environment(tmp_path):
     home = tmp_path / "home"
