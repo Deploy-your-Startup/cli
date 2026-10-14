@@ -261,7 +261,7 @@ def test_wizard_routes_cost_before_auth_and_finalization(tmp_path, provider):
     [
         (
             [],
-            "n\ny\n\n",
+            "n\ny\n\nn\n",
             "Cancelled before provisioning; nothing was created in Hetzner.",
         ),
         (["--yes", "--max-monthly-cost", "1"], "", "exceeds --max-monthly-cost"),
@@ -338,7 +338,20 @@ sys.exit(1)
     security.chmod(0o755)
     home = tmp_path / "home"
     (home / ".ssh").mkdir(parents=True)
-    (home / ".ssh/id_ed25519.pub").write_text("ssh-ed25519 synthetic-public-key")
+    subprocess.run(
+        [
+            "ssh-keygen",
+            "-q",
+            "-t",
+            "ed25519",
+            "-N",
+            "",
+            "-f",
+            str(home / ".ssh/id_ed25519"),
+        ],
+        check=True,
+        capture_output=True,
+    )
     (tmp_path / "token.env").write_text(
         "# Project: sample\nHETZNER_API_TOKEN=synthetic-token\n"
     )
@@ -390,7 +403,7 @@ sys.exit(1)
     # the original configured project survives for the next resume.
     output = result.stdout + result.stderr
     assert result.returncode == 1, output
-    assert expected in output
+    assert expected in output, output
     assert "Total per month" in output and "11.90" in output
     assert "/v1/pricing" in [path for path, _ in provider["requests"]]
     assert "workflow run" not in log.read_text()
