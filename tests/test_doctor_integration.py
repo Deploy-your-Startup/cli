@@ -1,6 +1,5 @@
 """Exercise doctor output through the real CLI, including a terminal."""
 
-import errno
 import os
 import pty
 import shutil
@@ -140,16 +139,17 @@ def test_doctor_uses_green_checks_and_red_crosses_in_a_terminal(
             timeout=30,
             check=False,
         )
-    finally:
-        os.close(slave)
+        # macOS can discard unread PTY output when the last slave closes.
+        # The child has exited: drain its output before closing our slave fd.
+        os.set_blocking(master, False)
         try:
             while chunk := os.read(master, 65536):
                 output += chunk
-        except OSError as error:
-            if error.errno != errno.EIO:
-                raise
-        finally:
-            os.close(master)
+        except BlockingIOError:
+            pass
+    finally:
+        os.close(slave)
+        os.close(master)
 
     # THEN the symbols carry the terminal colors and labels stay readable.
     text = output.decode("utf-8")
