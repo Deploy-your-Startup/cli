@@ -58,8 +58,18 @@ def check_local_prerequisites(*, browser: bool = True) -> None:
 
 
 @click.command()
-def doctor():
-    """Check macOS full-stack prerequisites without creating resources."""
+@click.option(
+    "--project-dir",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help="Check project legal/consent configuration instead of machine prerequisites.",
+)
+def doctor(project_dir: Path | None = None):
+    """Check setup prerequisites, or a project policy with --project-dir."""
+    if project_dir is not None:
+        from cli.site_policy import check_project_policy
+
+        check_project_policy(project_dir.resolve())
+        return
     checks = local_checks()
     if shutil.which("gh"):
         status = subprocess.run(
