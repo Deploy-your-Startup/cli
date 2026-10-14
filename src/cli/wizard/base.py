@@ -11,6 +11,7 @@ from pathlib import Path
 import click
 
 from cli import wizard_output as ui
+from cli.ssh_keys import read_public_key
 
 from .context import BootstrapContext
 
@@ -85,38 +86,41 @@ def is_pushed(project_dir: Path) -> bool:
     return False
 
 
-def prompt_user_public_key(*, non_interactive: bool = False) -> str:
-    """Ask the user for their own SSH public key for server SSH access."""
+def prompt_user_public_key(
+    *, non_interactive: bool = False, public_key_path: Path | None = None
+) -> str:
+    """Select and validate the operator key; never read or print private keys."""
     candidates = [
-        Path.home() / ".ssh" / "id_ed25519.pub",
-        Path.home() / ".ssh" / "id_rsa.pub",
+        Path.home() / ".ssh" / name for name in ("id_ed25519.pub", "id_rsa.pub")
     ]
-    default = next((str(p) for p in candidates if p.exists()), None)
-    if non_interactive:
-        # Nobody is there to accept the default, and a prompt that cannot be
-        # answered kills the run after the Hetzner project and token already
-        # exist.
-        if not default:
-            raise click.ClickException(
-                "No SSH public key found at ~/.ssh/id_ed25519.pub or "
-                "~/.ssh/id_rsa.pub, and there is no way to ask for one. "
-                "Create a key with `ssh-keygen -t ed25519` first."
-            )
-        return Path(default).read_text().strip()
+    default = public_key_path or next((p for p in candidates if p.is_file()), None)
+    ui.info(
+        "This public SSH key grants you server access. It is separate from GitHub "
+        "login; a dedicated deployment key is generated for CI. "
+        "Use an existing .pub file, or create a key in another terminal with "
+        "ssh-keygen -t ed25519."
+    )
     while True:
-        path_str = ui.text_input(
-            "Path to your public SSH key (for server access)",
-            default=default,
-        )
-        path = Path(path_str).expanduser()
-        if not path.is_file():
-            ui.error(f"File not found: {path}")
-            continue
-        content = path.read_text().strip()
-        if not content.startswith(("ssh-", "ecdsa-")):
-            ui.error("This does not look like an OpenSSH public key.")
-            continue
-        return content
+        if public_key_path or non_interactive:
+            if not default:
+                raise click.ClickException(
+                    "No SSH public key found. Use --ssh-public-key <path.pub> or "
+                    "create one with ssh-keygen -t ed25519."
+                )
+            path = default.expanduser()
+        else:
+            path = Path(
+                ui.text_input(
+                    "Path to your public SSH key (for server access)",
+                    default=str(default) if default else None,
+                )
+            ).expanduser()
+        try:
+            return read_public_key(path)
+        except click.ClickException as error:
+            if public_key_path or non_interactive:
+                raise
+            ui.error(error.format_message())
 
 
 def open_browser(url: str, label: str) -> None:

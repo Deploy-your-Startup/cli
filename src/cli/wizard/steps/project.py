@@ -175,7 +175,9 @@ class ProjectStep(WizardStep):
             ui.action_done("Project folder created")
 
         # 3b. SSH Keys
-        user_public_key = prompt_user_public_key(non_interactive=ctx.non_interactive)
+        user_public_key = ctx.user_public_key or prompt_user_public_key(
+            non_interactive=ctx.non_interactive, public_key_path=ctx.ssh_public_key_path
+        )
         ui.action_start("Generating CI SSH key...")
         with tempfile.TemporaryDirectory(prefix="bootstrap-ssh-") as ssh_tmp:
             ci_private_key, ci_public_key = _generate_ssh_keypair(

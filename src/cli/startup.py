@@ -16,6 +16,7 @@ from cli.skill_commands import skills
 from cli.template_commands import (
     DEFAULT_TEMPLATE,
     PITCH_TEMPLATE,
+    VUE_TEMPLATE,
     default_template_version,
     template,
     template_supports_shared_cluster,
@@ -82,7 +83,7 @@ cli.add_command(verify)
 @click.option(
     "--kind",
     type=click.Choice(["fullstack", "pitch"]),
-    help="Bootstrap mode (skips the first question).",
+    help="Project kind (skips the interactive stack selection).",
 )
 @click.option(
     "--provider",
@@ -150,6 +151,11 @@ cli.add_command(verify)
     show_default=True,
     help="Reviewed shared-workflow ref used by the generated project.",
 )
+@click.option(
+    "--ssh-public-key",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Your public SSH key for server access (not a GitHub token).",
+)
 @click.option("--byos-host", help="Existing server's IP or hostname (provider byos).")
 @click.option("--byos-ssh-user", help="SSH user on that server (default: root).")
 @click.option("--cloudflare-token", help="Cloudflare API token (pitch only).")
@@ -189,6 +195,7 @@ def bootstrap(
     shared_cluster,
     cluster_path,
     deployment_ref,
+    ssh_public_key,
     byos_host,
     byos_ssh_user,
     cloudflare_token,
@@ -197,8 +204,8 @@ def bootstrap(
 ):
     """Bootstrap a new startup — guided wizard.
 
-    Walks you through the complete setup: Domain, Hetzner project/token,
-    project creation from template, and finalization (commit, push, Keychain).
+    Choose a project name, folder, stack and deployment target, then configure
+    the required accounts and create your repository, secrets and first push.
 
     Each step checks if its outcome already exists, so you can safely
     re-run after an interruption.
@@ -266,18 +273,55 @@ def bootstrap(
     if (shared_cluster or cluster_config) and kind == "pitch":
         raise click.ClickException("Cluster options require --kind fullstack.")
 
+    # Project name (kebab-case validated — including one passed as an option,
+    # since it becomes a repo name, a k8s namespace and a Keychain entry).
+    while not project_name or not re.fullmatch(
+        r"[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?", project_name
+    ):
+        if project_name:
+            ui.error(
+                "Use lowercase letters, numbers and hyphens (for example, my-startup)."
+            )
+            if assume_yes:
+                raise click.ClickException(
+                    f"--project-name '{project_name}' must be kebab-case, end in an "
+                    "alphanumeric character, and contain at most 63 characters."
+                )
+        _require(project_name, "--project-name")
+        project_name = ui.text_input("Project name (for example, my-startup)")
+
+    # Output directory
+    if not output_dir:
+        output_dir = (
+            str(Path.home() / "Projects")
+            if assume_yes
+            else ui.text_input(
+                "Project folder",
+                default=str(Path.home() / "Projects"),
+            )
+        )
+
     # ── Mode selection ───────────────────────────────────────────
 
     if kind is None:
         _require(kind, "--kind")
-        choice = ui.numbered_choice(
-            "What are you building?",
-            [
-                "Application — Django/FastAPI on your infrastructure",
-                "Landing page — Astro on Cloudflare Pages",
-            ],
-        )
-        kind = "fullstack" if choice == 1 else "pitch"
+        if template_source:
+            kind = "pitch" if template_source == PITCH_TEMPLATE else "fullstack"
+        else:
+            choices = [
+                "Django/FastAPI — backend, Postgres and HTTPS",
+                "Vue + Django/FastAPI — frontend, backend, Postgres and HTTPS",
+            ]
+            if not (provider or shared_cluster or cluster_config):
+                choices.append("Astro — static landing page on Cloudflare Pages")
+            choice = ui.numbered_choice(
+                "Which stack would you like to start with?", choices
+            )
+            kind, template_source = [
+                ("fullstack", DEFAULT_TEMPLATE),
+                ("fullstack", VUE_TEMPLATE),
+                ("pitch", PITCH_TEMPLATE),
+            ][choice - 1]
 
     if template_source is None:
         template_source = PITCH_TEMPLATE if kind == "pitch" else DEFAULT_TEMPLATE
@@ -304,22 +348,16 @@ def bootstrap(
 
     # ── Collect inputs ───────────────────────────────────────────
 
-    # Project name (kebab-case validated — including one passed as an option,
-    # since it becomes a repo name, a k8s namespace and a Keychain entry).
-    while not project_name or not re.fullmatch(
-        r"[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?", project_name
-    ):
-        if project_name:
-            ui.error(
-                "Use lowercase letters, numbers and hyphens (for example, my-startup)."
+    if kind == "fullstack" and provider == "byos" and not cluster_config:
+        if domain_owned is False:
+            raise click.ClickException(
+                "BYOS uses your existing domain. Register it with your chosen "
+                "registrar first, then use --domain-owned."
             )
-            if assume_yes:
-                raise click.ClickException(
-                    f"--project-name '{project_name}' must be kebab-case, end in an "
-                    "alphanumeric character, and contain at most 63 characters."
-                )
-        _require(project_name, "--project-name")
-        project_name = ui.text_input("Project name (for example, my-startup)")
+        domain_owned = True
+        ui.info(
+            "Use a domain you own and point its DNS at your server; no Hetzner account is needed."
+        )
 
     # Domain — ask whether one exists first, so "no domain yet" leads to
     # registering one instead of a prompt that assumes ownership.
@@ -386,17 +424,6 @@ def bootstrap(
             _require(github_username, "--github-username")
             github_username = ui.text_input("GitHub username/org")
 
-    # Output directory
-    if not output_dir:
-        output_dir = (
-            str(Path.home() / "Projects")
-            if assume_yes
-            else ui.text_input(
-                "Project folder",
-                default=str(Path.home() / "Projects"),
-            )
-        )
-
     # ── Summary + confirmation ───────────────────────────────────
 
     template_version = template_version or default_template_version(template_source)
@@ -410,6 +437,7 @@ def bootstrap(
     summary = {
         "Type": "Full-Stack" if kind == "fullstack" else "Pitch (Cloudflare Pages)",
         "Project": project_name,
+        "Folder": str(Path(output_dir).expanduser().resolve() / project_name),
         "Domain": base_domain
         + (" (register through Hetzner)" if domain_owned is False else ""),
         "GitHub": f"{github_username}/{project_name}",
@@ -428,6 +456,8 @@ def bootstrap(
         template_name = (
             "Django/FastAPI"
             if template_source == DEFAULT_TEMPLATE
+            else "Vue + Django/FastAPI"
+            if template_source == VUE_TEMPLATE
             else template_source.rstrip("/").removesuffix(".git").rsplit("/", 1)[-1]
         )
         summary["Template"] = f"{template_name} {template_version}"
@@ -467,6 +497,7 @@ def bootstrap(
         deployment_ref=deployment_ref,
         shared_cluster=shared_cluster,
         cluster_config=cluster_config,
+        ssh_public_key_path=ssh_public_key,
         byos_host=byos_host,
         byos_ssh_user=byos_ssh_user or "root",
         hetzner_token=hetzner_token,
