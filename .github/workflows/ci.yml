@@ -32,8 +32,13 @@ jobs:
           # needing to know it is running inside GitHub Actions.
           RUFF_OUTPUT_FORMAT: github
 
-  test:
+  test-shard:
+    name: test-shard (${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/checkout@v7
@@ -53,6 +58,18 @@ jobs:
       - name: Install headless browser
         run: uv run --extra dev playwright install --with-deps chromium-headless-shell
       - name: Run tests
-        run: ./make.sh test
+        run: ./make.sh test --shard ${{ matrix.shard }}/3
         env:
           STARTUP_TEST_DEPLOY_TEMPLATE: ${{ github.workspace }}/.test-deploy-template
+
+  # Preserve the existing required check name. Fail closed on a failed,
+  # cancelled or skipped shard, while allowing all shards to report results.
+  test:
+    if: always()
+    needs: [test-shard]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every test shard
+        env:
+          SHARD_RESULT: ${{ needs.test-shard.result }}
+        run: test "$SHARD_RESULT" = success

@@ -12,3 +12,30 @@ def isolated_ansible_home(tmp_path_factory):
         patch.setenv("ANSIBLE_HOME", str(home))
         patch.setenv("ANSIBLE_COLLECTIONS_PATH", str(home / "collections"))
         yield home
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--shard", help="Run one deterministic CI shard, e.g. 1/3 (default: all tests)"
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    shard = config.getoption("--shard")
+    if shard is None:
+        return
+    try:
+        index, total = map(int, shard.split("/"))
+        if not 1 <= index <= total:
+            raise ValueError
+    except ValueError as error:
+        raise pytest.UsageError(
+            "--shard must be INDEX/TOTAL with 1 <= INDEX <= TOTAL"
+        ) from error
+    # Every runner collects the same suite. Sorting node IDs makes assignment
+    # independent of collection order; parametrized cases can run separately.
+    selected, deselected = [], []
+    for position, item in enumerate(sorted(items, key=lambda item: item.nodeid)):
+        (selected if position % total == index - 1 else deselected).append(item)
+    items[:] = selected
+    config.hook.pytest_deselected(items=deselected)
