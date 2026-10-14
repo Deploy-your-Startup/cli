@@ -1348,7 +1348,58 @@ def ansible_infrastructure(
     )
 
 
+@ansible.command("firewall")
+@click.option(
+    "--inspect",
+    is_flag=True,
+    help="Read live firewall rules and attached server IDs without changing anything.",
+)
+@click.option("--version", default="main", show_default=True)
+@click.option(
+    "--repo-url",
+    default=None,
+    help="Override the shared repository; existing immutable pins still apply.",
+)
+@click.option("--refresh/--no-refresh", default=True)
+@click.option("--working-directory", default="deployment", show_default=True)
+@click.option("--environment", type=click.Choice(["production"]), default="production")
+@click.option(
+    "--dry-run/--execute",
+    default=True,
+    show_default=True,
+    help="Preview or apply only the project's pinned Hetzner firewall role.",
+)
+def ansible_firewall(
+    working_directory, environment, dry_run, repo_url, refresh, version, inspect
+):
+    """Reconcile firewall rules without provisioning or upgrading servers."""
+    from cli.ansible_commands import run_firewall
+
+    run_firewall(
+        working_directory,
+        environment,
+        dry_run=dry_run,
+        repo_url=repo_url,
+        refresh=refresh,
+        version=version,
+        inspect=inspect,
+    )
+
+
 @ansible.command("kubeconfig")
+@click.option(
+    "--ssh-port", type=click.IntRange(1, 65535), default=22, show_default=True
+)
+@click.option(
+    "--direct",
+    is_flag=True,
+    help="Use direct API access instead of an automatic SSH tunnel.",
+)
+@click.option(
+    "--ssh-identity",
+    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+    help="Persistent SSH identity for automatic tunnels; otherwise use your SSH agent/config.",
+)
 @click.option(
     "--vault-password",
     "--vault_password",
@@ -1408,8 +1459,11 @@ def ansible_kubeconfig(
     version,
     refresh,
     repo_url,
+    direct,
+    ssh_identity,
+    ssh_port,
 ):
-    """Fetch and merge the cluster kubeconfig."""
+    """Fetch kubeconfig with automatic SSH access (public API access is unnecessary)."""
     from cli.ansible_commands import resolve_vault_password, run_kubeconfig
 
     resolved_vault_password = resolve_vault_password(
@@ -1432,6 +1486,9 @@ def ansible_kubeconfig(
         version=version,
         refresh=refresh,
         repo_url=repo_url,
+        direct=direct,
+        ssh_identity=ssh_identity,
+        ssh_port=ssh_port,
     )
 
 
