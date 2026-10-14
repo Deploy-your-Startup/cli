@@ -104,7 +104,8 @@ def check_prerequisites(ctx: BootstrapContext) -> None:
         from cli.preflight import check_local_prerequisites
 
         check_local_prerequisites(
-            browser=ctx.provider == "hetzner" and not ctx.hetzner_token
+            browser=ctx.provider == "hetzner" and not ctx.hetzner_token,
+            ssh_key=False,
         )
     required = [("git", "Git: https://git-scm.com/downloads")]
     if ctx.kind != "pitch":
@@ -143,6 +144,18 @@ def check_prerequisites(ctx: BootstrapContext) -> None:
                     "done as part of an unattended run."
                 )
             _ensure_ghcr_scopes()
+
+    # Resolve personal SSH access before creating provider resources. A resumed
+    # project can use its saved configuration and does not need the key again.
+    if ctx.kind != "pitch" and (
+        ctx.ssh_public_key_path is not None
+        or not (ctx.project_dir / ".copier-answers.yml").is_file()
+    ):
+        from .base import prompt_user_public_key
+
+        ctx.user_public_key = prompt_user_public_key(
+            non_interactive=ctx.non_interactive, public_key_path=ctx.ssh_public_key_path
+        )
 
 
 def run_wizard(ctx: BootstrapContext) -> None:

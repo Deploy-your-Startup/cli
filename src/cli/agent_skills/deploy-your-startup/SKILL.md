@@ -24,7 +24,10 @@ hand-written scaffolding, raw `ansible-vault` or ad-hoc `ansible-playbook` runs.
    The installer brings its own Python and puts `startup` into
    `~/.local/bin`. Early access supports macOS only. If Git is missing the user
    first runs `xcode-select --install`.
-2. Run `startup doctor`. It is read-only. Fix each `MISSING` line with the
+2. Run `startup doctor` for basic CLI/GitHub setup. It is read-only and does not
+   require SSH, Chrome or a cloud account. After selecting a target, use
+   `startup doctor --provider hetzner` or `startup doctor --provider byos`.
+   Fix each `✗ Missing:` line with the
    command it prints (for example `gh auth login --git-protocol https --scopes
    repo,workflow,read:packages,write:packages`). Commands that need the user's
    browser or password — GitHub login, Hetzner sign-up — are theirs to
@@ -33,6 +36,17 @@ hand-written scaffolding, raw `ansible-vault` or ad-hoc `ansible-playbook` runs.
    guessing. The help output is the source of truth for the installed version.
 
 ## 2. Create a new startup
+
+Interactive `startup bootstrap` asks for name and folder, then a stack
+(Django/FastAPI, Vue + Django/FastAPI, or Astro) and its deployment target.
+`--kind fullstack` skips the stack menu and keeps the Django/FastAPI default;
+use `--template` to select Vue in an unattended run. Known templates default to
+pinned releases; explicit `--template-version` overrides them.
+Server access is configured after target selection. Use `--ssh-public-key`
+for a custom public key path; this key is separate from GitHub login and the
+CI deployment key. BYOS requires an already owned domain; it does not order one
+through Hetzner. For existing shared-cluster attachments, the separate
+`--buy-domain` flow remains available.
 
 Ask **one** bundled question with only what is missing:
 

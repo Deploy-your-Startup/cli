@@ -189,3 +189,112 @@ def test_shared_owner_launch_uses_the_compatible_published_default(tmp_path):
     assert "CLI `v0.1.11` pins the compatible Django template `v0.1.6`" in readme
     assert "startup bootstrap --kind pitch --template-version v0.1.1" in readme
     assert "startup sync --source-version v0.1.6 --dry-run" in readme
+
+
+def run_interactive_bootstrap(tmp_path, answers, *options):
+    return subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "cli.startup",
+            "bootstrap",
+            "--github-username",
+            "example-owner",
+            *options,
+        ],
+        input=answers,
+        text=True,
+        capture_output=True,
+        cwd=tmp_path,
+        check=False,
+        timeout=30,
+        env={
+            **os.environ,
+            "PYTHONPATH": str(ROOT / "src"),
+            "SENTRY_DSN": "",
+            "NO_COLOR": "1",
+        },
+    )
+
+
+def test_interactive_stack_and_target_choices_precede_credentials(tmp_path):
+    # GIVEN a new user starting from bootstrap without fixed kind/provider flags.
+    scenarios = [
+        ("1\n1\n1\nexample.com\n\nn\n", "Django/FastAPI v0.1.6", "Hetzner"),
+        (
+            "2\n2\nexample.com\n\nn\n",
+            "Vue + Django/FastAPI v0.1.5",
+            "Bring your own server",
+        ),
+        ("3\nexample.com\nn\n", "Pitch v0.1.1", "Cloudflare Pages"),
+    ]
+    for answers, template, target in scenarios:
+        # WHEN choosing a stack and destination, then declining the launch plan.
+        result = run_interactive_bootstrap(
+            tmp_path, f"my-startup\n{tmp_path / 'projects'}\n" + answers
+        )
+        # THEN choices are visible in order and cancellation creates nothing.
+        assert result.returncode == 0, result.stdout + result.stderr
+        output = result.stdout
+        assert (
+            output.index("Project name")
+            < output.index("Project folder")
+            < output.index("Which stack")
+        )
+        assert template in output and target in output
+        assert "Cancelled. No resources were created." in output
+        assert not (tmp_path / "projects").exists()
+        if target == "Bring your own server":
+            assert "register a new one through Hetzner" not in output
+        if target == "Cloudflare Pages":
+            assert "Where should it run?" not in output
+
+
+def test_custom_template_and_flags_skip_interactive_stack_selection(tmp_path):
+    # GIVEN an automation/custom-template user with all project choices supplied.
+    # WHEN reviewing the launch plan using the existing options.
+    result = run_interactive_bootstrap(
+        tmp_path,
+        "n\nn\n",
+        "--kind",
+        "fullstack",
+        "--provider",
+        "byos",
+        "--project-name",
+        "my-startup",
+        "--output-dir",
+        str(tmp_path / "projects"),
+        "--base-domain",
+        "example.com",
+        "--template",
+        "https://example.com/custom.git",
+        "--template-version",
+        "v3.2.1",
+    )
+    # THEN explicit inputs are preserved and no new stack prompt is inserted.
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "custom v3.2.1" in result.stdout
+    assert "Which stack" not in result.stdout
+    assert not (tmp_path / "projects").exists()
+
+
+def test_byos_does_not_silently_accept_unsupported_domain_purchase(tmp_path):
+    # GIVEN BYOS with the domain-order flag used by Hetzner.
+    # WHEN reviewing that unsupported combination.
+    result = run_interactive_bootstrap(
+        tmp_path,
+        "",
+        "--kind",
+        "fullstack",
+        "--provider",
+        "byos",
+        "--buy-domain",
+        "--project-name",
+        "my-startup",
+        "--output-dir",
+        str(tmp_path / "projects"),
+    )
+    # THEN setup stops before creating resources and explains how to proceed.
+    assert result.returncode != 0
+    assert "Register it with your chosen registrar" in result.stderr
+    assert not (tmp_path / "projects").exists()
