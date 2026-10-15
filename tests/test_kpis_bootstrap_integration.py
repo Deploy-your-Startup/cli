@@ -15,7 +15,7 @@ from cli.bootstrap import TEMPLATE_VAULT_PASSWORD
 from tests.vault_support import RealVault
 
 ROOT = Path(__file__).resolve().parents[1]
-TEMPLATE_REVISION = "cdb0cc79da3424235a372968875ece297bb71ee7"
+TEMPLATE_REVISION = "67ec8ef27d4209f1c0106ed27f3547d39a95625c"
 TEMPLATE_SOURCE = "https://github.com/Deploy-your-Startup/vue-django-template.git"
 
 
