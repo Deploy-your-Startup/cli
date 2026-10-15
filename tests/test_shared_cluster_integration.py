@@ -21,7 +21,7 @@ TEMPLATE = (
     else "https://github.com/Deploy-your-Startup/django-backend-template.git"
 )
 TEMPLATE_VERSION = (
-    "HEAD" if LOCAL_TEMPLATE.is_dir() else "c321a39c2430a87cfcd10b9cef6ffe662346d02e"
+    "HEAD" if LOCAL_TEMPLATE.is_dir() else "0258f54129d7aee8050b699cc60869d8be7abcde"
 )
 
 
@@ -74,7 +74,7 @@ def descriptor():
         (
             "vue-django-template",
             "https://github.com/Deploy-your-Startup/vue-django-template.git",
-            "382961daaf43ccd59b645c9af1619c7f2826f650",
+            "7d83921d228a0f4f446b4d2a7cf9759f4f09cdb0",
         ),
     ],
 )
