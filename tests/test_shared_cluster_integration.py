@@ -21,7 +21,7 @@ TEMPLATE = (
     else "https://github.com/Deploy-your-Startup/django-backend-template.git"
 )
 TEMPLATE_VERSION = (
-    "HEAD" if LOCAL_TEMPLATE.is_dir() else "8e1a387ad45f0d6c9727d4a52ac4d245e8176790"
+    "HEAD" if LOCAL_TEMPLATE.is_dir() else "c207b2bfc1d129e18eaa36ea58721c878e0f1ec8"
 )
 
 
