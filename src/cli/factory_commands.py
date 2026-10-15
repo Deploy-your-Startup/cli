@@ -17,7 +17,7 @@ from cli import wizard_output as ui
 from cli.template_commands import ANSWERS_FILE, render_project
 
 FACTORY_TEMPLATE = "https://github.com/Deploy-your-Startup/startup-factory-template.git"
-FACTORY_VERSION = "v0.1.0"
+FACTORY_VERSION = "v0.1.1"
 MARKER = ".startup-factory.yml"
 
 
