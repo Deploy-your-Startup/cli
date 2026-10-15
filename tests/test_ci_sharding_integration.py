@@ -82,15 +82,20 @@ def test_ci_gate_requires_every_matrix_shard():
     )
     gate = jobs["test"]
     assert gate["if"] == "always()"
-    assert gate["needs"] == ["test-shard"]
+    assert gate["needs"] == ["test-shard", "factory-onboarding"]
     step = gate["steps"][0]
     assert step["env"]["SHARD_RESULT"] == "${{ needs.test-shard.result }}"
     # WHEN executing its real shell contract for each possible matrix result,
     # THEN only success permits the required check to pass.
     for status in ("success", "failure", "cancelled", "skipped"):
-        result = subprocess.run(
-            ["bash", "-e", "-c", step["run"]],
-            env={**os.environ, "SHARD_RESULT": status},
-            check=False,
-        )
-        assert (result.returncode == 0) is (status == "success")
+        for factory_status in ("success", "failure", "cancelled", "skipped"):
+            result = subprocess.run(
+                ["bash", "-e", "-c", step["run"]],
+                env={
+                    **os.environ,
+                    "SHARD_RESULT": status,
+                    "FACTORY_RESULT": factory_status,
+                },
+                check=False,
+            )
+            assert (result.returncode == 0) is (status == factory_status == "success")

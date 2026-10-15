@@ -154,3 +154,31 @@ Public policy configuration: `uv run --extra dev pytest tests/test_site_policy_i
 drives real CLI validation, renders a Copier project, verifies policy installation
 and resume preservation, and rejects incompatible template capabilities before
 provider setup. This validates configuration, not legal sufficiency.
+
+
+## Factory lifecycle and startup registration
+
+`uv run --extra dev pytest tests/test_factory_integration.py` exercises real CLI
+processes, Copier sources and Git repositories. It covers create/resume,
+nonempty/link/foreign-source refusal, owner file/comment preservation, duplicate
+and malformed registries, credential-bearing remotes, the Factory bootstrap
+folder and cancellation. Two complete pitch bootstrap scenarios use the real
+wizard, rendering, commits and pushes to a local bare Git repository. Only
+GitHub commands and Cloudflare HTTP boundaries are substituted. They cover
+success, failure after repository creation, automatic registration and resume
+without overwriting application edits.
+
+The Factory template's own lifecycle suite checks neutral exports, generated
+setup scripts, Sprowi and owner-preserving Copier upgrades. Homebrew downloads,
+fresh macOS binary installation, live GitHub OAuth, engine credentials and
+cloud provisioning remain separate qualification; none are proven by these
+local scenarios.
+
+
+The required macOS `factory-onboarding` CI job runs
+`uv run --extra dev python scripts/check_factory_onboarding_e2e.py`. It fetches
+the real public Factory release into an isolated home, installs mise runtimes,
+clones all public tooling, installs agent skills, reviews the startup plan and
+cancels before provider setup. Only GitHub identity is substituted. The required
+`test` aggregate fails if this E2E job fails or is skipped. This complements the
+bootstrap persistence tests; it does not provision a live application.
