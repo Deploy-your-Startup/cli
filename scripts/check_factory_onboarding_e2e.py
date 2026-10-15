@@ -107,7 +107,7 @@ def main():
         for entry in registry["tooling"]:
             assert (factory / "projects/tooling" / entry["name"] / ".git").is_dir()
         answers = yaml.safe_load((factory / ".copier-answers.yml").read_text())
-        assert answers["_commit"] == "v0.1.0"
+        assert answers["_commit"] == "v0.1.1"
         assert (
             answers["_src_path"]
             == "https://github.com/Deploy-your-Startup/startup-factory-template.git"
