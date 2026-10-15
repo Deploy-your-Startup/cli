@@ -117,3 +117,11 @@ web/SSH/internal rules and the attached-project owner guard. It requires a sibli
 `deploy-template` checkout; Docker or kubectl absence is reported as a skip.
 Live cloud firewall attachment, changing networks and sleep/wake remain separate
 operational verification; interrupted streaming sessions can require a retry.
+
+### Workspace template creation
+
+`test_template_create_integration.py` drives the real CLI against committed local
+Copier sources. It covers creation and recorded answers, nonempty/link target
+refusal, dirty-source rejection and public parameter validation. Template update
+coverage remains in `test_template_commands.py`. These checks do not publish a
+Factory release or verify cloud deployment.

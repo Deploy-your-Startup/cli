@@ -558,3 +558,21 @@ Read the admin password with `startup secrets get-field -f deployment/group_vars
 project's `kpis_enabled` setting to stop frontend tracking, without deleting
 stored analytics. Auth0 setup supports the shared `oauth2_proxy_enabled` toggle
 and retains `oauth_enabled` for older templates with a local proxy role.
+
+### Local workspace templates (next release)
+
+`startup template create` renders a Copier template without creating a GitHub
+repository, reading cloud credentials or provisioning infrastructure. Use it for
+workspace templates such as a startup factory. Supply a reviewed template source
+and an explicit release tag or commit:
+
+```bash
+startup template create --template <template-git-url> --version <release-tag> \
+  --project-dir my-factory --data project_name=my-factory
+```
+
+The destination must be new or empty. Review the files, initialize Git and commit
+including `.copier-answers.yml`. Subsequent updates use `startup template update
+--version <release-tag> --dry-run`, then the same command without `--dry-run`.
+Template-defined owner files are preserved; review conflicts before committing.
+Use `startup bootstrap` for applications that need deployment setup.

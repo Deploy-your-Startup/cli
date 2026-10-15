@@ -283,7 +283,7 @@ def update_project(
 
 @click.group("template")
 def template():
-    """Generate, adopt and update application templates with Copier."""
+    """Create, adopt and update project and workspace templates with Copier."""
 
 
 @template.command("adopt")
@@ -338,3 +338,41 @@ def update(project_dir: Path, version: str, values: tuple[str, ...], dry_run: bo
         )
     except (subprocess.CalledProcessError, OSError, ValueError) as exc:
         raise click.ClickException(str(exc)) from exc
+
+
+@template.command("create")
+@click.option(
+    "--project-dir",
+    required=True,
+    type=click.Path(file_okay=False, path_type=Path),
+    help="New or empty destination directory. Existing files are never overwritten.",
+)
+@click.option(
+    "--template", "source", required=True, help="Copier template Git URL or path."
+)
+@click.option("--version", required=True, help="Explicit template Git tag or commit.")
+@click.option(
+    "--data", "values", multiple=True, help="Public template parameter KEY=VALUE."
+)
+def create(project_dir: Path, source: str, version: str, values: tuple[str, ...]):
+    """Create a local workspace from a template, without provisioning or publishing.
+
+    Use bootstrap for an application with deployment setup. This command only
+    renders files; initialize Git and commit the result before template updates.
+    """
+    try:
+        destination = project_dir.absolute()
+        # Refuse links as well as non-empty directories: rendering must not
+        # overwrite an existing workspace or follow a destination symlink.
+        if destination.is_symlink() or (
+            destination.exists() and any(destination.iterdir())
+        ):
+            raise click.ClickException("Destination must be a new or empty directory.")
+        parameters = parse_data(values)
+        parameters.setdefault("project_name", destination.name)
+        render_project(destination, parameters, source=source, version=version)
+    except (subprocess.CalledProcessError, OSError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(
+        "Template created locally. Review the files, initialize Git and commit."
+    )

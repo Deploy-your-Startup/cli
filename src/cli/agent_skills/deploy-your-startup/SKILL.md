@@ -272,3 +272,11 @@ Auth0 setup accepts the shared `oauth2_proxy_enabled` setting while preserving
 `oauth_enabled` for legacy project-owned roles.
 
 Kubernetes access uses an on-demand SSH tunnel by default. Keep the CLI installed and use an unlocked SSH agent or a persistent identity file; never persist a decrypted deployment key for reconnecting. After verifying all attached startup contexts, the cluster owner can set `firewall_api_source_ips: []`, preview `startup ansible firewall --dry-run`, then apply with `--execute`. Check SSH, Kubernetes and public HTTPS after the change. `startup ansible kubeconfig --direct` explicitly opts out of tunnels.
+
+## Local factory workspaces (next release)
+
+For a workspace template without deployment, use `startup template create`
+with explicit `--template`, `--version` and `--project-dir`. The destination must
+be new or empty. This creates local files only; review and commit the generated
+`.copier-answers.yml` with the workspace before using `startup template update`.
+Do not copy an operator's portfolio or credentials into a shared template.
