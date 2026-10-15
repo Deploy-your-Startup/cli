@@ -1,49 +1,24 @@
-"""Wizard-style output helpers for the bootstrap flow.
-
-Builds on the pattern established in hetzner/_output.py but adds
-wizard-specific elements: progress indicators, step headers with
-tracking, numbered choices, skip indicators, and summary boxes.
-"""
+"""Compact output for bootstrap and provider setup."""
 
 from __future__ import annotations
 
 import os
+import shlex
 import shutil
 import sys
 import time
 
 import click
 
-# ── Progress indicator ───────────────────────────────────────────────
-
-
-def progress_indicator(completed: int, total: int) -> str:
-    """Render a progress string like ``●●○○``.
-
-    Args:
-        completed: Number of steps already finished.
-        total: Total number of steps.
-    """
-    return "●" * completed + "○" * (total - completed)
-
+from cli import terminal_style as terminal
 
 # ── Step headers ─────────────────────────────────────────────────────
 
 
-def step_header(number: int, name: str, completed: int, total: int) -> None:
-    """Print a prominent step header with progress.
-
-    Example::
-
-        ── Step 2 · Hetzner Cloud ──────────────────── ●●○○
-    """
-    progress = progress_indicator(completed, total)
-    prefix = f"── Step {number} · {name} "
-    padding = "─" * max(1, 52 - len(prefix))
-    line = prefix + padding + " " + progress
+def step_header(number: int, name: str, total: int) -> None:
+    """Print the step's position and name on one short line."""
     click.echo()
-    click.echo(click.style(f"  {line}", fg="cyan", bold=True))
-    click.echo()
+    click.echo(terminal.accent(f"  {number}/{total}") + f"  {name}")
 
 
 # ── Skip indicator ───────────────────────────────────────────────────
@@ -51,33 +26,25 @@ def step_header(number: int, name: str, completed: int, total: int) -> None:
 
 def skip_indicator(message: str) -> None:
     """Show that a step was skipped with explanation."""
-    click.echo(click.style("  ⏩ ", fg="yellow") + message)
+    click.echo(terminal.style("  · ", dim=True) + message)
 
 
 # ── Action progress ──────────────────────────────────────────────────
 
 
 def action_start(message: str) -> None:
-    """Print the start of an action (``→ Doing thing...``)."""
-    click.echo(click.style("  → ", fg="white", dim=True) + message)
+    """Print an action without interfering with its detailed logs."""
+    click.echo(terminal.accent("  · ") + message)
 
 
 def action_done(message: str) -> None:
-    """Print a completed action (``→ Thing done ✓``)."""
-    click.echo(
-        click.style("  → ", fg="white", dim=True)
-        + message
-        + click.style(" ✓", fg="green", bold=True)
-    )
+    """Print a completed action with the shared success marker."""
+    success(message)
 
 
 def action_fail(message: str) -> None:
-    """Print a failed action (``→ Thing failed ✗``)."""
-    click.echo(
-        click.style("  → ", fg="white", dim=True)
-        + message
-        + click.style(" ✗", fg="red", bold=True)
-    )
+    """Print a failed action with the shared error marker."""
+    error(message)
 
 
 # ── Numbered choice ──────────────────────────────────────────────────
@@ -94,10 +61,8 @@ def numbered_choice(prompt: str, options: list[str]) -> int:
         1-based index of the selected option.
     """
     click.echo(f"  {prompt}")
-    click.echo()
     for i, option in enumerate(options, 1):
-        click.echo(f"    [{i}] {option}")
-    click.echo()
+        click.echo(terminal.accent(f"    {i}.") + f" {option}")
 
     while True:
         raw = click.prompt("  Choose", type=str)
@@ -107,7 +72,7 @@ def numbered_choice(prompt: str, options: list[str]) -> int:
                 return choice
         except ValueError:
             pass
-        click.echo(click.style(f"  Enter a number from 1 to {len(options)}.", fg="red"))
+        error(f"Enter a number from 1 to {len(options)}.")
 
 
 # ── Text input ───────────────────────────────────────────────────────
@@ -144,28 +109,36 @@ def input_summary(fields: dict[str, str]) -> None:
         fields: Mapping of label → value.
     """
     click.echo()
-    click.echo(click.style("  ── Your launch plan ", fg="white", bold=True) + "─" * 35)
+    click.echo(terminal.style("  Your launch plan", bold=True))
+    _fields(fields)
     click.echo()
-    max_label = max(len(k) for k in fields)
+
+
+def _fields(fields: dict[str, str]) -> None:
+    max_label = max((len(k) for k in fields), default=0)
     for label, value in fields.items():
         click.echo(f"    {label:<{max_label}}  {value}")
-    click.echo()
 
 
 # ── Welcome banner ───────────────────────────────────────────────────
 
 
+def wordmark() -> None:
+    """Use the installer's compact wordmark in each entry flow."""
+    click.echo(
+        terminal.accent("  >_") + terminal.style(" deploy your startup", bold=True)
+    )
+
+
 def banner(*, animate: bool = True) -> None:
-    """Let the rocket write the wordmark once, then leave it stationary."""
+    """Reveal the brand once, then leave a static, compact introduction."""
     stream = sys.stdout
     prefix = "  >_ deploy your startup "
     motion = (
         animate
-        and stream.isatty()
-        and os.environ.get("TERM", "dumb") != "dumb"
-        and not any(
-            name in os.environ for name in ("NO_COLOR", "CI", "STARTUP_NO_ANIMATION")
-        )
+        and terminal.supports_color()
+        and not os.environ.get("CI")
+        and not os.environ.get("STARTUP_NO_ANIMATION")
         and shutil.get_terminal_size().columns >= len(prefix) + 4
     )
     click.echo()
@@ -180,20 +153,18 @@ def banner(*, animate: bool = True) -> None:
                 # Never wrap if the terminal shrinks mid-flight.
                 width = max(0, shutil.get_terminal_size().columns - 4)
                 text = prefix[: min(shown, width)]
-                stream.write("\r\x1b[2K" + click.style(text, fg="cyan") + "🚀")
+                stream.write("\r\x1b[2K" + terminal.accent(text) + "🚀")
                 stream.flush()
                 time.sleep(0.02 + 0.05 * (shown / len(prefix)) ** 3)
         finally:
             stream.write("\r\x1b[2K\x1b[?25h")
             stream.flush()
-    click.echo(click.style(prefix + "🚀", fg="cyan"))
-    click.echo()
-    click.echo("  Your idea. Your infrastructure.")
-    click.echo("  A few questions, then we’ll guide you through setup.")
+    wordmark()
+    click.echo("  Ideas in. Startups out.")
     click.echo()
 
 
-# ── Final summary box ────────────────────────────────────────────────
+# ── Final summary ────────────────────────────────────────────────
 
 
 def summary_box(
@@ -208,97 +179,40 @@ def summary_box(
     byos_deploy_key_command: str | None = None,
     cluster_owner: str | None = None,
 ) -> None:
-    """Display the framed final summary with next steps."""
-    W = 64  # total width including borders
-
-    def _pad(text: str) -> str:
-        inner = W - 6
-        return f"  ║  {text:<{inner}} ║"
-
-    def _emit(text: str = "") -> None:
-        click.echo(click.style(_pad(text), fg="green"))
-
-    def _empty() -> str:
-        return _pad("")
-
-    top = f"  ╔{'═' * (W - 4)}╗"
-    mid = f"  ╠{'═' * (W - 4)}╣"
-    bot = f"  ╚{'═' * (W - 4)}╝"
-
+    """Show the configured project and the next action without a fixed-width box."""
     click.echo()
-    click.echo(click.style(top, fg="green"))
-    click.echo(click.style(_pad(f"✅ {project_name} is configured!"), fg="green"))
-    click.echo(click.style(mid, fg="green"))
-    click.echo(click.style(_empty(), fg="green"))
-    click.echo(click.style(_pad(f"📁 {project_dir}"), fg="green"))
+    success(f"{project_name} is configured")
+    fields = {"Folder": project_dir}
     if github_url:
-        click.echo(click.style(_pad(f"🔗 {github_url}"), fg="green"))
-    click.echo(click.style(_pad(f"🌐 {domain}"), fg="green"))
+        fields["GitHub"] = github_url
+    fields["Domain"] = domain
     if keychain_service:
-        click.echo(
-            click.style(_pad(f"🔑 Keychain entry: {keychain_service}"), fg="green")
-        )
-    click.echo(click.style(_empty(), fg="green"))
-    click.echo(click.style(mid, fg="green"))
-    click.echo(click.style(_empty(), fg="green"))
-    if kind == "pitch":
-        click.echo(
-            click.style(
-                _pad("Build and deploy run through GitHub Actions"),
-                fg="green",
-            )
-        )
-        click.echo(click.style(_pad("(Push to main → Cloudflare Pages)."), fg="green"))
-        click.echo(click.style(_empty(), fg="green"))
-        click.echo(
-            click.style(
-                _pad(f"Custom Domain {domain} is connected"),
-                fg="green",
-            )
-        )
-        click.echo(
-            click.style(
-                _pad("(Cloudflare: DNS + TLS follow nameserver propagation)."),
-                fg="green",
-            )
-        )
-    else:
-        if cluster_owner:
-            _emit("Application build and deploy run through GitHub Actions.")
-            _emit("Verify Actions, DNS and HTTPS for this startup.")
-            _emit("Run cluster operations from the owner project.")
-        elif provider == "byos":
-            _emit("BYOS: deploy locally to your server.")
-            _emit()
-            _emit("Copy the commands below to continue.")
-            if byos_deploy_key_command:
-                _emit("1) Copy the deploy key to the server")
-            _emit("2) Then deploy locally")
-        else:
-            _emit("Build and deploy run through GitHub Actions")
-            _emit("(Push to main → backend & deployment).")
-            _emit()
-            _emit("Deployment requested; verify it before calling it live.")
-            if github_url:
-                _emit(f"Status: {github_url}/actions")
-            _emit("Then verify your domain’s DNS and HTTPS.")
-    click.echo(click.style(_empty(), fg="green"))
-    click.echo(click.style(bot, fg="green"))
+        fields["Keychain"] = keychain_service
+    _fields(fields)
     click.echo()
-    if kind != "pitch" and provider == "byos" and not cluster_owner:
-        click.echo("  Copy-Paste:")
-        click.echo()
+    click.echo(terminal.style("  Next", bold=True))
+
+    if kind == "pitch":
+        click.echo("  Push to main to build and deploy through Cloudflare Pages.")
+        click.echo("  Check Actions and HTTPS after DNS propagation.")
+    elif cluster_owner:
+        click.echo("  Check Actions, DNS and HTTPS for this startup.")
+        click.echo(f"  Run cluster operations from the owner project: {cluster_owner}")
+    elif provider == "byos":
         if byos_deploy_key_command:
             click.echo("  # Copy the deploy key to your server once")
             click.echo(f"  {byos_deploy_key_command}")
             click.echo()
-        click.echo("  # Then deploy locally")
-        click.echo(f"  cd {project_dir}/deployment")
+        click.echo("  # Deploy from your machine")
+        click.echo(f"  cd {shlex.quote(f'{project_dir}/deployment')}")
         click.echo("  ./make.sh setup")
-        if not cluster_owner:
-            click.echo("  ./make.sh infrastructure --environment production")
+        click.echo("  ./make.sh infrastructure --environment production")
         click.echo("  ./make.sh deploy --environment production")
-        click.echo()
+    else:
+        click.echo("  Deployment requested. Check Actions, DNS and HTTPS.")
+    if github_url and (kind == "pitch" or provider != "byos" or cluster_owner):
+        click.echo(f"  {github_url}/actions")
+    click.echo()
 
 
 # ── Simple helpers ───────────────────────────────────────────────────
@@ -306,19 +220,19 @@ def summary_box(
 
 def info(text: str) -> None:
     """Display an info message."""
-    click.echo(click.style("  ℹ ", fg="blue", bold=True) + text)
+    click.echo(terminal.accent("  · ") + text)
 
 
 def success(text: str) -> None:
     """Display a success message."""
-    click.echo(click.style("  ✓ ", fg="green", bold=True) + text)
+    click.echo(terminal.style("  ✓ ", fg="green", bold=True) + text)
 
 
 def error(text: str) -> None:
     """Display an error message."""
-    click.echo(click.style("  ✗ ", fg="red", bold=True) + text)
+    click.echo(terminal.style("  ✗ ", fg="red", bold=True) + text)
 
 
 def warning(text: str) -> None:
     """Display a warning message."""
-    click.echo(click.style("  ! ", fg="yellow", bold=True) + text)
+    click.echo(terminal.style("  ! ", fg="yellow", bold=True) + text)

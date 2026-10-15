@@ -54,8 +54,12 @@ See [the onboarding flow and rollout](docs/onboarding-flow.md). The website must
 publish its companion installer only after a CLI release containing this flow;
 merging this CLI change alone does not update the public installer.
 
-Interactive terminals show a brief launch animation once, then stop. Set
-`STARTUP_NO_ANIMATION=1` to disable it; redirected output, CI and `NO_COLOR` stay static.
+Onboarding uses the installer's muted blue, short numbered steps and a compact
+project summary. Detailed command logs remain visible. Interactive terminals
+show a brief launch animation once, before questions. Set
+`STARTUP_NO_ANIMATION=1` to disable motion while keeping color; CI also disables
+motion. Redirected output, `TERM=dumb` and `NO_COLOR` use plain output. See the
+[terminal design reference](docs/terminal-design.md) for the palette and fallbacks.
 Each CLI release bootstraps a tested release of the default application
 template; the launch plan shows which one.
 
