@@ -21,8 +21,8 @@ from tests.vault_support import RealVault
 
 SOURCE = Path(__file__).resolve().parents[1] / "src"
 TEMPLATES = {
-    "django-backend-template": "1da17451060b5617613815a8a1d62c5df74cb43f",
-    "vue-django-template": "6f5543eb937530ae6509225e6007e98a24ece58c",
+    "django-backend-template": "e8df91e6e6cfd48b0fe2f32abde091c8720585aa",
+    "vue-django-template": "12c400b6161dd59064b3925c7a5b02de1aad61b5",
 }
 NEW_PASSWORD = "template-integration-new-password"
 SENTRY = "https://synthetic@example.invalid/42"
