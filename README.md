@@ -125,6 +125,15 @@ verification; a custom application can use `--health-path` for an endpoint
 returning HTTP 200 with `{"status":"ok"}`. For local development, follow the
 generated project's README.
 
+### Bring your own server
+
+BYOS bootstrap installs the deploy SSH key using your existing server access
+before pushing. If SSH access fails, setup stops with a repair command; rerun
+bootstrap after restoring access. GitHub Actions performs server setup (including
+k3s), builds and deploys the application. Local `make.sh setup`, `infrastructure`
+and `deploy` commands are not required for this bootstrap path. Follow the Actions
+link, point the domain at your server, and verify DNS and HTTPS.
+
 ### Landing page on Cloudflare Pages
 
 Validate an idea before building the application: the pitch template creates a

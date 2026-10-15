@@ -182,3 +182,15 @@ clones all public tooling, installs agent skills, reviews the startup plan and
 cancels before provider setup. Only GitHub identity is substituted. The required
 `test` aggregate fails if this E2E job fails or is skipped. This complements the
 bootstrap persistence tests; it does not provision a live application.
+
+### BYOS finalization
+
+`test_byos_finalize_integration.py` exercises server selection, finalization and
+summary in real processes with real Git repositories and an SSH server in Docker.
+It verifies deploy-key installation and reuse, authentication with that key,
+workflow dispatch, and denied SSH stopping before push with repair instructions.
+GitHub and Keychain use local boundary stand-ins. Terminal summary coverage also
+checks that BYOS no longer requests manual setup or deployment.
+
+These checks do not run a fresh public GitHub Actions deployment or install k3s
+on a real BYOS VPS; those provider flows remain unverified by this local suite.

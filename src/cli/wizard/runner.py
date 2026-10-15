@@ -195,17 +195,6 @@ def run_wizard(ctx: BootstrapContext) -> None:
         from cli.ansible_commands import keychain_service_name
 
         keychain_service = keychain_service_name(ctx.project_name)
-    byos_deploy_key_command = None
-    if ctx.kind == "fullstack" and ctx.provider == "byos":
-        from .steps.project import (
-            BYOS_DEPLOY_PUBLIC_KEY_FILE,
-            byos_deploy_key_install_command,
-        )
-
-        deploy_key_path = ctx.deployment_dir / BYOS_DEPLOY_PUBLIC_KEY_FILE
-        byos_deploy_key_command = byos_deploy_key_install_command(
-            ctx, deploy_key_path.read_text().strip()
-        )
     ui.summary_box(
         project_name=ctx.project_name,
         project_dir=str(ctx.project_dir),
@@ -214,7 +203,6 @@ def run_wizard(ctx: BootstrapContext) -> None:
         kind=ctx.kind,
         keychain_service=keychain_service,
         provider=ctx.provider,
-        byos_deploy_key_command=byos_deploy_key_command,
         cluster_owner=ctx.cluster_config["owner"] if ctx.cluster_config else None,
     )
     if ctx.auth0_tenant:
