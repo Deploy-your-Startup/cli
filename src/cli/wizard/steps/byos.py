@@ -2,8 +2,8 @@
 
 Bring-your-own-server replaces the Hetzner step: instead of an API token used to
 provision VMs, we just need the host Ansible should SSH into. The deploy SSH key
-is generated in the ProjectStep; the user adds its public half to the VPS, and
-points the domain's DNS A record at the host. No cloud account required.
+is generated in the ProjectStep and installed automatically before pushing.
+The user points the domain's DNS A record at the host. No cloud account required.
 """
 
 from __future__ import annotations
@@ -119,8 +119,7 @@ class ByosStep(WizardStep):
             f"Check that {ctx.byos_host} has ports 22 (SSH), 80 and "
             "443 (HTTP/HTTPS for Let's Encrypt) open and that the DNS "
             f"A record for '{ctx.base_domain}' points to {ctx.byos_host}.\n"
-            "The next step generates a deploy SSH key. Add it to "
-            f"~{'' if ctx.byos_ssh_user == 'root' else '/' + ctx.byos_ssh_user}"
-            "/.ssh/authorized_keys on the server."
+            "Setup will install the deploy SSH key using your existing SSH access "
+            "before starting GitHub Actions."
         )
         ui.action_done(f"Server selected: {ctx.byos_ssh_user}@{ctx.byos_host}")

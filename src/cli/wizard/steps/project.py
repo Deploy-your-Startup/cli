@@ -347,20 +347,6 @@ class ProjectStep(WizardStep):
             # deploy-your-startup and pass only VAULT_PASSWORD. BYOS vs. Hetzner
             # is decided in Ansible (inventory + vault), not in the workflow YAML.
 
-            authorized_keys = (
-                "/root/.ssh/authorized_keys"
-                if ctx.byos_ssh_user == "root"
-                else f"/home/{ctx.byos_ssh_user}/.ssh/authorized_keys"
-            )
-            ui.info(
-                "Add this public deploy key to "
-                f"{authorized_keys} on the server so Ansible can connect:\n\n"
-                f"{ci_public_key}\n"
-                "Schnellweg:\n"
-                f"  {byos_deploy_key_install_command(ctx, ci_public_key)}\n"
-                f"The local helper file {deploy_key_path} is in .gitignore "
-                "and will not be committed."
-            )
         from cli.cluster_commands import configure_project_cluster
 
         configure_project_cluster(ctx)

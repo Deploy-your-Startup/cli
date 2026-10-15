@@ -46,6 +46,12 @@ without this prompt, and `--yes` remains unattended.
 `--kind fullstack` skips the stack menu and keeps the Django/FastAPI default;
 use `--template` to select Vue in an unattended run. Known templates default to
 pinned releases; explicit `--template-version` overrides them.
+BYOS bootstrap installs the CI deploy key using existing SSH access before
+pushing. If SSH fails, follow the printed repair command and rerun bootstrap.
+GitHub Actions runs server setup (including k3s), build and deployment; no local
+`make.sh` setup or deployment commands are required. The final summary lists the
+project folder, website, repository, Actions link and unverified deployment status.
+
 Server access is configured after target selection. Use `--ssh-public-key`
 for a custom public key path; this key is separate from GitHub login and the
 CI deployment key. BYOS requires an already owned domain; it does not order one

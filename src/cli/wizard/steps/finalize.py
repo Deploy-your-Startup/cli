@@ -159,10 +159,10 @@ class FinalizeStep(WizardStep):
             if install_byos_deploy_key(ctx, deploy_public_key):
                 ui.action_done(f"Deploy key on {ctx.byos_host} installed")
             else:
-                ui.info(
+                raise click.ClickException(
                     f"Could not reach {ctx.byos_ssh_user}@{ctx.byos_host} over SSH. "
                     "Run this from a machine that can reach "
-                    "the server before deploying:\n"
+                    "the server, then rerun bootstrap. Code has not been pushed:\n"
                     f"  {byos_deploy_key_install_command(ctx, deploy_public_key)}"
                 )
 
@@ -175,9 +175,7 @@ class FinalizeStep(WizardStep):
         )
         ui.action_done("Pushed")
 
-        # 4g. Provision. On byos there is nothing to provision in the cloud — the
-        # user runs the install/deploy locally against their VPS, so we just print
-        # the next steps instead of kicking off the Hetzner infrastructure workflow.
+        # Both providers need server setup; BYOS uses its static inventory.
         if ctx.cluster_config:
             ui.info(
                 "Attached to the existing cluster. Application workflows deploy into this startup's namespace; run cluster operations from "
@@ -185,20 +183,7 @@ class FinalizeStep(WizardStep):
                 + "."
             )
             return
-        if ctx.provider == "byos":
-            ui.action_done("BYOS — no cloud provisioning needed")
-            ui.info(
-                "Next steps:\n"
-                f"  cd {ctx.deployment_dir}\n"
-                "  ./make.sh setup\n"
-                "  ./make.sh infrastructure --environment production\n"
-                "  ./make.sh deploy --environment production\n"
-                "This installs k3s on the server and deploys cert-manager, Postgres "
-                "and the backend."
-            )
-            return
-
-        # 4f (hetzner). Trigger infra workflow (retry — GitHub needs time to index)
+        # Trigger infrastructure workflow (retry while GitHub indexes it).
         ui.action_start("Requesting infrastructure deployment...")
         triggered = False
         last_err: str | None = None

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import shlex
 import shutil
 import sys
 import time
@@ -176,42 +175,30 @@ def summary_box(
     kind: str = "fullstack",
     keychain_service: str | None = None,
     provider: str = "hetzner",
-    byos_deploy_key_command: str | None = None,
     cluster_owner: str | None = None,
 ) -> None:
-    """Show the configured project and the next action without a fixed-width box."""
+    """Show the configured project and its links without a second setup checklist."""
+    click.echo(terminal.style("  Setup complete", bold=True))
+    success(f"{project_name} is configured!")
     click.echo()
-    success(f"{project_name} is configured")
-    fields = {"Folder": project_dir}
+    fields = {"Project folder": project_dir, "Website": f"https://{domain}"}
     if github_url:
         fields["GitHub"] = github_url
-    fields["Domain"] = domain
-    if keychain_service:
-        fields["Keychain"] = keychain_service
-    _fields(fields)
-    click.echo()
-    click.echo(terminal.style("  Next", bold=True))
-
+        fields["GitHub Actions"] = f"{github_url}/actions"
     if kind == "pitch":
-        click.echo("  Push to main to build and deploy through Cloudflare Pages.")
-        click.echo("  Check Actions and HTTPS after DNS propagation.")
+        fields["Hosting"] = "Cloudflare Pages"
     elif cluster_owner:
-        click.echo("  Check Actions, DNS and HTTPS for this startup.")
-        click.echo(f"  Run cluster operations from the owner project: {cluster_owner}")
-    elif provider == "byos":
-        if byos_deploy_key_command:
-            click.echo("  # Copy the deploy key to your server once")
-            click.echo(f"  {byos_deploy_key_command}")
-            click.echo()
-        click.echo("  # Deploy from your machine")
-        click.echo(f"  cd {shlex.quote(f'{project_dir}/deployment')}")
-        click.echo("  ./make.sh setup")
-        click.echo("  ./make.sh infrastructure --environment production")
-        click.echo("  ./make.sh deploy --environment production")
+        fields["Cluster owner"] = cluster_owner
     else:
-        click.echo("  Deployment requested. Check Actions, DNS and HTTPS.")
-    if github_url and (kind == "pitch" or provider != "byos" or cluster_owner):
-        click.echo(f"  {github_url}/actions")
+        fields["Server"] = (
+            "Your existing server (BYOS)" if provider == "byos" else "Hetzner Cloud"
+        )
+    if keychain_service:
+        fields["Vault password"] = f"Saved in Keychain ({keychain_service})"
+    if github_url:
+        fields["Deployment"] = "Requested via GitHub Actions"
+    fields["Website status"] = "Not verified yet"
+    _fields(fields)
     click.echo()
 
 
