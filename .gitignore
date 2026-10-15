@@ -7,3 +7,6 @@ __pycache__/
 *.egg-info/
 *.pyc
 .DS_Store
+
+# Vault test backups are local artifacts, not source fixtures.
+/tests/data/**/*.bak
