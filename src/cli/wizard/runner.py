@@ -170,18 +170,15 @@ def run_wizard(ctx: BootstrapContext) -> None:
 
     steps = steps_for(ctx)
     total = len(steps)
-    completed = 0
 
     for idx, step_cls in enumerate(steps, 1):
         step = step_cls()
-        ui.step_header(idx, step.name, completed, total)
+        ui.step_header(idx, step.name, total)
 
         try:
             if step.check(ctx):
-                completed += 1
                 continue
             step.run(ctx)
-            completed += 1
             ui.success(f"Step {idx} complete")
         except click.ClickException:
             raise
