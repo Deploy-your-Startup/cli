@@ -11,6 +11,7 @@ import click
 
 from cli.auth0_commands import auth0
 from cli.cluster_commands import cluster
+from cli.factory_commands import factory
 from cli.preflight import doctor
 from cli.skill_commands import skills
 from cli.template_commands import (
@@ -52,6 +53,7 @@ def cli():
     """Startup CLI - Command line tool for Deploy Your Startup operations"""
 
 
+cli.add_command(factory)
 cli.add_command(template)
 cli.add_command(auth0)
 cli.add_command(cluster)
@@ -326,6 +328,13 @@ def bootstrap(
     if template_source is None:
         template_source = PITCH_TEMPLATE if kind == "pitch" else DEFAULT_TEMPLATE
 
+    # A Factory supplies the shared startup location for every subsequent idea.
+    from cli.factory_commands import check_registration, factory_in_directory
+
+    workspace = factory_in_directory(Path.cwd())
+    if not output_dir and workspace:
+        output_dir = str(workspace / "projects/startups")
+
     # Output directory
     if not output_dir:
         output_dir = (
@@ -445,6 +454,10 @@ def bootstrap(
     else:
         ui.info(f"GitHub repository owner: {github_username}")
 
+    check_registration(
+        Path(output_dir).expanduser().resolve(), project_name, github_username
+    )
+
     # ── Summary + confirmation ───────────────────────────────────
 
     template_version = template_version or default_template_version(template_source)
@@ -546,7 +559,20 @@ def bootstrap(
                 f"{base_domain} is already registered; choose another domain or use --domain-owned."
             )
 
-    run_wizard(ctx)
+    try:
+        run_wizard(ctx)
+    finally:
+        # Keep a created repository discoverable even if setup needs to resume.
+        from cli.factory_commands import register_project
+
+        bootstrap_failed = sys.exc_info()[0] is not None
+        try:
+            register_project(ctx.project_dir)
+        except (click.ClickException, OSError, ValueError) as exc:
+            if bootstrap_failed:
+                ui.warning(f"Factory registration needs attention: {exc}")
+            else:
+                raise
     if verify_deployment and ctx.kind == "fullstack" and ctx.provider == "hetzner":
         from cli.verification import verify_project
 

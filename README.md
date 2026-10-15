@@ -625,3 +625,42 @@ account or hosted consent service. Analytics needs both valid runtime Umami
 configuration and a reviewed policy with `analytics: consent`. Accept, reject and
 withdraw are available; withdrawing reloads the page to discard tracker listeners.
 Shared-role sync alone cannot add these application pages or consent controls.
+
+
+### Your startup Factory
+
+The guided installer creates a local Factory before your first startup. Its
+versioned workspace includes an empty startup registry, public contribution
+repositories and optional Sprowi automation. CLI-only installation remains
+available without onboarding.
+
+```bash
+startup factory onboard
+```
+
+Choose a workspace folder (default `~/Projects/startup-factory`). Setup installs
+missing workspace tools using Homebrew when available, installs the declared
+mise runtimes and clones public tooling. Without Homebrew it prints the missing
+prerequisites; install them and rerun with the same folder. Existing Factory files
+and applications are preserved. Cloud setup starts only after bootstrap's plan
+and approval. Sprowi remains optional and requires separate engine credentials.
+
+To create only the workspace:
+
+```bash
+startup factory init --project-dir my-factory --version v0.1.1 --setup
+cd my-factory
+startup bootstrap
+```
+
+Factory v0.1.1 is pinned by the CLI. `--template` and `--version` select a reviewed
+alternative; new/empty destinations and matching existing Factories are accepted.
+A retry never applies template updates. Initialize Git and commit generated files
+including `.copier-answers.yml` before `startup template update`.
+
+Inside a Factory, bootstrap defaults to `projects/startups`. It registers the
+actual Git remote in `projects.yaml` even if a later step fails. Existing entries
+and comments survive, and conflicting repository mappings stop setup. Only name
+and repository are recorded; verify Actions, DNS, HTTPS and cluster access before
+adding live deployment metadata. For an already cloned startup, use
+`startup factory register projects/startups/example-app`.

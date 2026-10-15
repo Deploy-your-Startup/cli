@@ -62,14 +62,27 @@ jobs:
         env:
           STARTUP_TEST_DEPLOY_TEMPLATE: ${{ github.workspace }}/.test-deploy-template
 
+  factory-onboarding:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Install Factory workspace tools
+        run: brew install mise yq kubectl
+      - name: Exercise public Factory setup and launch cancellation
+        run: uv run --extra dev python scripts/check_factory_onboarding_e2e.py
+
   # Preserve the existing required check name. Fail closed on a failed,
   # cancelled or skipped shard, while allowing all shards to report results.
   test:
     if: always()
-    needs: [test-shard]
+    needs: [test-shard, factory-onboarding]
     runs-on: ubuntu-latest
     steps:
       - name: Require every test shard
         env:
           SHARD_RESULT: ${{ needs.test-shard.result }}
-        run: test "$SHARD_RESULT" = success
+          FACTORY_RESULT: ${{ needs.factory-onboarding.result }}
+        run: test "$SHARD_RESULT" = success && test "$FACTORY_RESULT" = success
