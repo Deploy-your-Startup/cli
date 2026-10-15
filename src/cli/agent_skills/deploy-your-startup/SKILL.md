@@ -318,3 +318,23 @@ including pitch sites even when their template has no built-in legal pages.
 Use supported site-policy configuration and checks where available; otherwise
 add the required project pages and record the gap. No extra consent-service
 account is required by the standard workflow.
+
+
+## Factory workspaces
+
+The guided installer runs `startup factory onboard` to create and set up the
+owner's Factory before bootstrap. For a workspace without a startup, use
+`startup factory init --project-dir <folder> --setup`. The CLI pins the public
+Factory template release. Setup installs missing workspace tools with Homebrew
+when available and uses mise to install runtimes and clone public tooling.
+Without Homebrew, follow the printed prerequisites and rerun the same folder.
+Retries preserve owner files; template updates remain a separate reviewed step.
+
+Run bootstrap from inside the Factory to use `projects/startups` automatically.
+Created Git repositories are registered in `projects.yaml`, including after a
+partial bootstrap. Do not invent `deployed`, `url` or `kubectl_context` values;
+verify their live state first. To register an existing startup cloned into this
+folder, use `startup factory register projects/startups/<name>`. Sprowi is optional:
+`mise exec -- ./scripts/init.sh --with-sprowi` requires Docker Sandboxes and an
+engine credential. Initialize Git and commit the Factory's `.copier-answers.yml`
+before using `startup template update`.

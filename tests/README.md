@@ -154,3 +154,22 @@ Public policy configuration: `uv run --extra dev pytest tests/test_site_policy_i
 drives real CLI validation, renders a Copier project, verifies policy installation
 and resume preservation, and rejects incompatible template capabilities before
 provider setup. This validates configuration, not legal sufficiency.
+
+
+## Factory lifecycle and startup registration
+
+`uv run --extra dev pytest tests/test_factory_integration.py` exercises real CLI
+processes, Copier sources and Git repositories. It covers create/resume,
+nonempty/link/foreign-source refusal, owner file/comment preservation, duplicate
+and malformed registries, credential-bearing remotes, the Factory bootstrap
+folder and cancellation. Two complete pitch bootstrap scenarios use the real
+wizard, rendering, commits and pushes to a local bare Git repository. Only
+GitHub commands and Cloudflare HTTP boundaries are substituted. They cover
+success, failure after repository creation, automatic registration and resume
+without overwriting application edits.
+
+The Factory template's own lifecycle suite checks neutral exports, generated
+setup scripts, Sprowi and owner-preserving Copier upgrades. Homebrew downloads,
+fresh macOS binary installation, live GitHub OAuth, engine credentials and
+cloud provisioning remain separate qualification; none are proven by these
+local scenarios.
