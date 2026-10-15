@@ -173,3 +173,12 @@ setup scripts, Sprowi and owner-preserving Copier upgrades. Homebrew downloads,
 fresh macOS binary installation, live GitHub OAuth, engine credentials and
 cloud provisioning remain separate qualification; none are proven by these
 local scenarios.
+
+
+The required macOS `factory-onboarding` CI job runs
+`uv run --extra dev python scripts/check_factory_onboarding_e2e.py`. It fetches
+the real public Factory release into an isolated home, installs mise runtimes,
+clones all public tooling, installs agent skills, reviews the startup plan and
+cancels before provider setup. Only GitHub identity is substituted. The required
+`test` aggregate fails if this E2E job fails or is skipped. This complements the
+bootstrap persistence tests; it does not provision a live application.
