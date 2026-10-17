@@ -17,7 +17,7 @@ from cli import wizard_output as ui
 from cli.template_commands import ANSWERS_FILE, render_project
 
 FACTORY_TEMPLATE = "https://github.com/Deploy-your-Startup/startup-factory-template.git"
-FACTORY_VERSION = "v0.1.1"
+FACTORY_VERSION = "v0.1.2"
 MARKER = ".startup-factory.yml"
 
 
@@ -216,10 +216,9 @@ def initialize_factory(
         ui.success(f"Factory created at {destination}.")
     registry_document(destination)
     if setup:
+        # kubectl is optional: only inspecting a full-stack cluster needs it.
         missing = [
-            tool
-            for tool in ("mise", "uv", "yq", "kubectl", "gh")
-            if not shutil.which(tool)
+            tool for tool in ("mise", "uv", "yq", "gh") if not shutil.which(tool)
         ]
         if missing and shutil.which("brew"):
             ui.info(

@@ -1,6 +1,7 @@
 """Real CLI, Copier and Git lifecycle; no account or infrastructure mutations."""
 
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -78,7 +79,7 @@ def workspace(tmp_path):
     return source, destination
 
 
-def initialize(workspace, **kwargs):
+def initialize(workspace, *options, env=None):
     source, destination = workspace
     return cli(
         source.parent,
@@ -90,7 +91,8 @@ def initialize(workspace, **kwargs):
         "v1.0.0",
         "--project-dir",
         str(destination),
-        **kwargs,
+        *options,
+        env=env,
     )
 
 
@@ -127,6 +129,38 @@ def test_creation_and_resume_preserve_owner_files(workspace):
     )
     assert "Sprowi is optional" in second.stdout
     assert str(destination / "projects/startups") not in first.stderr
+
+
+def test_setup_without_kubectl_prepares_workspace_without_installing_it(
+    workspace, tmp_path
+):
+    # GIVEN every required Factory tool except kubectl, and Homebrew available.
+    binaries = tmp_path / "bin"
+    binaries.mkdir()
+    calls = tmp_path / "calls"
+    for tool in ("mise", "uv", "yq", "gh", "brew"):
+        (binaries / tool).write_text(
+            f'#!/bin/sh\nprintf \'{tool} %s\\n\' "$*" >> "{calls}"\n'
+        )
+        (binaries / tool).chmod(0o755)
+    # Mirror the system tools without kubectl; CI runners preinstall it.
+    system = tmp_path / "system"
+    system.mkdir()
+    for directory in (Path("/usr/bin"), Path("/bin")):
+        for tool in directory.iterdir():
+            target = system / tool.name
+            if tool.name != "kubectl" and not target.exists():
+                target.symlink_to(tool)
+    path = os.pathsep.join((str(binaries), str(system)))
+    assert shutil.which("kubectl", path=path) is None
+    # WHEN the real CLI creates the Factory with setup.
+    result = initialize(workspace, "--setup", env={"PATH": path})
+    # THEN setup completes, runs the workspace init and never installs kubectl.
+    assert result.returncode == 0, result.stdout + result.stderr
+    recorded = calls.read_text()
+    assert "mise exec -- ./scripts/init.sh" in recorded
+    assert "brew" not in recorded
+    assert "Missing Factory tools" not in result.stdout + result.stderr
 
 
 @pytest.mark.parametrize("kind", ["nonempty", "symlink", "foreign-template"])
