@@ -43,7 +43,7 @@ make.sh and mise commands; shared workflows consume the same service contracts.
 The portable documentation contract can be checked without application services:
 
 ```bash
-python3 tests/test_testing_policy_integration.py
+python3 tests/test_agent_links_integration.py
 ```
 
 Application integration and E2E checks remain the project's own commands.

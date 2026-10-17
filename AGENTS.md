@@ -1,31 +1,18 @@
 # Startup CLI contributor instructions
 
-## Tests: integration by default, E2E for user flows
+## Tests
 
-**Every change ships with integration tests, plus an E2E test when a user flow
-changes.** Unit tests are reserved for complex algorithms with meaningful
-edge cases or invariants; they supplement integration and E2E coverage.
+Follow [Testing policy and completion evidence](docs/testing-policy.md). Here:
 
-- An integration test drives the real thing: the real CLI process or public
-  function, real git repositories, real files, real scripts. It asserts on
-  outcomes a user would see (files, commits, tags, exit codes, output).
-- Use isolated unit tests only for complex algorithms, and do not mock our own code.
-  Replace only the boundary we cannot run locally (GitHub API, cloud providers,
-  browsers) with a local stand-in such as a bare git repository or a fake `gh`.
-- Write tests as GIVEN / WHEN / THEN. A bug fix starts with an integration test
-  that reproduces the bug.
-- If an existing unit test covers a routine helper or service workflow, replace
-  it with an integration scenario when working nearby. Preserve focused tests
-  for complex algorithms when they add useful edge-case coverage.
-- Here: pytest under `tests/`, run with `mise run test`. Run the real CLI as a
-  subprocess (`python -m cli.startup ...`) or call a public entrypoint. For
-  GitHub, put a fake `gh` on PATH backed by bare git repositories; see
-  `tests/test_sync_versioning_integration.py` for the pattern.
-- E2E: when a command talks to servers over SSH, run it against a real SSH
-  server in a local Docker container (skipped without Docker) and replace only
-  Kubernetes with a stand-in; see `tests/test_shared_cluster_data_integration.py`.
-
-Integration and E2E tests remain required; algorithm unit tests only supplement them.
+- pytest under `tests/`, run with `mise run test`. Run the real CLI as a
+  subprocess (`python -m cli.startup ...`) or call a public entrypoint.
+- For GitHub, put a fake `gh` on PATH backed by bare git repositories; see
+  `tests/test_sync_versioning_integration.py`.
+- When a command talks to servers over SSH, run it against a real SSH server in
+  a local Docker container (skipped without Docker) and replace only Kubernetes
+  with a stand-in; see `tests/test_shared_cluster_data_integration.py`.
+- Replace an existing unit test of a routine helper or workflow with an
+  integration scenario when working nearby.
 
 ### Ansible Vault compatibility
 
@@ -72,10 +59,6 @@ Help developers and coding agents ship a startup in their own accounts and
 repeat the workflow for the next idea. Preserve user ownership of code,
 infrastructure and deployment configuration. Keep the shared workflow reusable
 across application stacks and provide predictable commands and automated checks.
-
-Harness Engineering for startups prioritizes Speed, Control and Scalability.
-Use explicit agent instructions, reusable tools and automated checks to build
-startups quickly, preserve owner control and support growth.
 
 The public first-deploy path currently targets macOS, Hetzner, Django/FastAPI,
 Postgres and HTTPS; Vue is an explicit template option. Verify support before
@@ -151,13 +134,3 @@ its data namespace. Namespace policies separate application traffic; SSH/admin
 access is shared, and local data volumes do not provide failover. Before shared
 upgrades, verify backups and health for every attached application. Test owner
 and attached flows together through real CLI processes and rendered templates.
-
-## Test coverage and completion claims
-
-Follow [Testing policy and completion evidence](docs/testing-policy.md).
-Integration tests are the default; changed user flows require E2E coverage.
-Unit tests are reserved for complex algorithms and never replace these checks.
-Use GIVEN / WHEN / THEN, real application interfaces and independent fixtures.
-A green pipeline confirms the executed checks, not complete feature coverage.
-Record uncovered flows and report skipped provider checks and remaining gaps.
-Keep required E2E checks enabled when improving speed.

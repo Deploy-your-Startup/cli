@@ -1,10 +1,10 @@
-name: Portable testing policy
+name: Agent instruction links
 on:
   pull_request:
-    paths: ['**/AGENTS.md', '**/CLAUDE.md', 'docs/**', 'tests/test_testing_policy_integration.py', '.github/workflows/testing-policy.yml']
+    paths: ['**/AGENTS.md', '**/CLAUDE.md', '**/*.md', 'tests/test_agent_links_integration.py', '.github/workflows/testing-policy.yml']
   push:
     branches: [main]
-    paths: ['**/AGENTS.md', '**/CLAUDE.md', 'docs/**', 'tests/test_testing_policy_integration.py', '.github/workflows/testing-policy.yml']
+    paths: ['**/AGENTS.md', '**/CLAUDE.md', '**/*.md', 'tests/test_agent_links_integration.py', '.github/workflows/testing-policy.yml']
 permissions:
   contents: read
 jobs:
@@ -12,5 +12,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Follow the real standalone agent instructions
-        run: python3 tests/test_testing_policy_integration.py
+      - name: Follow every relative link in the agent instructions
+        run: python3 tests/test_agent_links_integration.py
