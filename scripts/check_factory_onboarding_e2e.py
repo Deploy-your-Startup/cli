@@ -15,6 +15,8 @@ from pathlib import Path
 
 import yaml
 
+from cli.factory_commands import FACTORY_TEMPLATE, FACTORY_VERSION
+
 
 def main():
     required = ("mise", "uv", "yq", "git")
@@ -107,11 +109,9 @@ def main():
         for entry in registry["tooling"]:
             assert (factory / "projects/tooling" / entry["name"] / ".git").is_dir()
         answers = yaml.safe_load((factory / ".copier-answers.yml").read_text())
-        assert answers["_commit"] == "v0.1.2"
-        assert (
-            answers["_src_path"]
-            == "https://github.com/Deploy-your-Startup/startup-factory-template.git"
-        )
+        # The CLI's own pin, so a reviewed template bump needs no second edit here.
+        assert answers["_commit"] == FACTORY_VERSION
+        assert answers["_src_path"] == FACTORY_TEMPLATE
         assert (home / ".agents/skills/deploy-your-startup/SKILL.md").is_file()
         assert not (factory / "projects/startups/example-app").exists()
         assert "Sprowi (agent loop, beta) is not set up" in text
