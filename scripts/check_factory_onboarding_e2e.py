@@ -17,7 +17,7 @@ import yaml
 
 
 def main():
-    required = ("mise", "uv", "yq", "kubectl", "git")
+    required = ("mise", "uv", "yq", "git")
     missing = [tool for tool in required if not shutil.which(tool)]
     if missing:
         raise SystemExit("Install E2E prerequisites: " + ", ".join(missing))
