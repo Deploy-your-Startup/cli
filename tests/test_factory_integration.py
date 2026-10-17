@@ -143,7 +143,15 @@ def test_setup_without_kubectl_prepares_workspace_without_installing_it(
             f'#!/bin/sh\nprintf \'{tool} %s\\n\' "$*" >> "{calls}"\n'
         )
         (binaries / tool).chmod(0o755)
-    path = os.pathsep.join((str(binaries), "/usr/bin", "/bin"))
+    # Mirror the system tools without kubectl; CI runners preinstall it.
+    system = tmp_path / "system"
+    system.mkdir()
+    for directory in (Path("/usr/bin"), Path("/bin")):
+        for tool in directory.iterdir():
+            target = system / tool.name
+            if tool.name != "kubectl" and not target.exists():
+                target.symlink_to(tool)
+    path = os.pathsep.join((str(binaries), str(system)))
     assert shutil.which("kubectl", path=path) is None
     # WHEN the real CLI creates the Factory with setup.
     result = initialize(workspace, "--setup", env={"PATH": path})
