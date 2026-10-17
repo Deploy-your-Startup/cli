@@ -242,10 +242,9 @@ def initialize_factory(
         ui.success(f"Factory created at {destination}.")
     registry_document(destination)
     if setup:
+        # kubectl is optional: only inspecting a full-stack cluster needs it.
         missing = [
-            tool
-            for tool in ("mise", "uv", "yq", "kubectl", "gh")
-            if not shutil.which(tool)
+            tool for tool in ("mise", "uv", "yq", "gh") if not shutil.which(tool)
         ]
         if missing and shutil.which("brew"):
             ui.info(
