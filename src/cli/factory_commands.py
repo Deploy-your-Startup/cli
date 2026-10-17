@@ -17,7 +17,7 @@ from cli import wizard_output as ui
 from cli.template_commands import ANSWERS_FILE, render_project
 
 FACTORY_TEMPLATE = "https://github.com/Deploy-your-Startup/startup-factory-template.git"
-FACTORY_VERSION = "v0.1.1"
+FACTORY_VERSION = "v0.1.4"
 MARKER = ".startup-factory.yml"
 
 
@@ -180,27 +180,53 @@ def register_project(project: Path) -> None:
     ui.success(f"Registered {project.name} in {path}.")
 
 
-def initialize_factory(
-    destination: Path, source: str, version: str, setup: bool
-) -> Path:
+def resolve_source(source: str) -> str:
     if Path(source).expanduser().exists():
-        source = str(Path(source).expanduser().resolve())
-    destination = destination.expanduser().absolute()
+        return str(Path(source).expanduser().resolve())
+    return source
+
+
+def destination_problem(destination: Path, source: str) -> str | None:
+    """Explain why a folder cannot hold this Factory, or None when it can."""
     if destination.is_symlink():
-        raise click.ClickException("Factory destination must not be a symlink.")
+        return "Factory destination must not be a symlink."
+    if destination.exists() and not destination.is_dir():
+        return "Destination must be empty or an existing Factory; no files changed."
+    if not destination.exists() or not any(destination.iterdir()):
+        return None
+    if not is_factory(destination) or (
+        not (destination / ANSWERS_FILE).is_file()
+        or (destination / ANSWERS_FILE).is_symlink()
+    ):
+        return "Destination must be empty or an existing Factory; no files changed."
+    answers = yaml.safe_load((destination / ANSWERS_FILE).read_text())
+    if not isinstance(answers, dict) or answers.get("_src_path") != source:
+        return "Existing Factory uses another template; review its Copier answers."
+    return None
+
+
+def suggested_destination(source: str) -> Path:
+    """The default folder, or the next free variant when another folder owns it."""
+    base = Path.home() / "Projects/startup-factory"
+    candidate, number = base, 2
+    while destination_problem(candidate, source):
+        candidate, number = base.with_name(f"{base.name}-{number}"), number + 1
+    return candidate
+
+
+def initialize_factory(
+    destination: Path,
+    source: str,
+    version: str,
+    setup: bool,
+    show_next_steps: bool = True,
+) -> Path:
+    source = resolve_source(source)
+    destination = destination.expanduser().absolute()
+    problem = destination_problem(destination, source)
+    if problem:
+        raise click.ClickException(problem)
     if destination.exists() and any(destination.iterdir()):
-        if not is_factory(destination) or (
-            not (destination / ANSWERS_FILE).is_file()
-            or (destination / ANSWERS_FILE).is_symlink()
-        ):
-            raise click.ClickException(
-                "Destination must be empty or an existing Factory; no files changed."
-            )
-        answers = yaml.safe_load((destination / ANSWERS_FILE).read_text())
-        if not isinstance(answers, dict) or answers.get("_src_path") != source:
-            raise click.ClickException(
-                "Existing Factory uses another template; review its Copier answers."
-            )
         ui.info(f"Using existing Factory at {destination}; owner files are preserved.")
     else:
         render_project(
@@ -244,11 +270,12 @@ def initialize_factory(
         subprocess.run(
             ["mise", "exec", "--", "./scripts/init.sh"], check=True, cwd=destination
         )
-    ui.info(f"Next: cd {shlex.quote(str(destination))} && startup bootstrap")
-    ui.info(
-        "Review the files, initialize Git and commit .copier-answers.yml before template updates."
-    )
-    ui.info("Sprowi is optional: mise exec -- ./scripts/init.sh --with-sprowi")
+    if show_next_steps:
+        ui.info(f"Next: cd {shlex.quote(str(destination))} && startup bootstrap")
+        ui.info(
+            "Review the files, initialize Git and commit .copier-answers.yml before template updates."
+        )
+        ui.info("Sprowi is optional: mise exec -- ./scripts/init.sh --with-sprowi")
     return destination
 
 
@@ -281,21 +308,31 @@ def init(project_dir: Path, source: str, version: str, setup: bool):
 
 @factory.command("onboard")
 @click.option("--project-dir", type=click.Path(file_okay=False, path_type=Path))
+@click.option("--template", "source", default=FACTORY_TEMPLATE, hidden=True)
+@click.option("--version", default=FACTORY_VERSION, hidden=True)
 @click.pass_context
-def onboard(ctx: click.Context, project_dir: Path | None):
+def onboard(ctx: click.Context, project_dir: Path | None, source: str, version: str):
     """Set up your Factory, then guide you through your first startup."""
+    source = resolve_source(source)
     if project_dir is None:
-        project_dir = click.prompt(
-            "Factory folder",
-            default=str(Path.home() / "Projects/startup-factory"),
-            type=Path,
-        )
+        # Suggest a free folder and ask again instead of ending onboarding when
+        # the chosen folder already holds something else.
+        default = suggested_destination(source)
+        while True:
+            project_dir = click.prompt(
+                "Factory folder", default=str(default), type=Path
+            )
+            problem = destination_problem(project_dir.expanduser().absolute(), source)
+            if not problem:
+                break
+            ui.error(f"{problem} Choose another folder.")
     try:
         destination = initialize_factory(
-            project_dir, FACTORY_TEMPLATE, FACTORY_VERSION, True
+            project_dir, source, version, True, show_next_steps=False
         )
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         raise click.ClickException(str(exc)) from exc
+    ui.info("Factory ready. Now your first startup:")
     from cli.startup import bootstrap
 
     ctx.invoke(bootstrap, output_dir=str(destination / "projects/startups"))

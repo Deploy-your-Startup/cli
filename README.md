@@ -647,7 +647,9 @@ available without onboarding.
 startup factory onboard
 ```
 
-Choose a workspace folder (default `~/Projects/startup-factory`). Setup installs
+Choose a workspace folder (default `~/Projects/startup-factory`). When another
+folder already uses that name, onboarding suggests the next free one, such as
+`~/Projects/startup-factory-2`, and asks again instead of stopping. Setup installs
 missing workspace tools using Homebrew when available, installs the declared
 mise runtimes and clones public tooling. Without Homebrew it prints the missing
 prerequisites; install them and rerun with the same folder. Existing Factory files
@@ -657,12 +659,12 @@ and approval. Sprowi remains optional and requires separate engine credentials.
 To create only the workspace:
 
 ```bash
-startup factory init --project-dir my-factory --version v0.1.1 --setup
+startup factory init --project-dir my-factory --version v0.1.4 --setup
 cd my-factory
 startup bootstrap
 ```
 
-Factory v0.1.1 is pinned by the CLI. `--template` and `--version` select a reviewed
+Factory v0.1.4 is pinned by the CLI. `--template` and `--version` select a reviewed
 alternative; new/empty destinations and matching existing Factories are accepted.
 A retry never applies template updates. Initialize Git and commit generated files
 including `.copier-answers.yml` before `startup template update`.

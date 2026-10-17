@@ -422,3 +422,38 @@ sys.exit(99)
         destination / "projects/startups/example-app/README.md"
     ).read_text() == "Owner customization\n"
     assert calls
+
+
+def test_onboarding_offers_a_free_folder_when_the_default_is_taken(workspace, tmp_path):
+    source, _ = workspace
+    # GIVEN an unrelated workspace already occupies the default Factory folder.
+    home = tmp_path / "home"
+    occupied = home / "Projects/startup-factory"
+    occupied.mkdir(parents=True)
+    (occupied / "notes").write_text("keep")
+    # WHEN onboarding, first choosing the occupied folder, then the suggestion.
+    result = cli(
+        tmp_path,
+        "factory",
+        "onboard",
+        "--template",
+        str(source),
+        "--version",
+        "v1.0.0",
+        answers=f"{occupied}\n\n",
+        # System tools only: no Homebrew or workspace tools for setup.
+        env={"HOME": str(home), "PATH": "/usr/bin:/bin"},
+    )
+    # THEN the user is asked again and the Factory goes to the free folder.
+    output = result.stdout + result.stderr
+    suggestion = home / "Projects/startup-factory-2"
+    assert f"[{suggestion}]" in output
+    assert "Choose another folder" in output
+    assert (suggestion / ".startup-factory.yml").is_file()
+    assert (occupied / "notes").read_text() == "keep"
+    assert sorted(p.name for p in occupied.iterdir()) == ["notes"]
+    # The guided flow continues itself, so it prints no manual next steps.
+    assert "Next: cd" not in output
+    # Without workspace tools, setup stops with an actionable message.
+    assert result.returncode != 0
+    assert "your Factory is preserved" in result.stderr
