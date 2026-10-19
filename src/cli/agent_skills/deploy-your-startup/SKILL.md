@@ -237,7 +237,10 @@ supports `deploy_ref` when reviewing an unpublished shared workflow branch.
 
 Secrets live as inline Ansible Vault fields in
 `deployment/group_vars/<environment>.yml`. The vault password comes from the
-macOS Keychain when `-p` is omitted — always omit it.
+macOS Keychain when `-p` is omitted — always omit it. If this Mac has no
+Keychain entry, the command fails without a terminal; ask the user to run it
+once in their own terminal and paste the password from their password manager
+entry `VAULT_PASSWORD_<PROJECT>`. Never ask for the password in the conversation.
 
 - Read a value: `startup secrets get-field -f <file> --field <name>`. Do not
   print secrets into the conversation unless the user asked to see that value.
