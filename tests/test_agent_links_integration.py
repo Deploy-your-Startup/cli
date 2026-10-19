@@ -45,7 +45,7 @@ def broken_links(document):
 def test_relative_links_resolve():
     # GIVEN every Markdown document in this standalone repository.
     documents = list(markdown_files())
-    # WHEN following their relative links and CLAUDE.md imports.
+    # WHEN following their relative links and @ imports.
     broken = [link for document in documents for link in broken_links(document)]
     # THEN every target exists, so short instructions lead to their details.
     assert not broken, "Broken links:\n" + "\n".join(broken)
