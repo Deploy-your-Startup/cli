@@ -14,7 +14,7 @@ authors = [
     {name = "Deploy Your Startup", email = "contact@deployyourstartup.com"}
 ]
 dependencies = [
-    "copier==9.18.2",
+    "copier==9.19.1",
     "ansible==14.5.0",
     "click>=8.4.2",
     # Runtime requirement of the hetzner.hcloud Ansible collection (the deploy
@@ -39,12 +39,12 @@ dev = [
     # developer and CI run could pick up a different ruff whose default rule set
     # had grown. Bump this deliberately, then run `./make.sh format`.
     "pytest-xdist==3.8.0",
-    "ruff>=0.16.0,<0.17",
+    "ruff>=0.16.0,<0.18",
     # Exact pin, not a range: ty is 0.0.x and explicitly has no stable API —
     # diagnostics can change between any two releases. Since `./make.sh lint`
     # gates CI, an unpinned bump would turn every pipeline red at once. Bump
     # deliberately, then run `./make.sh lint`.
-    "ty==0.0.85",
+    "ty==0.0.89",
 ]
 server = [
     "fastapi>=0.141.1",
