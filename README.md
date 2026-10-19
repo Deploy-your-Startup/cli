@@ -452,7 +452,11 @@ when necessary, and uncordon a node only after it is healthy.
 ## Manage secrets
 
 Run from the generated project's root. Bootstrap stores the project Vault
-password in Keychain; omit `-p` to retrieve it. Preview changes first:
+password in Keychain and waits until you have also saved it in your password
+manager as `VAULT_PASSWORD_<PROJECT>` (for example `VAULT_PASSWORD_EXAMPLE_APP`);
+omit `-p` to retrieve it. On another Mac, the first command that needs the
+password asks for that copy, checks it against the project's Vault and stores
+it in that Mac's Keychain. Preview changes first:
 
 ```bash
 startup secrets list-vaults --repo deployment

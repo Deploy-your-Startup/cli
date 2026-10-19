@@ -84,8 +84,9 @@ class KeychainBackend:
         except subprocess.CalledProcessError as exc:
             raise click.ClickException(
                 f'No vault password found in macOS Keychain for "{service_name}". '
-                f"Store it first, for example from the portfolio hub with: "
-                f"scripts/secrets.sh store {key}"
+                "Run the command in an interactive terminal and paste the "
+                f"password from your password manager entry {service_name}, or "
+                "pass it through STARTUP_VAULT_PASSWORD."
             ) from exc
 
         vault_password = result.stdout.strip()

@@ -18,6 +18,7 @@ from cli.sync_commands import (
     _run_command,
 )
 from cli.template_commands import render_project
+from cli.vault_backends import keychain_service_name
 
 TEMPLATE_REPO = "django-backend-template"
 TEMPLATE_VAULT_PASSWORD = "ranhah-ceqZu9-fihfez"
@@ -374,7 +375,10 @@ def bootstrap_project(
     click.echo(f"  Domain: {base_domain}")
     click.echo("")
     click.echo(f"  Vault Password: {vault_password}")
-    click.echo("  SAVE THIS PASSWORD — you need it for deployments!")
+    click.echo(
+        "  SAVE THIS PASSWORD in your password manager as "
+        f"{keychain_service_name(project_name)} — you need it for deployments!"
+    )
     click.echo("=" * 60)
     click.echo("")
     click.echo("Next steps:")
