@@ -25,8 +25,8 @@ TOKEN_FORM_ATTEMPTS = 3
 DEFAULT_PERMISSIONS = [
     ("Account", "Cloudflare Pages", "Edit"),
     ("Account", "Account Settings", "Read"),
-    ("Zone", "Zone", "Edit"),  # grants account.zone.create (anlegen neuer Zonen)
-    ("Zone", "DNS", "Edit"),  # DNS-Records in den (neuen) Zonen verwalten
+    ("Zone", "Zone", "Edit"),  # grants account.zone.create (creating new zones)
+    ("Zone", "DNS", "Edit"),  # manage DNS records in the (new) zones
     ("User", "User Details", "Read"),
 ]
 
