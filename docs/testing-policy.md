@@ -5,6 +5,10 @@ real application or tool; changed user flows also need E2E coverage. Use explici
 GIVEN / WHEN / THEN, independent fixtures and observable outcomes. Exercise real
 persistence, scripts and public interfaces. Do not mock our own code; use local
 stand-ins only for external boundaries that cannot run locally.
+GIVEN / WHEN / THEN tests are the specification: do not write separate spec
+documents. Specs that are not executed drift from the code; tests are checked
+on every change. Record why a behaviour was chosen in an ADR or the change
+description.
 
 Unit tests are reserved for complex algorithms with meaningful edge cases or
 invariants. Explain why isolated coverage is useful. They supplement integration
