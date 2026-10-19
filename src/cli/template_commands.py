@@ -240,17 +240,26 @@ def adopt_project(
         shutil.copyfile(generated / ANSWERS_FILE, answers)
 
 
-def harness_drift(project: Path, rendered: Path) -> list[str]:
+def harness_patterns(template_root: Path) -> list[str] | tuple[str, ...]:
+    """Read the harness list from the template repository, not the rendered output.
+
+    Templates keep startup-template.yml next to copier.yml, outside a Copier
+    `_subdirectory`, so a rendered project never contains it.
+    """
+    manifest = template_root / "startup-template.yml"
+    values = yaml.safe_load(manifest.read_text()) if manifest.is_file() else None
+    patterns = values.get("harness") if isinstance(values, dict) else None
+    return patterns if isinstance(patterns, list) else DEFAULT_HARNESS
+
+
+def harness_drift(
+    project: Path, rendered: Path, patterns: list[str] | tuple[str, ...]
+) -> list[str]:
     """Compare template-owned harness files with a fresh render of the template.
 
     Copier keeps any earlier divergence as a customization, so an update never
     reports a harness file that was edited, deleted or never adopted.
     """
-    manifest = rendered / "startup-template.yml"
-    values = yaml.safe_load(manifest.read_text()) if manifest.is_file() else None
-    patterns = values.get("harness") if isinstance(values, dict) else None
-    if not isinstance(patterns, list):
-        patterns = DEFAULT_HARNESS
     findings = []
     for pattern in patterns:
         expected = {path.relative_to(rendered) for path in rendered.glob(pattern)}
@@ -274,16 +283,18 @@ def report_harness_drift(
     parameters.update(data)
     with tempfile.TemporaryDirectory(prefix="startup-template-harness-") as temporary:
         rendered = Path(temporary).resolve() / "rendered"
-        run_copy(
-            answers["_src_path"],
-            rendered,
+        with Worker(
+            src_path=answers["_src_path"],
+            dst_path=rendered,
             data=parameters,
             vcs_ref=version,
             defaults=True,
             quiet=True,
             skip_tasks=True,
-        )
-        findings = harness_drift(project, rendered)
+        ) as worker:
+            worker.run_copy()
+            patterns = harness_patterns(worker.template.local_abspath)
+        findings = harness_drift(project, rendered, patterns)
     if findings:
         click.echo(
             f"Warning: agent harness files differ from the template at {version}:\n  "

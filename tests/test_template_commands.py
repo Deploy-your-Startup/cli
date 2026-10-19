@@ -214,6 +214,51 @@ def test_update_without_harness_drift_prints_no_warning(repos):
     assert "harness files differ" not in result.output
 
 
+def test_update_reads_declared_harness_from_a_template_subdirectory(tmp_path):
+    # GIVEN a template laid out like the published ones: files under a Copier
+    # `_subdirectory`, startup-template.yml next to copier.yml declaring only
+    # AGENTS.md, plus an ADR that the default harness list would cover.
+    template = tmp_path.resolve() / "template"
+    init(template)
+    (template / "copier.yml").write_text(
+        "_subdirectory: template\nproject_name: demo\n"
+    )
+    (template / "startup-template.yml").write_text("harness:\n  - AGENTS.md\n")
+    files = template / "template"
+    (files / "docs/architecture").mkdir(parents=True)
+    (files / "docs/architecture/0001-test-strategy.md").write_text("# Tests\n")
+    (files / "AGENTS.md").write_text("# Template instructions\n")
+    (files / ".copier-answers.yml.jinja").write_text(
+        "{{ _copier_answers | to_nice_yaml }}"
+    )
+    (files / "make.sh").write_text("setup=v1\n")
+    commit(template, "baseline")
+    git(template, "tag", "v1.0.0")
+    project = tmp_path.resolve() / "project"
+    init(project)
+    git(project, "remote", "add", "origin", "git@github.com:owner/project.git")
+    (project / "AGENTS.md").write_text("# Edited instructions\n")
+    (project / "make.sh").write_text("setup=v1\n")
+    commit(project, "project")
+    adopt_project(project, source=str(template), version="v1.0.0", data={})
+    commit(project, "adopt without the template ADR")
+    (files / "make.sh").write_text("setup=v2\n")
+    commit(template, "unrelated update")
+    git(template, "tag", "v2.0.0")
+
+    # WHEN updating the template.
+    result = CliRunner().invoke(
+        cli,
+        ["template", "update", "--project-dir", str(project), "--version", "v2.0.0"],
+    )
+
+    # THEN the declared list decides: the edited AGENTS.md is reported and the
+    # ADR outside that list is not.
+    assert result.exit_code == 0, result.output
+    assert "differs: AGENTS.md" in result.output
+    assert "0001-test-strategy.md" not in result.output
+
+
 def test_dirty_project_and_duplicate_adoption_are_rejected(repos):
     template, project = repos
     (project / "app.py").write_text("# Uncommitted work\n")
