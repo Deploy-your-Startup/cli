@@ -1,10 +1,10 @@
 name: Agent instruction links
 on:
   pull_request:
-    paths: ['**/AGENTS.md', '**/CLAUDE.md', '**/*.md', 'tests/test_agent_links_integration.py', '.github/workflows/testing-policy.yml']
+    paths: ['**/AGENTS.md', '**/*.md', 'tests/test_agent_links_integration.py', '.github/workflows/testing-policy.yml']
   push:
     branches: [main]
-    paths: ['**/AGENTS.md', '**/CLAUDE.md', '**/*.md', 'tests/test_agent_links_integration.py', '.github/workflows/testing-policy.yml']
+    paths: ['**/AGENTS.md', '**/*.md', 'tests/test_agent_links_integration.py', '.github/workflows/testing-policy.yml']
 permissions:
   contents: read
 jobs:
