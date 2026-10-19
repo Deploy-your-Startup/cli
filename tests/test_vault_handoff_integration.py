@@ -158,6 +158,11 @@ def test_missing_keychain_entry_is_recovered_from_the_password_manager(tmp_path)
     assert "does not open this project's vault" in text
     assert SECRET.decode().strip() in text
     assert PASSWORD not in text
+    if sys.platform != "darwin":
+        # Only macOS has a Keychain to store it in; the run still succeeds.
+        assert "Using it for this run only." in text
+        assert list(store.iterdir()) == []
+        return
     assert (store / ENTRY).read_text() == PASSWORD
 
     # AND a later run, even without a terminal, reads it from the Keychain.

@@ -159,8 +159,14 @@ def recover_from_password_manager(
             )
             return password
         if vault_is_decryptable(vault_dir, password):
-            backend.write(project_name, password)
-            click.echo(f"  Saved to the Keychain as {entry}.", err=True)
+            try:
+                backend.write(project_name, password)
+            except click.ClickException as error:
+                # The password is verified; a missing Keychain only costs the
+                # next run another prompt.
+                click.echo(f"  {error.message} Using it for this run only.", err=True)
+            else:
+                click.echo(f"  Saved to the Keychain as {entry}.", err=True)
             return password
         click.echo("  That password does not open this project's vault.", err=True)
     return None
