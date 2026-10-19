@@ -534,6 +534,14 @@ deploy or decrypt Vault. Commit local template changes before using `HEAD` so
 Copier records a reachable baseline for later updates. The default target is the
 template's HEAD; pass a tag or commit for repeatable updates.
 
+Copier keeps earlier divergences as customizations, so both modes also compare
+the agent harness files the template owns (template ADRs 0001-0099, testing
+policy, commit conventions and their link check) with a fresh render at the
+target version. A warning lists files that differ, are missing, or use a
+template ADR number without coming from the template. Templates can declare
+their own list under `harness` in `startup-template.yml`. The warning does not
+change files or the exit status; align the files or record why they diverge.
+
 For a project without Copier answers, record its original baseline first:
 
 ```bash

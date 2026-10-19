@@ -178,7 +178,9 @@ Keep the two update paths apart: `startup sync` updates the shared deployment
 repository in the user's GitHub account; `startup template update` changes the
 application files of one project. After a template update, review the diff,
 resolve conflicts, run the project's checks and commit together with
-`.copier-answers.yml`.
+`.copier-answers.yml`. Treat its agent harness drift warning as a finding:
+report it and align the listed files with the template, or record why the
+project diverges; number project ADRs from 0100.
 
 `os-upgrade` previews by default. It is separate from package updates.
 Execution uses `--execute --backup-confirmed --health-url https://app.example.com/health`

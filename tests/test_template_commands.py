@@ -140,6 +140,80 @@ def test_update_reports_conflict_and_preview_preserves_original(repos):
     assert "<<<<<<<" in (project / "make.sh").read_text()
 
 
+def test_update_reports_harness_files_that_drifted_from_the_template(repos):
+    # GIVEN a template that ships ADRs and a testing policy, and a project adopted
+    # with an edited ADR 0001, no ADR 0006, a project ADR in the template range
+    # and a correctly numbered project ADR.
+    template, project = repos
+    adrs = template / "docs/architecture"
+    adrs.mkdir(parents=True)
+    (adrs / "0001-test-strategy.md").write_text("# Integration and E2E tests\n")
+    (adrs / "0006-business-logic-in-services.md").write_text("# Services\n")
+    (template / "docs/testing-policy.md").write_text("# Testing policy\n")
+    commit(template, "ship harness")
+    git(template, "tag", "v1.1.0")
+    project_adrs = project / "docs/architecture"
+    project_adrs.mkdir(parents=True)
+    (project_adrs / "0001-test-strategy.md").write_text("# Outdated test strategy\n")
+    (project_adrs / "0007-card-recognition.md").write_text("# Card recognition\n")
+    (project_adrs / "0100-retailer-images.md").write_text("# Retailer images\n")
+    (project / "docs/testing-policy.md").write_text("# Testing policy\n")
+    commit(project, "project harness")
+    adopt_project(project, source=str(template), version="v1.1.0", data={})
+    commit(project, "adopt with drifted harness")
+    (template / "make.sh").write_text("setup=v2\n\ncustom=template\n")
+    commit(template, "unrelated update")
+    git(template, "tag", "v2.0.0")
+    args = ["template", "update", "--project-dir", str(project), "--version", "v2.0.0"]
+
+    # WHEN previewing and then applying the update.
+    preview = CliRunner().invoke(cli, [*args, "--dry-run"])
+    result = CliRunner().invoke(cli, args)
+
+    # THEN both name every drifted harness file, Copier's merge left them as they
+    # were, and the correctly numbered project ADR is not reported.
+    for output in (preview.output, result.output):
+        assert "agent harness files differ from the template at v2.0.0" in output
+        assert "differs: docs/architecture/0001-test-strategy.md" in output
+        assert "missing: docs/architecture/0006-business-logic-in-services.md" in output
+        assert "not in template: docs/architecture/0007-card-recognition.md" in output
+        assert "0100-retailer-images.md" not in output
+        assert "testing-policy.md" not in output
+    assert preview.exit_code == 0, preview.output
+    assert result.exit_code == 0, result.output
+    assert not (
+        project / "docs/architecture/0006-business-logic-in-services.md"
+    ).exists()
+
+
+def test_update_without_harness_drift_prints_no_warning(repos):
+    # GIVEN a template that declares its own harness files and a project that
+    # carries them unchanged.
+    template, project = repos
+    (template / "startup-template.yml").write_text("harness:\n  - AGENTS.md\n")
+    (template / "AGENTS.md").write_text("# Instructions\n")
+    commit(template, "declare harness")
+    git(template, "tag", "v1.1.0")
+    (project / "startup-template.yml").write_text("harness:\n  - AGENTS.md\n")
+    (project / "AGENTS.md").write_text("# Instructions\n")
+    commit(project, "project harness")
+    adopt_project(project, source=str(template), version="v1.1.0", data={})
+    commit(project, "adopt matching harness")
+    (template / "make.sh").write_text("setup=v2\n\ncustom=template\n")
+    commit(template, "unrelated update")
+    git(template, "tag", "v2.0.0")
+
+    # WHEN updating the template.
+    result = CliRunner().invoke(
+        cli,
+        ["template", "update", "--project-dir", str(project), "--version", "v2.0.0"],
+    )
+
+    # THEN the update succeeds without a drift warning.
+    assert result.exit_code == 0, result.output
+    assert "harness files differ" not in result.output
+
+
 def test_dirty_project_and_duplicate_adoption_are_rejected(repos):
     template, project = repos
     (project / "app.py").write_text("# Uncommitted work\n")

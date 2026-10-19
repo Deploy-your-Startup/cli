@@ -39,6 +39,15 @@ PUBLIC_FIELDS = {
     "kpis_website_id",
 }
 PROTECTED = ("deployment/group_vars/**",)
+# Agent harness files a template owns. Projects customize AGENTS.md freely, but
+# these should match the template; a template may list its own under `harness`
+# in startup-template.yml. ADRs 0001-0099 are template-reserved (ADR 0003).
+DEFAULT_HARNESS = (
+    "docs/architecture/00[0-9][0-9]-*.md",
+    "docs/testing-policy.md",
+    ".github/git-commit-instructions.md",
+    "tests/test_agent_links_integration.py",
+)
 
 
 def require_committed_template(source: str, version: str) -> None:
@@ -231,6 +240,59 @@ def adopt_project(
         shutil.copyfile(generated / ANSWERS_FILE, answers)
 
 
+def harness_drift(project: Path, rendered: Path) -> list[str]:
+    """Compare template-owned harness files with a fresh render of the template.
+
+    Copier keeps any earlier divergence as a customization, so an update never
+    reports a harness file that was edited, deleted or never adopted.
+    """
+    manifest = rendered / "startup-template.yml"
+    values = yaml.safe_load(manifest.read_text()) if manifest.is_file() else None
+    patterns = values.get("harness") if isinstance(values, dict) else None
+    if not isinstance(patterns, list):
+        patterns = DEFAULT_HARNESS
+    findings = []
+    for pattern in patterns:
+        expected = {path.relative_to(rendered) for path in rendered.glob(pattern)}
+        actual = {path.relative_to(project) for path in project.glob(pattern)}
+        for path in sorted(expected | actual):
+            if path not in actual:
+                findings.append(f"missing: {path}")
+            elif path not in expected:
+                findings.append(f"not in template: {path}")
+            elif (project / path).read_bytes() != (rendered / path).read_bytes():
+                findings.append(f"differs: {path}")
+    return findings
+
+
+def report_harness_drift(
+    project: Path, answers: dict, *, version: str, data: dict[str, str]
+) -> None:
+    parameters = {
+        key: value for key, value in answers.items() if not key.startswith("_")
+    }
+    parameters.update(data)
+    with tempfile.TemporaryDirectory(prefix="startup-template-harness-") as temporary:
+        rendered = Path(temporary).resolve() / "rendered"
+        run_copy(
+            answers["_src_path"],
+            rendered,
+            data=parameters,
+            vcs_ref=version,
+            defaults=True,
+            quiet=True,
+            skip_tasks=True,
+        )
+        findings = harness_drift(project, rendered)
+    if findings:
+        click.echo(
+            f"Warning: agent harness files differ from the template at {version}:\n  "
+            + "\n  ".join(findings)
+            + "\nAlign them with the template, change the template, or record why "
+            "the project diverges. Project ADRs start at 0100."
+        )
+
+
 def update_project(
     project: Path, *, version: str, data: dict[str, str], dry_run: bool
 ) -> None:
@@ -274,6 +336,7 @@ def update_project(
         new_files = git(target, "ls-files", "--others", "--exclude-standard")
         if new_files:
             click.echo(f"New files:\n{new_files}")
+        report_harness_drift(target, answers, version=version, data=data)
         if conflicts:
             raise click.ClickException(
                 f"Template update has conflicts; resolve before committing:\n{conflicts}"
@@ -335,7 +398,11 @@ def adopt(project_dir: Path, source: str, version: str, values: tuple[str, ...])
     "--dry-run", is_flag=True, help="Update an isolated clone and show the diff."
 )
 def update(project_dir: Path, version: str, values: tuple[str, ...], dry_run: bool):
-    """Apply template changes while preserving project customizations."""
+    """Apply template changes while preserving project customizations.
+
+    Also warns when the template's agent harness files (ADRs 0001-0099, testing
+    policy, commit conventions) differ from a fresh render of the target version.
+    """
     try:
         update_project(
             project_dir, version=version, data=parse_data(values), dry_run=dry_run
