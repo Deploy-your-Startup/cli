@@ -17,37 +17,17 @@ from pathlib import Path
 
 import click
 
-from cli.vault.fields import contains_vault_blocks
-from cli.vault.files import check_can_decrypt_with_password, is_full_vault_file
+from cli.vault.files import check_can_decrypt_with_password
 from cli.vault_backends import get_backend
+from cli.vault_handoff import iter_vault_files, vault_is_decryptable
 
-
-def iter_vault_files(deployment_dir: Path) -> list[Path]:
-    """Return every YAML file under ``deployment_dir`` that holds vault content."""
-    files: list[Path] = []
-    if not deployment_dir.exists():
-        return files
-    for path in sorted(deployment_dir.rglob("*.y*ml")):
-        try:
-            if is_full_vault_file(path) or contains_vault_blocks(path):
-                files.append(path)
-        except OSError:
-            continue
-    return files
-
-
-def vault_is_decryptable(deployment_dir: Path, password: str | None) -> bool:
-    """True iff at least one vault file exists and *all* decrypt with ``password``.
-
-    Requiring at least one file matters: an empty project would otherwise look
-    "decryptable" and let a broken state pass as healthy.
-    """
-    if not password:
-        return False
-    files = iter_vault_files(deployment_dir)
-    if not files:
-        return False
-    return all(check_can_decrypt_with_password(p, password) for p in files)
+__all__ = [
+    "iter_vault_files",
+    "read_keychain_password",
+    "store_keychain_password",
+    "vault_is_decryptable",
+    "verify_rotation",
+]
 
 
 def verify_rotation(

@@ -23,6 +23,7 @@ from .vault_backends import (
     get_backend,
     keychain_service_name,  # re-exported for cli.wizard.*
 )
+from .vault_handoff import recover_from_password_manager
 
 __all__ = ["keychain_service_name"]
 
@@ -92,7 +93,8 @@ def resolve_vault_password(
 
     An explicit ``--vault-password`` always wins. Otherwise the password is
     read from the configured backend (default: macOS Keychain), keyed by the
-    project name derived from ``working_directory``.
+    project name derived from ``working_directory``. When the backend has no
+    entry, an interactive run asks for the password manager copy and stores it.
     """
     if vault_password:
         return vault_password
@@ -111,7 +113,18 @@ def resolve_vault_password(
             "STARTUP_DISABLE_KEYCHAIN_VAULT to allow the default keychain backend."
         )
 
-    return get_backend(backend).read(project_name)
+    password_backend = get_backend(backend)
+    try:
+        return password_backend.read(project_name)
+    except click.ClickException:
+        # A computer without the Keychain entry: ask for the password manager
+        # copy once instead of failing every command.
+        recovered = recover_from_password_manager(
+            project_name, _resolve_working_dir(working_directory), password_backend
+        )
+        if recovered is None:
+            raise
+        return recovered
 
 
 def _ansible_env(

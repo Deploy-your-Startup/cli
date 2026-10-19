@@ -20,6 +20,7 @@ from cli.bootstrap import (
 )
 from cli.sync_commands import _run_command
 from cli.template_commands import ANSWERS_FILE, render_project
+from cli.vault_handoff import hand_off_to_password_manager
 
 from ..base import WizardStep, has_placeholders, prompt_user_public_key, repo_exists
 from ..context import BootstrapContext
@@ -320,6 +321,9 @@ class ProjectStep(WizardStep):
         ui.action_start("Saving vault password in Keychain...")
         store_keychain_password(ctx.project_name, ctx.vault_password)
         ui.action_done("Vault password saved in Keychain")
+        # The Keychain entry is local to this Mac; the password manager copy is
+        # what lets another computer deploy the project later.
+        hand_off_to_password_manager(ctx.project_name, ctx.vault_password)
 
         # 3g. Remove .bak files left behind by vault encryption
         for bak in ctx.project_dir.rglob("*.bak"):
