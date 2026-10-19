@@ -100,5 +100,5 @@ select = [
 ignore = [
     "E501",    # line length is the formatter's job; it cannot split long
                # comments/strings and we do not want them mangled
-    "RUF001",  # ambiguous unicode: the UI strings are German and use – — ×
+    "RUF001",  # ambiguous unicode: UI strings use typographic characters such as – — ×
 ]
