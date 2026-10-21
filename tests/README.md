@@ -194,3 +194,16 @@ checks that BYOS no longer requests manual setup or deployment.
 
 These checks do not run a fresh public GitHub Actions deployment or install k3s
 on a real BYOS VPS; those provider flows remain unverified by this local suite.
+
+## Cloudflare browser setup
+
+`uv run --extra dev pytest tests/test_cloudflare_browser_integration.py` launches
+real installed Chrome with disposable persistent profiles against a local HTTP
+provider. It checks ready, delayed and denied sessions, no repeated navigation
+while the token page loads, and Stealth scripts in the first tab, new tabs and
+iframes. The public token-creation entrypoint also fills every permission row,
+submits the form once and extracts a delayed one-time token from either the
+success box or curl example without printing it. Both template-picker and direct
+form entry are covered. Google Chrome must be installed. Live Cloudflare login,
+challenges, permission selectors and API token creation require separate account
+verification; local provider checks cannot establish live compatibility.
