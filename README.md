@@ -157,9 +157,10 @@ account permissions: **Cloudflare Pages: Edit**, **Account Settings: Read** and
 
 Bootstrap renders the
 [pitch template](https://github.com/Deploy-your-Startup/pitch-template), creates
-the GitHub repository, stores the Cloudflare token and account ID as repository
-secrets, pushes the code and connects the domain and its `www` subdomain to the
-Pages project. Nameserver changes can take a while to propagate; verify the site
+the GitHub repository, stores the Cloudflare token and account ID as secrets of
+a `production` environment that only `main` can deploy to, pushes the code and connects the domain and its `www` subdomain to the
+Pages project. For a public repository it also requires approval before
+workflows from fork pull requests run. Nameserver changes can take a while to propagate; verify the site
 over HTTPS once the Actions run has finished. Edit `frontend/src/pages/index.astro`
 and run `./make.sh run` to work on the page locally.
 ## Use the CLI from a coding agent

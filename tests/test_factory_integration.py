@@ -352,6 +352,7 @@ def test_real_bootstrap_registers_created_repository_even_after_failure(
 args = sys.argv[1:]
 if args[:2] == ['auth', 'status']: print("- Token scopes: 'repo', 'read:packages'"); sys.exit(0)
 if args and args[0] == 'api': print('X-OAuth-Scopes: repo, read:packages'); sys.exit(0)
+if args[:2] == ['repo', 'view'] and '--json' in args: print('PRIVATE'); sys.exit(0)
 if args[:2] == ['repo', 'view']: sys.exit(0 if 'deploy-your-startup' in args[2] or os.environ.get('CREATED_REPO') else 1)
 if args[:2] == ['repo', 'create']:
     subprocess.run(['git', 'remote', 'add', 'origin', 'https://github.com/example-owner/example-app.git'], check=True)
@@ -443,7 +444,7 @@ sys.exit(99)
     ]
     assert "Registered example-app" in first.output
     if fail_secret:
-        assert "Command failed: gh secret set" in first.output
+        assert "Could not set the GitHub secret CLOUDFLARE_API_TOKEN" in first.output
         monkeypatch.delenv("FAIL_SECRET")
     # WHEN resuming, THEN project edits survive and the registry does not grow.
     (destination / "projects/startups/example-app/README.md").write_text(
