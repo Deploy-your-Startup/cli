@@ -90,6 +90,7 @@ class CloudflareAutomation:
 
     async def start(self) -> None:
         from playwright.async_api import async_playwright
+        from playwright_stealth import Stealth
 
         self._playwright = await async_playwright().start()
         CHROME_USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -105,6 +106,14 @@ class CloudflareAutomation:
                 "--disable-component-extensions-with-background-pages",
             ],
         )
+        # Apply directly: the library's Playwright wrapper does not instrument
+        # launch_persistent_context. Preserve Chrome's actual OS and GPU values.
+        await Stealth(
+            navigator_platform=False,
+            # Upstream accepts None at runtime but annotates this as str.
+            navigator_platform_override=None,  # ty: ignore[invalid-argument-type]
+            webgl_vendor=False,
+        ).apply_stealth_async(self._context)
         self._page = (
             self._context.pages[0]
             if self._context.pages
@@ -213,24 +222,25 @@ class CloudflareAutomation:
     async def _submit_token_form(self, token_name: str) -> None:
         await self._click_create_token_entry()
         await self._dismiss_blocking_ui()
-        try:
-            await self.page.get_by_role("button", name="Get started").first.click(
-                timeout=15_000
-            )
-        except playwright_error():
-            # "Get started" is the empty-state button; an account that already
-            # has tokens opens the form directly.
-            pass
+        custom_token = self.page.get_by_role("button", name="Get started").first
+        token_name_input = self.page.get_by_role(
+            "textbox", name="Token name", exact=True
+        )
+        await custom_token.or_(token_name_input).first.wait_for(
+            state="visible", timeout=FORM_READY_TIMEOUT
+        )
+        if not await token_name_input.is_visible():
+            await custom_token.click()
 
         await self._wait_for_form_ready()
-        await self.page.get_by_role("textbox").first.fill(token_name)
+        await token_name_input.fill(token_name)
 
         for index, spec in enumerate(DEFAULT_PERMISSIONS):
             if index > 0:
                 await self.page.get_by_role("button", name="Add more").first.click()
             await self._set_permission_row(index, *spec)
 
-        await self.page.get_by_test_id("api_tokens_summary_button").click()
+        await self.page.get_by_role("button", name="Continue to summary").click()
         await self.page.get_by_role("button", name="Create Token").click()
 
     async def _wait_for_form_ready(self) -> None:
@@ -244,38 +254,27 @@ class CloudflareAutomation:
         Waiting for the first row here turns that into one explicit, retryable
         failure before a single character is typed.
         """
-        await self.page.get_by_role("button", name="Resources").first.wait_for(
-            state="visible", timeout=FORM_READY_TIMEOUT
-        )
+        await self.page.get_by_role(
+            "combobox", name="Resources", exact=True
+        ).first.wait_for(state="visible", timeout=FORM_READY_TIMEOUT)
 
     async def _click_create_token_entry(self) -> None:
-        try:
-            await self._dismiss_blocking_ui()
-            await self.page.get_by_role("button", name="Create Token").click(
-                timeout=5_000
-            )
-        except playwright_error():
-            pass
-
-        try:
-            await self.page.get_by_role("button", name="Get started").first.wait_for(
-                state="visible", timeout=5_000
-            )
-            return
-        except playwright_error():
-            await self.page.goto(
-                f"{CF_TOKEN_URL}/create", wait_until="domcontentloaded"
-            )
+        await self._dismiss_blocking_ui()
+        await self.page.get_by_role("button", name="Create Token", exact=True).click()
 
     async def _set_permission_row(
         self, index: int, resource: str, permission: str, level: str
     ) -> None:
-        await self.page.get_by_role("button", name="Resources").nth(index).click()
+        await (
+            self.page.get_by_role("combobox", name="Resources", exact=True)
+            .nth(index)
+            .click()
+        )
         await self.page.get_by_role("option", name=resource, exact=True).click()
 
-        permission_input = self.page.get_by_role("textbox", name="Permissions").nth(
-            index
-        )
+        permission_input = self.page.get_by_role(
+            "combobox", name="Permissions", exact=True
+        ).nth(index)
         await permission_input.click()
         await permission_input.fill(permission)
         await self.page.get_by_role("option", name=permission, exact=True).click()
@@ -283,35 +282,8 @@ class CloudflareAutomation:
         level_input = self.page.get_by_role("combobox", name="Permissions levels").nth(
             index
         )
-        await self._open_permission_level_menu(level_input)
-        if level == "Edit":
-            await level_input.press("ArrowDown")
-        await level_input.press("Enter")
-
-    async def _open_permission_level_menu(self, level_input) -> None:
-        """Open the visible React select wrapper, not the hidden input itself."""
-        deadline = asyncio.get_running_loop().time() + 5
-        while asyncio.get_running_loop().time() < deadline:
-            try:
-                if await level_input.is_enabled(timeout=250):
-                    break
-            except playwright_error():
-                pass
-            await asyncio.sleep(0.1)
-
-        await level_input.evaluate(
-            """
-            (element) => {
-              const wrapper = element.closest('[role="combobox"]')?.parentElement || element.parentElement;
-              if (wrapper) {
-                wrapper.scrollIntoView({ block: 'center', inline: 'nearest' });
-                wrapper.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-                wrapper.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-              }
-            }
-            """
-        )
-        await level_input.focus()
+        await level_input.click()
+        await self.page.get_by_role("option", name=level, exact=True).click()
 
     async def _extract_token(self) -> str | None:
         await self.page.wait_for_load_state("domcontentloaded")
@@ -385,7 +357,7 @@ class CloudflareAutomation:
         """Handle Cloudflare's success screen with the dashed token box."""
         try:
             token = await self.page.evaluate(
-                """
+                r"""
                 () => {
                   // The freshly created token is rendered in a `.select-all` box.
                   for (const el of document.querySelectorAll('.select-all')) {
@@ -396,7 +368,7 @@ class CloudflareAutomation:
                   const curlCode = Array.from(document.querySelectorAll('code,pre'))
                     .map((el) => el.textContent || '')
                     .join('\n');
-                  const match = curlCode.match(/Bearer\\s+([A-Za-z0-9_-]{30,120})/);
+                  const match = curlCode.match(/Bearer\s+([A-Za-z0-9_-]{30,120})/);
                   return match ? match[1] : '';
                 }
                 """
@@ -443,6 +415,7 @@ class CloudflareAutomation:
                 url.startswith("https://dash.cloudflare.com/")
                 and "/login" not in url
                 and "/sign-up" not in url
+                and "/profile/api-tokens" not in url
             ):
                 try:
                     await self.page.goto(CF_TOKEN_URL, wait_until="domcontentloaded")
@@ -475,9 +448,8 @@ class CloudflareAutomation:
                 continue
 
     async def _on_token_page(self) -> bool:
-        if "/profile/api-tokens" in self.page.url and "login" not in self.page.url:
-            return True
-
+        # The requested URL can already be present during login, a challenge or
+        # SPA loading. Only the rendered token dashboard proves session readiness.
         try:
             heading = self.page.get_by_role("heading", name="User API Tokens")
             return await heading.first.is_visible(timeout=2_000)

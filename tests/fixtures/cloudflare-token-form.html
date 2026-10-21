@@ -1,0 +1,75 @@
+<!doctype html>
+<title>Local Cloudflare token provider</title>
+<h1>User API Tokens</h1>
+<button id="entry">Create Token</button>
+<main></main>
+<script>
+const main = document.querySelector('main');
+const rows = [];
+let tokenName = '';
+function options(control, values, select) {
+  document.querySelector('[role=listbox]')?.remove();
+  const list = document.createElement('div');
+  list.role = 'listbox';
+  values.forEach(value => {
+    const option = document.createElement('button');
+    option.role = 'option';
+    option.textContent = value;
+    option.onclick = () => { select(value); list.remove(); };
+    list.append(option);
+  });
+  control.after(list);
+}
+function addRow() {
+  const row = {resource: 'Account', permission: '', level: ''};
+  rows.push(row);
+  const group = document.createElement('div');
+  group.innerHTML = `<button role="combobox" aria-label="Resources">Account</button>
+    <input role="combobox" aria-label="Permissions" placeholder="Select...">
+    <button role="combobox" aria-label="Permissions levels" disabled>Select...</button>`;
+  const [resource, permission, level] = group.children;
+  resource.onclick = () => options(resource, ['Account', 'Zone', 'User'], value => {
+    row.resource = value; resource.textContent = value;
+  });
+  permission.oninput = () => options(permission, ['Cloudflare Pages', 'Account Settings', 'Zone', 'DNS', 'User Details'], value => {
+    row.permission = value; permission.value = value; level.disabled = false;
+  });
+  level.onclick = () => options(level, ['Read', 'Edit'], value => {
+    row.level = value; level.textContent = value;
+  });
+  document.querySelector('#rows').append(group);
+}
+function form() {
+  main.innerHTML = `<h1>Create Custom Token</h1>
+    <label>Token name <input name="name"></label><div id="rows"></div>
+    <button id="add">Add more</button><h2>Account Resources</h2>
+    <button>Add more</button><button id="summary">Continue to summary</button>`;
+  document.querySelector('#add').onclick = addRow;
+  document.querySelector('#summary').onclick = () => {
+    tokenName = document.querySelector('[name=name]').value;
+    if (!tokenName || rows.some(row => !row.permission || !row.level)) return;
+    main.innerHTML = '<h1>Summary</h1><button id="create">Create Token</button>';
+    document.querySelector('#create').onclick = async () => {
+      const response = await fetch('/tokens', {method: 'POST', body: JSON.stringify({name: tokenName, permissions: rows})});
+      if (!response.ok) return;
+      const token = await response.text();
+      setTimeout(() => {
+        main.innerHTML = '<h1>API token was successfully created</h1>';
+        const output = document.createElement(location.search.includes('success=curl') ? 'pre' : 'div');
+        if (output.tagName === 'PRE') output.textContent = 'curl -H "Authorization: Bearer ' + token + '"';
+        else { output.className = 'select-all'; output.textContent = token; }
+        main.append(output);
+      }, 100);
+    };
+  };
+  addRow();
+}
+document.querySelector('#entry').onclick = event => {
+  event.target.remove();
+  if (location.search.includes('direct')) form();
+  else {
+    main.innerHTML = '<h1>Create API Token</h1><button id="custom">Get started</button>';
+    document.querySelector('#custom').onclick = form;
+  }
+};
+</script>

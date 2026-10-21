@@ -136,6 +136,13 @@ link, point the domain at your server, and verify DNS and HTTPS.
 
 ### Landing page on Cloudflare Pages
 
+Cloudflare browser setup uses installed Google Chrome, a dedicated persistent
+profile and `playwright-stealth`. Complete sign-in and any Cloudflare checks in
+the browser; setup waits for the rendered **User API Tokens** dashboard before
+continuing. Stealth does not guarantee acceptance by Cloudflare. If browser
+setup stays blocked, choose **Paste an existing token** in the wizard and enter
+the token at the hidden prompt.
+
 Validate an idea before building the application: the pitch template creates a
 static [Astro](https://astro.build) landing page that deploys to Cloudflare Pages
 on every push to `main`. It needs a GitHub account, a free Cloudflare account and
