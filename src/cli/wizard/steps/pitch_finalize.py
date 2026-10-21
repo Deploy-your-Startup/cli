@@ -1,9 +1,12 @@
-"""Step 4 (pitch): commit, create GH repo, push CF secrets, push code."""
+"""Step 4 (pitch): commit, create GH repo, store CF secrets in production, push code."""
 
 from __future__ import annotations
 
+import json
 import subprocess
+from pathlib import Path
 
+import click
 import httpx
 
 from cli import wizard_output as ui
@@ -125,6 +128,150 @@ def custom_domain_linked(ctx: BootstrapContext) -> bool:
         return False
 
 
+PAGES_ENVIRONMENT = "production"
+CLOUDFLARE_SECRETS = ("CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID")
+
+
+def _gh(
+    args: list[str], cwd: Path | None = None, stdin: str | None = None
+) -> subprocess.CompletedProcess[str]:
+    """Run gh without echoing stdin or output; callers decide what failure means."""
+    return subprocess.run(
+        ["gh", *args],
+        cwd=cwd,
+        input=stdin,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def _is_public(full_repo: str, cwd: Path | None = None) -> bool:
+    visibility = _gh(
+        ["repo", "view", full_repo, "--json", "visibility", "--jq", ".visibility"],
+        cwd,
+    )
+    if visibility.returncode:
+        raise click.ClickException(f"Could not read the visibility of {full_repo}.")
+    return visibility.stdout.strip().upper() == "PUBLIC"
+
+
+def public_repository_lacks_environment(full_repo: str) -> bool:
+    """True when a public repository still needs the production environment."""
+    if not _is_public(full_repo):
+        return False
+    environment = _gh(["api", f"repos/{full_repo}/environments/{PAGES_ENVIRONMENT}"])
+    return environment.returncode != 0
+
+
+def _ensure_production_environment(project_dir: Path, full_repo: str) -> None:
+    """Create the environment with a deployment branch policy for main only."""
+    environment = f"repos/{full_repo}/environments/{PAGES_ENVIRONMENT}"
+    created = _gh(
+        ["api", "--method", "PUT", environment, "--input", "-"],
+        project_dir,
+        stdin=json.dumps(
+            {
+                "deployment_branch_policy": {
+                    "protected_branches": False,
+                    "custom_branch_policies": True,
+                }
+            }
+        ),
+    )
+    if created.returncode:
+        raise click.ClickException(
+            f"Could not create the {PAGES_ENVIRONMENT} environment."
+        )
+
+    policies = _gh(
+        [
+            "api",
+            f"{environment}/deployment-branch-policies",
+            "--jq",
+            '.branch_policies[] | select(.type != "tag") | .name',
+        ],
+        project_dir,
+    )
+    if policies.returncode:
+        raise click.ClickException("Could not read the deployment branch policies.")
+    if "main" not in policies.stdout.split():
+        added = _gh(
+            [
+                "api",
+                "--method",
+                "POST",
+                f"{environment}/deployment-branch-policies",
+                "-f",
+                "name=main",
+                "-f",
+                "type=branch",
+            ],
+            project_dir,
+        )
+        if added.returncode:
+            raise click.ClickException("Could not limit the environment to main.")
+
+
+def _remove_repository_secrets(project_dir: Path, full_repo: str) -> None:
+    """Drop repository copies so other branches cannot read the credentials."""
+    listed = _gh(
+        ["secret", "list", "--repo", full_repo, "--json", "name", "--jq", ".[].name"],
+        project_dir,
+    )
+    if listed.returncode:
+        raise click.ClickException("Could not list the repository secrets.")
+    for name in set(CLOUDFLARE_SECRETS) & set(listed.stdout.split()):
+        deleted = _gh(["secret", "delete", name, "--repo", full_repo], project_dir)
+        if deleted.returncode:
+            raise click.ClickException(
+                f"Could not remove the repository secret {name}."
+            )
+
+
+def save_cloudflare_secrets(
+    project_dir: Path, full_repo: str, token: str, account_id: str
+) -> bool:
+    """Store the Cloudflare secrets where the deploy workflow reads them.
+
+    Private repositories keep repository secrets, because environments there
+    need a paid GitHub plan. Public repositories get a production environment
+    that only main can deploy to, lose the repository copies and require
+    approval for fork PR workflows. Values go through stdin, never argv or
+    errors. Returns True when the secrets live in the environment.
+    """
+    public = _is_public(full_repo, project_dir)
+    if public:
+        _ensure_production_environment(project_dir, full_repo)
+    scope = ["--env", PAGES_ENVIRONMENT] if public else []
+    for name, value in zip(CLOUDFLARE_SECRETS, (token, account_id), strict=True):
+        stored = _gh(
+            ["secret", "set", name, "--repo", full_repo, *scope],
+            project_dir,
+            stdin=value,
+        )
+        if stored.returncode:
+            raise click.ClickException(f"Could not set the GitHub secret {name}.")
+    if public:
+        _remove_repository_secrets(project_dir, full_repo)
+        approval = _gh(
+            [
+                "api",
+                "--method",
+                "PUT",
+                f"repos/{full_repo}/actions/permissions/fork-pr-contributor-approval",
+                "-f",
+                "approval_policy=all_external_contributors",
+            ],
+            project_dir,
+        )
+        if approval.returncode:
+            raise click.ClickException(
+                "Could not require approval for fork PR workflows."
+            )
+    return public
+
+
 class PitchFinalizeStep(WizardStep):
     number = 4
     name = "Abschluss"
@@ -139,6 +286,7 @@ class PitchFinalizeStep(WizardStep):
             and repo_exists(ctx.full_repo)
             and pages_project_exists(ctx)
             and custom_domain_linked(ctx)
+            and not public_repository_lacks_environment(ctx.full_repo)
         ):
             ui.skip_indicator("Code pushed and custom domain connected")
             return True
@@ -190,31 +338,10 @@ class PitchFinalizeStep(WizardStep):
 
         ui.action_start("Saving Cloudflare secrets...")
         token, account_id = ctx.require_cloudflare()
-        _run_command(
-            [
-                "gh",
-                "secret",
-                "set",
-                "CLOUDFLARE_API_TOKEN",
-                "--body",
-                token,
-            ],
-            cwd=ctx.project_dir,
-            capture_output=True,
-        )
-        _run_command(
-            [
-                "gh",
-                "secret",
-                "set",
-                "CLOUDFLARE_ACCOUNT_ID",
-                "--body",
-                account_id,
-            ],
-            cwd=ctx.project_dir,
-            capture_output=True,
-        )
-        ui.action_done("Secrets saved")
+        if save_cloudflare_secrets(ctx.project_dir, ctx.full_repo, token, account_id):
+            ui.action_done(f"Secrets saved in the {PAGES_ENVIRONMENT} environment")
+        else:
+            ui.action_done("Secrets saved as repository secrets")
 
         ui.action_start("Checking Cloudflare Pages project...")
         ensure_pages_project(ctx)
