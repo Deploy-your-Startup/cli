@@ -157,12 +157,18 @@ account permissions: **Cloudflare Pages: Edit**, **Account Settings: Read** and
 
 Bootstrap renders the
 [pitch template](https://github.com/Deploy-your-Startup/pitch-template), creates
-the GitHub repository, stores the Cloudflare token and account ID as secrets of
-a `production` environment that only `main` can deploy to, pushes the code and connects the domain and its `www` subdomain to the
-Pages project. For a public repository it also requires approval before
-workflows from fork pull requests run. Nameserver changes can take a while to propagate; verify the site
+the private GitHub repository, stores the Cloudflare token and account ID as
+repository secrets, pushes the code and connects the domain and its `www` subdomain to the
+Pages project. Nameserver changes can take a while to propagate; verify the site
 over HTTPS once the Actions run has finished. Edit `frontend/src/pages/index.astro`
 and run `./make.sh run` to work on the page locally.
+
+Before making the repository public, switch its visibility and run the same
+`startup bootstrap` command again. It moves the Cloudflare secrets into a
+`production` environment that only `main` can deploy to, removes the repository
+copies and requires approval before workflows from fork pull requests run. The
+deploy workflow uses that environment in public repositories; GitHub's free
+plan offers environments for public repositories only.
 ## Use the CLI from a coding agent
 
 The CLI ships an agent skill that teaches Claude Code, Codex and OpenCode how
