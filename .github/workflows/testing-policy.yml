@@ -11,6 +11,6 @@ jobs:
   instructions:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Follow every relative link in the agent instructions
         run: python3 tests/test_agent_links_integration.py
