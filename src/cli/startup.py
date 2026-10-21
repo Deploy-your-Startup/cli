@@ -12,6 +12,7 @@ import click
 from cli.auth0_commands import auth0
 from cli.cluster_commands import cluster
 from cli.factory_commands import factory
+from cli.lint_contract import lint_contract
 from cli.preflight import doctor
 from cli.skill_commands import skills
 from cli.template_commands import (
@@ -58,6 +59,7 @@ cli.add_command(template)
 cli.add_command(auth0)
 cli.add_command(cluster)
 cli.add_command(doctor)
+cli.add_command(lint_contract)
 cli.add_command(skills)
 cli.add_command(verify)
 

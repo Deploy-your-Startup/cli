@@ -302,6 +302,14 @@ Auth0 setup accepts the shared `oauth2_proxy_enabled` setting while preserving
 
 Kubernetes access uses an on-demand SSH tunnel by default. Keep the CLI installed and use an unlocked SSH agent or a persistent identity file; never persist a decrypted deployment key for reconnecting. After verifying all attached startup contexts, the cluster owner can set `firewall_api_source_ips: []`, preview `startup ansible firewall --dry-run`, then apply with `--execute`. Check SSH, Kubernetes and public HTTPS after the change. `startup ansible kubeconfig --direct` explicitly opts out of tunnels.
 
+## Service lint contract
+
+Services expose `./make.sh format` (writes fixes) and `./make.sh lint` (checks
+only); CI calls only `lint`. After changing a `make.sh`, `pyproject.toml`,
+`mise.toml` or a service workflow, run `startup lint-contract --project-dir
+<project>` and fix what it reports rather than weakening the check. Then run
+`./make.sh lint` itself; the contract check does not run the tools.
+
 ## Public legal information and analytics
 
 Compatible templates ship public `site-policy.json` configuration and legal pages.
