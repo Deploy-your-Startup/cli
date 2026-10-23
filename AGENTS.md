@@ -37,8 +37,16 @@ mise run test-vault
 
 ## Repository workflow
 
-- Public command entrypoints live in `src/cli/startup.py`; implementations in
-  the corresponding modules. Read the command and its tests before changing it.
+- `src/cli/startup.py` registers the command groups; each group's Click
+  definitions live in `src/cli/commands/` or its `*_commands.py` module, and
+  implementations in the modules they call. Read the command and its tests
+  before changing it.
+- Keep files and functions small: one topic per module, Click callbacks only
+  parse options and delegate, and a function does one step. Ruff enforces
+  complexity, branch and statement limits; the per-file ignores in
+  `pyproject.toml` only list older code. Split such a function when you change
+  it and remove its entry; never add one. Prefer a new module over growing a
+  file past a few hundred lines.
 - Use global uv, the committed `.python-version` and `mise -C <checkout> run
   <task>`. Pinned tools run through uv. Do not add git hooks.
 - User commands stay independent of this checkout; installation provides its
