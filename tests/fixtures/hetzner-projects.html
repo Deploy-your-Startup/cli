@@ -1,0 +1,79 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Local Hetzner projects list</title>
+<!-- Markup observed on console.hetzner.com/projects (de-DE) on 2026-10-23. -->
+<style>
+  .hc-overlay__mask { position: fixed; inset: 0; z-index: 1500; background: #0008; }
+  .hc-modal__container { margin: 6rem auto; width: 36rem; background: #fff; padding: 2rem; }
+  .project-card { display: block; width: 24rem; height: 6rem; }
+  .hc-button--dashed { width: 24rem; height: 9rem; border: 2px dashed #ccc; }
+</style>
+<hc-app><hc-projects-list><div class="projects"></div></hc-projects-list></hc-app>
+<hc-modal-container></hc-modal-container>
+<hc-dialog></hc-dialog>
+<script>
+// Like the Angular console, the static shell paints nothing until the app boots.
+async function render() {
+  const state = await (await fetch('/api/state')).json();
+  const list = document.querySelector('.projects');
+  list.innerHTML = state.projects.map(p => `
+    <hc-project-card><a data-test="project" class="project-card" href="/projects/${p.id}">
+      <div class="project-titlebar"><span class="project-name project-name--tiled"
+        data-projectid="${p.id}" data-projectname="${p.name}">${p.name}</span></div>
+      <hc-project-menu><a data-test="dropdown-trigger" class="dropdown__trigger"></a></hc-project-menu>
+    </a></hc-project-card>`).join('') + `
+    <hc-button classes="hc-button--dashed" data-test="create-project-btn">
+      <button class="hc-button hc-button--dashed" id="Neues Projekt-1002">
+        <span class="hc-button__content"><hc-icon></hc-icon>
+        <span class="hc-button__text"> Neues Projekt </span></span>
+      </button>
+    </hc-button>`;
+  list.querySelector('[data-test=create-project-btn] button').onclick = openDialog;
+  if (state.announcement) showAnnouncement();
+}
+
+function showAnnouncement() {
+  const container = document.querySelector('hc-modal-container');
+  container.innerHTML = `
+    <div class="hc-overlay__mask scroller-target hc-overlay__mask--dimmed">
+      <div class="hc-modal__container hc-feature-modal hc-changelog-modal modal-size--big">
+        <div class="hc-modal__main"><div class="hc-modal__header"><h2>Neuigkeiten</h2>
+          <a role="button" class="hc-modal__close"><hc-icon name="clear">×</hc-icon></a>
+        </div><div class="hc-modal__content"><p>Start der Beta-Phase.</p></div></div>
+      </div>
+    </div>`;
+  container.querySelector('.hc-modal__close').onclick = () => { container.innerHTML = ''; };
+}
+
+function openDialog() {
+  const host = document.querySelector('hc-dialog');
+  host.innerHTML = `
+    <dialog class="dialog__wrapper"><div class="dialog__content dialog-size--medium">
+      <hc-create-project-dialog class="block"><hc-dialog-body><form>
+        <hc-textfield><div class="hc-field__input-wrap"><span class="hc-textfield__infix">
+          <input data-test="input" class="hc-field__input" placeholder="" name="name" id="name" type="text">
+        </span></div></hc-textfield>
+      </form></hc-dialog-body>
+      <button class="hc-button hc-button--disabled" aria-disabled="true" disabled id="Projekt hinzufügen-9298">
+        <span class="hc-button__content"><span class="hc-button__text"> Projekt hinzufügen </span></span>
+      </button></hc-create-project-dialog>
+    </div></dialog>`;
+  const dialog = host.querySelector('dialog');
+  const input = host.querySelector('input');
+  const submit = host.querySelector('button');
+  input.oninput = () => {
+    submit.disabled = !input.value;
+    submit.setAttribute('aria-disabled', String(!input.value));
+    submit.classList.toggle('hc-button--disabled', !input.value);
+  };
+  submit.onclick = async () => {
+    await fetch('/api/projects', {method: 'POST', body: JSON.stringify({name: input.value})});
+    dialog.close();
+    host.innerHTML = '';
+    render();
+  };
+  dialog.showModal();
+}
+
+setTimeout(render, 300);
+</script>

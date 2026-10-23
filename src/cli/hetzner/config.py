@@ -78,6 +78,7 @@ ORDER_WAIT_TIMEOUT = int(os.environ.get("HETZNER_ORDER_WAIT_TIMEOUT_MS", "900000
 # Collected here so Hetzner UI changes only require a single-file update.
 
 SELECTORS_NEW_PROJECT_BUTTON = (
+    '[data-test="create-project-btn"] button, '
     'button:has-text("New project"), '
     'button:has-text("Neues Projekt"), '
     'a:has-text("New project"), '
@@ -91,6 +92,11 @@ SELECTORS_ADD_BUTTON_FALLBACK = (
     'button[aria-label*="new" i], '
     'button[aria-label*="create" i]'
 )
+
+# After a fresh login or a release the console opens an announcement such as the
+# "Neuigkeiten" changelog over the page. Its overlay swallows every click until
+# the announcement is closed.
+SELECTORS_ANNOUNCEMENT_CLOSE = ".hc-feature-modal .hc-modal__close"
 
 # The console is an Angular app behind a static shell: `domcontentloaded` fires
 # while the body is still empty. Anything that reads or clicks the projects list
