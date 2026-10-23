@@ -11,13 +11,16 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from urllib.parse import urlsplit
 
 import click
 import yaml
 
-from . import tailnet
+from . import kubeconfig_files, playbook_inputs, tailnet
 from .ansible_bin import ansible_bin
+from .kubeconfig_files import (
+    configure_context as _configure_kubeconfig_context,  # used by tests
+)
+from .playbook_inputs import BYOS_INVENTORY
 from .vault_backends import (
     PasswordNotFound,
     get_backend,
@@ -139,6 +142,47 @@ def _ansible_env(
     return env
 
 
+# `/bin/cat` echoes the password piped to stdin (`input_text`), so the vault
+# password reaches Ansible without ever appearing in a command line.
+VAULT_PASSWORD_FROM_STDIN = ["--vault-password-file", "/bin/cat"]
+
+
+def _uv_run(working_dir: Path, *args: str) -> list[str]:
+    """A command that runs inside the project's uv environment, where Ansible lives."""
+    return [_find_uv(), "run", "--project", str(working_dir), *args]
+
+
+def _playbook_command(working_dir: Path, playbook: str, *args: str) -> list[str]:
+    return _uv_run(working_dir, ansible_bin("ansible-playbook"), playbook, *args)
+
+
+def _playbook_options(
+    *,
+    tags: list[str] | None = None,
+    skip_tags: list[str] | None = None,
+    limit: list[str] | None = None,
+    extra_vars: str | None = None,
+) -> list[str]:
+    options: list[str] = []
+    if tags:
+        options += ["--tags", ",".join(tags)]
+    if skip_tags:
+        options += ["--skip-tags", ",".join(skip_tags)]
+    if limit:
+        options += ["-l", ",".join(limit)]
+    if extra_vars:
+        options += ["--extra-vars", extra_vars]
+    return options
+
+
+def _git(
+    repo_dir: Path, *args: str, cwd: Path, capture_output: bool = False
+) -> subprocess.CompletedProcess[str]:
+    return _run_command(
+        ["git", "-C", str(repo_dir), *args], cwd=cwd, capture_output=capture_output
+    )
+
+
 def _extract_github_owner(remote_url: str) -> str | None:
     ssh_match = re.match(
         r"git@github\.com:(?P<owner>[^/]+)/[^/]+(?:\.git)?$", remote_url
@@ -194,65 +238,44 @@ def _infer_roles_owner(working_dir: Path) -> str | None:
     return _extract_github_owner(remote_url)
 
 
+def _github_clone_urls(
+    repository: str, github_token: str | None, prefer_https: bool
+) -> list[str]:
+    """Clone URLs for ``owner/name``: token first, then SSH and HTTPS.
+
+    CI has no SSH key but may have HTTPS access, so there HTTPS goes first.
+    """
+    https = f"https://github.com/{repository}.git"
+    ssh = f"git@github.com:{repository}.git"
+    with_token = (
+        [f"https://x-access-token:{github_token}@github.com/{repository}.git"]
+        if github_token
+        else []
+    )
+    return with_token + ([https, ssh] if prefer_https else [ssh, https])
+
+
 def _candidate_repo_urls(working_dir: Path, repo_url: str | None = None) -> list[str]:
-    candidates: list[str] = []
+    """Sources for the shared roles, most specific first, without duplicates.
+
+    An explicit URL wins, then STARTUP_ANSIBLE_REPO_URL, then the owner's copy
+    of the roles, and finally the public deploy-template.
+    """
     prefer_https = bool(os.getenv("GITHUB_ACTIONS") or os.getenv("CI"))
-
-    if repo_url:
-        candidates.append(repo_url)
-
-    env_repo = os.getenv("STARTUP_ANSIBLE_REPO_URL")
-    if env_repo:
-        candidates.append(env_repo)
+    github_token = os.getenv("GITHUB_TOKEN")
+    candidates = [
+        url for url in (repo_url, os.getenv("STARTUP_ANSIBLE_REPO_URL")) if url
+    ]
 
     inferred_owner = _infer_roles_owner(working_dir)
-    github_token = os.getenv("GITHUB_TOKEN")
-    if inferred_owner and github_token:
-        candidates.append(
-            f"https://x-access-token:{github_token}@github.com/{inferred_owner}/{DEFAULT_SHARED_REPO_NAME}.git"
-        )
-
     if inferred_owner:
-        if prefer_https:
-            candidates.append(
-                f"https://github.com/{inferred_owner}/{DEFAULT_SHARED_REPO_NAME}.git"
-            )
-            candidates.append(
-                f"git@github.com:{inferred_owner}/{DEFAULT_SHARED_REPO_NAME}.git"
-            )
-        else:
-            candidates.append(
-                f"git@github.com:{inferred_owner}/{DEFAULT_SHARED_REPO_NAME}.git"
-            )
-            candidates.append(
-                f"https://github.com/{inferred_owner}/{DEFAULT_SHARED_REPO_NAME}.git"
-            )
-
-    fallback_owner = "Deploy-your-Startup"
-    if github_token:
-        candidates.append(
-            f"https://x-access-token:{github_token}@github.com/{fallback_owner}/deploy-template.git"
+        candidates += _github_clone_urls(
+            f"{inferred_owner}/{DEFAULT_SHARED_REPO_NAME}", github_token, prefer_https
         )
-    if prefer_https:
-        candidates.extend(
-            [
-                f"https://github.com/{fallback_owner}/deploy-template.git",
-                f"git@github.com:{fallback_owner}/deploy-template.git",
-            ]
-        )
-    else:
-        candidates.extend(
-            [
-                f"git@github.com:{fallback_owner}/deploy-template.git",
-                f"https://github.com/{fallback_owner}/deploy-template.git",
-            ]
-        )
-
-    unique_candidates: list[str] = []
-    for candidate in candidates:
-        if candidate not in unique_candidates:
-            unique_candidates.append(candidate)
-    return unique_candidates
+    candidates += _github_clone_urls(
+        "Deploy-your-Startup/deploy-template", github_token, prefer_https
+    )
+    return list(dict.fromkeys(candidates))
 
 
 def _copy_local_repo(source_dir: Path, target_dir: Path) -> Path:
@@ -278,85 +301,37 @@ def _copy_local_repo(source_dir: Path, target_dir: Path) -> Path:
 def _configure_sparse_checkout(target_dir: Path, cwd: Path) -> None:
     sparse_entries = ["roles/*", *[f"/{path}" for path in ROOT_SHARED_FILES]]
 
-    _run_command(
-        ["git", "-C", str(target_dir), "config", "core.sparseCheckout", "true"],
-        cwd=cwd,
-    )
-    _run_command(
-        ["git", "-C", str(target_dir), "sparse-checkout", "init", "--no-cone"],
-        cwd=cwd,
-    )
-    _run_command(
-        [
-            "git",
-            "-C",
-            str(target_dir),
-            "sparse-checkout",
-            "set",
-            *sparse_entries,
-        ],
-        cwd=cwd,
-    )
+    _git(target_dir, "config", "core.sparseCheckout", "true", cwd=cwd)
+    _git(target_dir, "sparse-checkout", "init", "--no-cone", cwd=cwd)
+    _git(target_dir, "sparse-checkout", "set", *sparse_entries, cwd=cwd)
     # Only apply sparse checkout to working tree if HEAD exists (skip on fresh init)
     try:
-        _run_command(
-            ["git", "-C", str(target_dir), "rev-parse", "--verify", "HEAD"],
-            cwd=cwd,
-            capture_output=True,
-        )
+        _git(target_dir, "rev-parse", "--verify", "HEAD", cwd=cwd, capture_output=True)
     except click.ClickException:
         return
-    _run_command(
-        ["git", "-C", str(target_dir), "read-tree", "-mu", "HEAD"],
-        cwd=cwd,
-    )
+    _git(target_dir, "read-tree", "-mu", "HEAD", cwd=cwd)
     existing_root_files = [
         path
         for path in ROOT_SHARED_FILES
-        if (
-            subprocess.run(
-                [
-                    "git",
-                    "-C",
-                    str(target_dir),
-                    "cat-file",
-                    "-e",
-                    f"HEAD:{path}",
-                ],
-                cwd=str(cwd),
-                capture_output=True,
-                text=True,
-                check=False,
-            ).returncode
-            == 0
-        )
+        if subprocess.run(
+            ["git", "-C", str(target_dir), "cat-file", "-e", f"HEAD:{path}"],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            check=False,
+        ).returncode
+        == 0
     ]
     if existing_root_files:
-        _run_command(
-            [
-                "git",
-                "-C",
-                str(target_dir),
-                "checkout",
-                "--force",
-                "HEAD",
-                "--",
-                *existing_root_files,
-            ],
+        _git(
+            target_dir,
+            "checkout",
+            "--force",
+            "HEAD",
+            "--",
+            *existing_root_files,
             cwd=cwd,
         )
-
-
-def _normalize_inventory_value(value: object) -> str | None:
-    if value is None:
-        return None
-    if isinstance(value, str):
-        return value
-    if isinstance(value, dict):
-        unsafe_value = value.get("__ansible_unsafe")
-        if isinstance(unsafe_value, str):
-            return unsafe_value
-    return str(value)
 
 
 def _local_changes(target_dir: Path, working_dir: Path) -> str:
@@ -366,10 +341,8 @@ def _local_changes(target_dir: Path, working_dir: Path) -> str:
     Ansible is about to run are not the roles the pinned commit contains.
     """
     try:
-        return _run_command(
-            ["git", "-C", str(target_dir), "status", "--porcelain"],
-            cwd=working_dir,
-            capture_output=True,
+        return _git(
+            target_dir, "status", "--porcelain", cwd=working_dir, capture_output=True
         ).stdout.strip()
     except click.ClickException:
         return ""
@@ -383,13 +356,14 @@ def _is_up_to_date(target_dir: Path, working_dir: Path, version: str) -> bool:
     if _local_changes(target_dir, working_dir):
         return False
     try:
-        local_head = _run_command(
-            ["git", "-C", str(target_dir), "rev-parse", "HEAD"],
-            cwd=working_dir,
-            capture_output=True,
+        local_head = _git(
+            target_dir, "rev-parse", "HEAD", cwd=working_dir, capture_output=True
         ).stdout.strip()
-        remote_ref = _run_command(
-            ["git", "-C", str(target_dir), "ls-remote", "origin", version],
+        remote_ref = _git(
+            target_dir,
+            "ls-remote",
+            "origin",
+            version,
             cwd=working_dir,
             capture_output=True,
         ).stdout.strip()
@@ -401,30 +375,9 @@ def _is_up_to_date(target_dir: Path, working_dir: Path, version: str) -> bool:
     return False
 
 
-def clone_or_update_shared_roles(
-    working_directory: str = ".",
-    shared_dir: str = DEFAULT_SHARED_DIR,
-    version: str = DEFAULT_VERSION,
-    repo_url: str | None = None,
-    refresh: bool = True,
-) -> Path:
-    working_dir = _resolve_working_dir(working_directory)
+def _requested_roles_version(working_dir: Path, version: str) -> str:
+    """Apply the project's pins: shared-roles.ref, else Copier's deploy_ref."""
     pin_file = working_dir / "shared-roles.ref"
-    if not pin_file.exists() and version == DEFAULT_VERSION:
-        answers = working_dir.parent / ".copier-answers.yml"
-        if answers.exists():
-            values = yaml.safe_load(answers.read_text())
-            deployment_ref = (
-                values.get("deploy_ref") if isinstance(values, dict) else None
-            )
-            if deployment_ref:
-                if (
-                    not isinstance(deployment_ref, str)
-                    or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]*", deployment_ref)
-                    or ".." in deployment_ref
-                ):
-                    raise click.ClickException("Invalid deploy_ref in Copier answers.")
-                version = deployment_ref
     if pin_file.exists():
         pinned = pin_file.read_text().strip()
         if not re.fullmatch(r"[0-9a-f]{40}", pinned):
@@ -435,100 +388,151 @@ def clone_or_update_shared_roles(
             raise click.ClickException(
                 "Requested roles differ from shared-roles.ref. Update the reviewed pin first."
             )
-        version = pinned
+        return pinned
+    if version != DEFAULT_VERSION:
+        return version
+    answers = working_dir.parent / ".copier-answers.yml"
+    if not answers.exists():
+        return version
+    values = yaml.safe_load(answers.read_text())
+    deployment_ref = values.get("deploy_ref") if isinstance(values, dict) else None
+    if not deployment_ref:
+        return version
+    if (
+        not isinstance(deployment_ref, str)
+        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]*", deployment_ref)
+        or ".." in deployment_ref
+    ):
+        raise click.ClickException("Invalid deploy_ref in Copier answers.")
+    return deployment_ref
+
+
+def _warn_about_local_changes(
+    target_dir: Path, working_dir: Path, version: str
+) -> None:
+    # The fetch/checkout that follows keeps uncommitted edits, so say plainly
+    # that this run will not use the roles the pinned commit contains.
+    # `.shared-roles` is a managed checkout — edits there are almost always a
+    # leftover experiment.
+    dirty = _local_changes(target_dir, working_dir)
+    if not dirty:
+        return
+    click.echo(
+        f"WARNING: '{target_dir}' has uncommitted changes; Ansible "
+        f"will run against them, not against {version}:"
+    )
+    for line in dirty.splitlines():
+        click.echo(f"  {line}")
+    click.echo(f"  Discard them with: git -C {target_dir} checkout -- .")
+
+
+def _update_existing_checkout(
+    target_dir: Path, working_dir: Path, version: str, candidates: list[str]
+) -> Path:
+    """Bring an existing git checkout to ``version``.
+
+    Raises FileNotFoundError after deleting a checkout whose remote is no
+    longer a configured source, so the caller clones it afresh.
+    """
+    current_remote = _git(
+        target_dir, "remote", "get-url", "origin", cwd=working_dir, capture_output=True
+    ).stdout.strip()
+    configured = {_normalize_repo_url(candidate) for candidate in candidates}
+    if _normalize_repo_url(current_remote) not in configured:
+        click.echo(
+            f"Replacing shared roles checkout from '{current_remote}' with current configured source ..."
+        )
+        shutil.rmtree(target_dir)
+        raise FileNotFoundError("Recreate shared roles checkout with new source")
+
+    # Re-apply the sparse cone before deciding anything. The set of files
+    # SPARSE_PATHS asks for grows with the CLI, and a checkout created by an
+    # older version keeps its narrower cone in .git/info/sparse-checkout
+    # forever: HEAD matches the remote, so the fast path below returns, and the
+    # never-checked-out file stays missing. `git status` does not report it —
+    # the file is in the commit, just not in the worktree — so this is invisible
+    # until a playbook is not found. Materializing the cone first costs three
+    # cheap git calls and makes the fast path safe.
+    _configure_sparse_checkout(target_dir, working_dir)
+
+    if _is_up_to_date(target_dir, working_dir, version):
+        click.echo("Shared roles are up to date.")
+        return target_dir
+
+    _warn_about_local_changes(target_dir, working_dir, version)
+    _configure_sparse_checkout(target_dir, working_dir)
+    _git(target_dir, "fetch", "--tags", "origin", version, cwd=working_dir)
+    _git(target_dir, "checkout", version, cwd=working_dir)
+    _configure_sparse_checkout(target_dir, working_dir)
+    if re.fullmatch(r"[A-Za-z0-9._/-]+", version):
+        with contextlib.suppress(subprocess.CalledProcessError):
+            _git(target_dir, "pull", "--ff-only", "origin", version, cwd=working_dir)
+    return target_dir
+
+
+def _fresh_checkout(
+    candidate: str, target_dir: Path, working_dir: Path, version: str
+) -> Path:
+    """Copy a local source directory, or shallow-clone ``version`` of a remote."""
+    local_candidate = Path(candidate).expanduser()
+    if local_candidate.exists() and local_candidate.is_dir():
+        click.echo(
+            f"Copying shared Ansible roles from local directory {local_candidate} ..."
+        )
+        return _copy_local_repo(local_candidate.resolve(), target_dir)
+
+    if target_dir.exists():
+        shutil.rmtree(target_dir)
+    click.echo(f"Cloning shared Ansible roles from {candidate} ...")
+    _run_command(["git", "init", str(target_dir)], cwd=working_dir)
+    _git(target_dir, "remote", "add", "origin", candidate, cwd=working_dir)
+    _configure_sparse_checkout(target_dir, working_dir)
+    _git(target_dir, "fetch", "--depth", "1", "origin", version, cwd=working_dir)
+    _git(target_dir, "checkout", "FETCH_HEAD", cwd=working_dir)
+    return target_dir
+
+
+_CHECKOUT_ERRORS = (
+    click.ClickException,
+    subprocess.CalledProcessError,
+    FileNotFoundError,
+)
+
+
+def clone_or_update_shared_roles(
+    working_directory: str = ".",
+    shared_dir: str = DEFAULT_SHARED_DIR,
+    version: str = DEFAULT_VERSION,
+    repo_url: str | None = None,
+    refresh: bool = True,
+) -> Path:
+    """Materialize the shared roles in ``shared_dir`` and return that directory.
+
+    An existing git checkout is updated in place; anything that fails falls
+    back to a fresh copy or clone from each candidate source in turn.
+    """
+    working_dir = _resolve_working_dir(working_directory)
+    version = _requested_roles_version(working_dir, version)
     target_dir = working_dir / shared_dir
     candidates = _candidate_repo_urls(working_dir, repo_url)
+    is_git_checkout = (target_dir / ".git").exists()
     last_error: Exception | None = None
 
     if (
         target_dir.exists()
-        and not (target_dir / ".git").exists()
+        and not is_git_checkout
         and (target_dir / "roles").exists()
         and not refresh
     ):
         click.echo(f"Using existing shared roles directory '{target_dir}' ...")
         return target_dir
 
-    if target_dir.exists() and (target_dir / ".git").exists():
+    if target_dir.exists() and is_git_checkout:
         try:
-            current_remote = _run_command(
-                ["git", "-C", str(target_dir), "remote", "get-url", "origin"],
-                cwd=working_dir,
-                capture_output=True,
-            ).stdout.strip()
-            normalized_current_remote = _normalize_repo_url(current_remote)
-            normalized_candidates = {
-                _normalize_repo_url(candidate) for candidate in candidates
-            }
-
-            if normalized_current_remote not in normalized_candidates:
-                click.echo(
-                    f"Replacing shared roles checkout from '{current_remote}' with current configured source ..."
-                )
-                shutil.rmtree(target_dir)
-                raise FileNotFoundError(
-                    "Recreate shared roles checkout with new source"
-                )
-
-            # Re-apply the sparse cone before deciding anything. The set of
-            # files SPARSE_PATHS asks for grows with the CLI, and a checkout
-            # created by an older version keeps its narrower cone in
-            # .git/info/sparse-checkout forever: HEAD matches the remote, so the
-            # fast path below returns, and the never-checked-out file stays
-            # missing. `git status` does not report it — the file is in the
-            # commit, just not in the worktree — so this is invisible until a
-            # playbook is not found. Materializing the cone first costs three
-            # cheap git calls and makes the fast path safe.
-            _configure_sparse_checkout(target_dir, working_dir)
-
-            # Quick check: skip fetch/pull if already up to date
-            if _is_up_to_date(target_dir, working_dir, version):
-                click.echo("Shared roles are up to date.")
-                return target_dir
-
-            # The fetch/checkout below keeps uncommitted edits, so say plainly
-            # that this run will not use the roles the pinned commit contains.
-            # `.shared-roles` is a managed checkout — edits there are almost
-            # always a leftover experiment.
-            dirty = _local_changes(target_dir, working_dir)
-            if dirty:
-                click.echo(
-                    f"WARNING: '{target_dir}' has uncommitted changes; Ansible "
-                    f"will run against them, not against {version}:"
-                )
-                for line in dirty.splitlines():
-                    click.echo(f"  {line}")
-                click.echo(f"  Discard them with: git -C {target_dir} checkout -- .")
-
-            _configure_sparse_checkout(target_dir, working_dir)
-            _run_command(
-                ["git", "-C", str(target_dir), "fetch", "--tags", "origin", version],
-                cwd=working_dir,
+            return _update_existing_checkout(
+                target_dir, working_dir, version, candidates
             )
-            _run_command(
-                ["git", "-C", str(target_dir), "checkout", version], cwd=working_dir
-            )
-            _configure_sparse_checkout(target_dir, working_dir)
-            if re.fullmatch(r"[A-Za-z0-9._/-]+", version):
-                with contextlib.suppress(subprocess.CalledProcessError):
-                    _run_command(
-                        [
-                            "git",
-                            "-C",
-                            str(target_dir),
-                            "pull",
-                            "--ff-only",
-                            "origin",
-                            version,
-                        ],
-                        cwd=working_dir,
-                    )
-            return target_dir
-        except (
-            click.ClickException,
-            subprocess.CalledProcessError,
-            FileNotFoundError,
-        ) as exc:
+        except _CHECKOUT_ERRORS as exc:
             last_error = exc
 
     if target_dir.exists() and not (target_dir / ".git").exists():
@@ -539,45 +543,8 @@ def clone_or_update_shared_roles(
 
     for candidate in candidates:
         try:
-            local_candidate = Path(candidate).expanduser()
-            if local_candidate.exists() and local_candidate.is_dir():
-                click.echo(
-                    f"Copying shared Ansible roles from local directory {local_candidate} ..."
-                )
-                return _copy_local_repo(local_candidate.resolve(), target_dir)
-
-            if target_dir.exists():
-                shutil.rmtree(target_dir)
-            click.echo(f"Cloning shared Ansible roles from {candidate} ...")
-            _run_command(["git", "init", str(target_dir)], cwd=working_dir)
-            _run_command(
-                ["git", "-C", str(target_dir), "remote", "add", "origin", candidate],
-                cwd=working_dir,
-            )
-            _configure_sparse_checkout(target_dir, working_dir)
-            _run_command(
-                [
-                    "git",
-                    "-C",
-                    str(target_dir),
-                    "fetch",
-                    "--depth",
-                    "1",
-                    "origin",
-                    version,
-                ],
-                cwd=working_dir,
-            )
-            _run_command(
-                ["git", "-C", str(target_dir), "checkout", "FETCH_HEAD"],
-                cwd=working_dir,
-            )
-            return target_dir
-        except (
-            click.ClickException,
-            subprocess.CalledProcessError,
-            FileNotFoundError,
-        ) as exc:
+            return _fresh_checkout(candidate, target_dir, working_dir, version)
+        except _CHECKOUT_ERRORS as exc:
             last_error = exc
 
     raise click.ClickException(
@@ -615,17 +582,14 @@ def install_collections(
         if requirements_file.exists():
             click.echo(f"Installing Ansible collections from {requirements_file} ...")
             _run_command(
-                [
-                    _find_uv(),
-                    "run",
-                    "--project",
-                    str(working_dir),
+                _uv_run(
+                    working_dir,
                     "ansible-galaxy",
                     "collection",
                     "install",
                     "-r",
                     str(requirements_file),
-                ],
+                ),
                 cwd=working_dir,
             )
 
@@ -745,17 +709,13 @@ def get_hcloud_token(
     working_dir = _resolve_working_dir(working_directory)
     env = _ansible_env(working_dir, shared_dir)
     result = _run_command(
-        [
-            _find_uv(),
-            "run",
-            "--project",
-            str(working_dir),
+        _uv_run(
+            working_dir,
             ansible_bin("ansible-vault"),
             "view",
             f"hcloud_token_{environment}",
-            "--vault-password-file",
-            "/bin/cat",
-        ],
+            *VAULT_PASSWORD_FROM_STDIN,
+        ),
         cwd=working_dir,
         env=env,
         input_text=vault_password,
@@ -798,50 +758,6 @@ def _resolve_k8s_namespace(working_dir: Path) -> str:
     return "default"
 
 
-def _resolve_playbook_path(
-    working_dir: Path, playbook: str, label: str, shared_dir: str = DEFAULT_SHARED_DIR
-) -> Path:
-    playbook_path = working_dir / playbook
-    if not playbook_path.exists():
-        playbook_path = working_dir / shared_dir / playbook
-    if not playbook_path.exists():
-        raise click.ClickException(f"{label} playbook not found: {playbook_path}")
-    return playbook_path
-
-
-def _latest_matching_file(search_root: Path, pattern: str) -> Path | None:
-    candidates = [path for path in search_root.rglob(pattern) if path.is_file()]
-    if not candidates:
-        return None
-    return max(candidates, key=lambda path: path.stat().st_mtime)
-
-
-def _resolve_restore_file(
-    explicit_file: str | None,
-    *,
-    search_root: Path,
-    pattern: str,
-    label: str,
-) -> Path:
-    if explicit_file:
-        resolved = Path(explicit_file).expanduser().resolve()
-        if not resolved.exists():
-            raise click.ClickException(f"{label} backup file not found: {resolved}")
-        if not resolved.is_file():
-            raise click.ClickException(f"{label} backup path is not a file: {resolved}")
-        return resolved
-
-    resolved = _latest_matching_file(search_root, pattern)
-    if resolved is None:
-        raise click.ClickException(
-            f"Could not find a {label.lower()} backup file matching '{pattern}' in {search_root}"
-        )
-    return resolved
-
-
-BYOS_INVENTORY = "inventory.byos.yml"
-
-
 def _is_byos(working_dir: Path) -> bool:
     """A project is bring-your-own-server when it ships a static byos inventory."""
     return (working_dir / BYOS_INVENTORY).exists()
@@ -856,17 +772,13 @@ def get_byos_ssh_key(
     working_dir = _resolve_working_dir(working_directory)
     env = _ansible_env(working_dir, shared_dir)
     result = _run_command(
-        [
-            _find_uv(),
-            "run",
-            "--project",
-            str(working_dir),
+        _uv_run(
+            working_dir,
             ansible_bin("ansible-vault"),
             "view",
             "ci_ssh_key",
-            "--vault-password-file",
-            "/bin/cat",
-        ],
+            *VAULT_PASSWORD_FROM_STDIN,
+        ),
         cwd=working_dir,
         env=env,
         input_text=vault_password,
@@ -918,28 +830,18 @@ def _run_byos_playbook(
     with byos_private_key_file(
         working_directory, vault_password, shared_dir
     ) as key_path:
-        command = [
-            _find_uv(),
-            "run",
-            "--project",
-            str(working_dir),
-            ansible_bin("ansible-playbook"),
+        command = _playbook_command(
+            working_dir,
             playbook,
             "-i",
             BYOS_INVENTORY,
             "--private-key",
             key_path,
-            "--vault-password-file",
-            "/bin/cat",
-        ]
-        if tags:
-            command += ["--tags", ",".join(tags)]
-        if skip_tags:
-            command += ["--skip-tags", ",".join(skip_tags)]
-        if limit:
-            command += ["-l", ",".join(limit)]
-        if extra_vars:
-            command += ["--extra-vars", extra_vars]
+            *VAULT_PASSWORD_FROM_STDIN,
+            *_playbook_options(
+                tags=tags, skip_tags=skip_tags, limit=limit, extra_vars=extra_vars
+            ),
+        )
         _run_command(command, cwd=working_dir, env=env, input_text=vault_password)
 
 
@@ -953,16 +855,7 @@ def _dynamic_inventory_hostvars(
     if not inventory_path.exists():
         return {}
     result = _run_command(
-        [
-            _find_uv(),
-            "run",
-            "--project",
-            str(working_dir),
-            "ansible-inventory",
-            "-i",
-            str(inventory_path),
-            "--list",
-        ],
+        _uv_run(working_dir, "ansible-inventory", "-i", str(inventory_path), "--list"),
         cwd=working_dir,
         env=env,
         capture_output=True,
@@ -996,6 +889,109 @@ def _ensure_tailnet(
     )
 
 
+def _refresh_shared_roles(
+    working_directory: str,
+    shared_dir: str,
+    version: str,
+    repo_url: str | None,
+    refresh: bool,
+) -> Path:
+    """The first step of every playbook command: pinned roles and collections."""
+    return setup_ansible(
+        working_directory=working_directory,
+        shared_dir=shared_dir,
+        version=version,
+        repo_url=repo_url,
+        refresh=refresh,
+    )
+
+
+def _hcloud_env(
+    working_directory: str, vault_password: str, environment: str, shared_dir: str
+) -> dict[str, str]:
+    """Ansible environment with the token the Hetzner dynamic inventory needs."""
+    hcloud_token = get_hcloud_token(
+        working_directory, vault_password, environment, shared_dir
+    )
+    env = _ansible_env(_resolve_working_dir(working_directory), shared_dir)
+    env["HCLOUD_TOKEN"] = hcloud_token
+    return env
+
+
+def _run_hcloud_playbook(
+    working_directory: str,
+    vault_password: str,
+    environment: str,
+    shared_dir: str,
+    playbook: str,
+    options: list[str],
+    *,
+    require_hosts: bool = False,
+    strict_tailnet: bool = True,
+) -> None:
+    """Run a playbook against the servers the Hetzner dynamic inventory finds."""
+    working_dir = _resolve_working_dir(working_directory)
+    env = _hcloud_env(working_directory, vault_password, environment, shared_dir)
+    hostvars = None
+    if require_hosts:
+        # Ansible skips every play on zero hosts, prints an empty PLAY RECAP
+        # and exits 0. A deploy that overtakes the infrastructure provisioning
+        # (both are triggered by the initial push) would report green while
+        # having deployed nothing at all.
+        hostvars = _dynamic_inventory_hostvars(working_dir, shared_dir, env)
+        if not hostvars:
+            raise click.ClickException(
+                "The Hetzner inventory resolved to zero hosts — there is nothing to "
+                "deploy to. Provision the servers first with "
+                "`startup ansible infrastructure`, then run the deploy again."
+            )
+    _ensure_tailnet(
+        working_dir,
+        environment,
+        shared_dir,
+        env,
+        hostvars=hostvars,
+        strict=strict_tailnet,
+    )
+    _run_command(
+        _playbook_command(working_dir, playbook, *VAULT_PASSWORD_FROM_STDIN, *options),
+        cwd=working_dir,
+        env=env,
+        input_text=vault_password,
+    )
+
+
+def _run_server_playbook(
+    working_directory: str,
+    vault_password: str,
+    environment: str,
+    shared_dir: str,
+    playbook: str,
+    *,
+    limit: str | None = None,
+    extra_vars: str | None = None,
+) -> None:
+    """Run a playbook on the project's servers, byos or Hetzner alike."""
+    if _is_byos(_resolve_working_dir(working_directory)):
+        _run_byos_playbook(
+            working_directory,
+            vault_password,
+            shared_dir,
+            playbook=playbook,
+            limit=[limit] if limit else None,
+            extra_vars=extra_vars,
+        )
+        return
+    _run_hcloud_playbook(
+        working_directory,
+        vault_password,
+        environment,
+        shared_dir,
+        playbook,
+        _playbook_options(limit=[limit] if limit else None, extra_vars=extra_vars),
+    )
+
+
 def run_validate(
     playbook: str,
     inventory: str,
@@ -1015,17 +1011,9 @@ def run_validate(
             raise click.ClickException(f"Roles directory not found: {resolved_roles}")
         env["ANSIBLE_ROLES_PATH"] = str(resolved_roles)
     _run_command(
-        [
-            _find_uv(),
-            "run",
-            "--project",
-            str(working_dir),
-            ansible_bin("ansible-playbook"),
-            playbook,
-            "--inventory",
-            inventory,
-            "--syntax-check",
-        ],
+        _playbook_command(
+            working_dir, playbook, "--inventory", inventory, "--syntax-check"
+        ),
         cwd=working_dir,
         env=env,
     )
@@ -1043,61 +1031,28 @@ def run_deploy(
     refresh: bool = True,
     extra_vars: dict[str, object] | None = None,
 ) -> None:
-    working_dir = _resolve_working_dir(working_directory)
-    setup_ansible(
-        working_directory=working_directory,
-        shared_dir=shared_dir,
-        version=version,
-        repo_url=repo_url,
-        refresh=refresh,
-    )
-    extra_vars_args = ["--extra-vars", json.dumps(extra_vars)] if extra_vars else []
-    if _is_byos(working_dir):
+    _refresh_shared_roles(working_directory, shared_dir, version, repo_url, refresh)
+    tags = [service or "all"]
+    skip_tags = ["infrastructure"]
+    encoded_vars = json.dumps(extra_vars) if extra_vars else None
+    if _is_byos(_resolve_working_dir(working_directory)):
         _run_byos_playbook(
             working_directory,
             vault_password,
             shared_dir,
-            tags=[service or "all"],
-            skip_tags=["infrastructure"],
-            extra_vars=json.dumps(extra_vars) if extra_vars else None,
+            tags=tags,
+            skip_tags=skip_tags,
+            extra_vars=encoded_vars,
         )
         return
-    hcloud_token = get_hcloud_token(
-        working_directory, vault_password, environment, shared_dir
-    )
-    env = _ansible_env(working_dir, shared_dir)
-    env["HCLOUD_TOKEN"] = hcloud_token
-    # A deploy against zero hosts is not a success. Ansible skips every play,
-    # prints an empty PLAY RECAP and exits 0, so a deploy that overtakes the
-    # infrastructure provisioning (both are triggered by the initial push)
-    # reports green while having deployed nothing at all.
-    hostvars = _dynamic_inventory_hostvars(working_dir, shared_dir, env)
-    if not hostvars:
-        raise click.ClickException(
-            "The Hetzner inventory resolved to zero hosts — there is nothing to "
-            "deploy to. Provision the servers first with "
-            "`startup ansible infrastructure`, then run the deploy again."
-        )
-    _ensure_tailnet(working_dir, environment, shared_dir, env, hostvars=hostvars)
-    _run_command(
-        [
-            _find_uv(),
-            "run",
-            "--project",
-            str(working_dir),
-            ansible_bin("ansible-playbook"),
-            "playbook.yml",
-            "--vault-password-file",
-            "/bin/cat",
-            "--tags",
-            service or "all",
-            "--skip-tags",
-            "infrastructure",
-            *extra_vars_args,
-        ],
-        cwd=working_dir,
-        env=env,
-        input_text=vault_password,
+    _run_hcloud_playbook(
+        working_directory,
+        vault_password,
+        environment,
+        shared_dir,
+        "playbook.yml",
+        _playbook_options(tags=tags, skip_tags=skip_tags, extra_vars=encoded_vars),
+        require_hosts=True,
     )
 
 
@@ -1157,17 +1112,10 @@ def run_infrastructure(
 
     require_cluster_owner(_resolve_working_dir(working_directory), "infrastructure")
     _validated_environment(environment)
-    working_dir = _resolve_working_dir(working_directory)
     # Always override group_vars: destructive authorization is per invocation.
     teardown_vars = json.dumps({"allow_worker_teardown": allow_worker_teardown})
-    setup_ansible(
-        working_directory=working_directory,
-        shared_dir=shared_dir,
-        version=version,
-        repo_url=repo_url,
-        refresh=refresh,
-    )
-    if _is_byos(working_dir):
+    _refresh_shared_roles(working_directory, shared_dir, version, repo_url, refresh)
+    if _is_byos(_resolve_working_dir(working_directory)):
         # No cloud to provision — just install k3s + cluster add-ons on the VPS.
         # The provision-infrastructure host doesn't exist in the byos inventory,
         # so those plays are skipped automatically.
@@ -1180,33 +1128,52 @@ def run_infrastructure(
             extra_vars=teardown_vars,
         )
         return
-    hcloud_token = get_hcloud_token(
-        working_directory, vault_password, environment, shared_dir
+    _run_hcloud_playbook(
+        working_directory,
+        vault_password,
+        environment,
+        shared_dir,
+        "playbook.yml",
+        _playbook_options(
+            tags=["infrastructure"],
+            limit=[environment, "provision-infrastructure"],
+            extra_vars=teardown_vars,
+        ),
+        # This run may be the one that brings the servers onto the tailnet.
+        strict_tailnet=False,
     )
-    env = _ansible_env(working_dir, shared_dir)
-    env["HCLOUD_TOKEN"] = hcloud_token
-    _ensure_tailnet(working_dir, environment, shared_dir, env, strict=False)
-    _run_command(
-        [
-            _find_uv(),
-            "run",
-            "--project",
-            str(working_dir),
-            ansible_bin("ansible-playbook"),
-            "playbook.yml",
-            "--vault-password-file",
-            "/bin/cat",
-            "--tags",
-            "infrastructure",
-            "-l",
-            f"{environment},provision-infrastructure",
-            "--extra-vars",
-            teardown_vars,
-        ],
-        cwd=working_dir,
-        env=env,
-        input_text=vault_password,
+
+
+def _print_firewalls(hcloud_token: str) -> None:
+    """Print the project's Hetzner firewalls as JSON, read-only."""
+    from hcloud import Client
+
+    client = Client(
+        token=hcloud_token,
+        api_endpoint=os.environ.get("HCLOUD_ENDPOINT", "https://api.hetzner.cloud/v1"),
     )
+    firewalls = [
+        {
+            "name": firewall.name,
+            "id": firewall.id,
+            "rules": [
+                {
+                    "direction": rule.direction,
+                    "protocol": rule.protocol,
+                    "port": rule.port,
+                    "source_ips": rule.source_ips,
+                }
+                for rule in (firewall.rules or [])
+            ],
+            "servers": [
+                resource.server.id
+                for resource in (firewall.applied_to or [])
+                if resource.server is not None
+            ],
+        }
+        for firewall in client.firewalls.get_all()
+    ]
+    click.echo(json.dumps(firewalls, indent=2))
 
 
 def run_firewall(
@@ -1239,146 +1206,98 @@ def run_firewall(
     env = _ansible_env(working_dir)
     env["HCLOUD_TOKEN"] = get_hcloud_token(working_directory, password, environment)
     if inspect:
-        from hcloud import Client
-
-        client = Client(
-            token=env["HCLOUD_TOKEN"],
-            api_endpoint=os.environ.get(
-                "HCLOUD_ENDPOINT", "https://api.hetzner.cloud/v1"
-            ),
-        )
-        firewalls = client.firewalls.get_all()
-        click.echo(
-            json.dumps(
-                [
-                    {
-                        "name": firewall.name,
-                        "id": firewall.id,
-                        "rules": [
-                            {
-                                "direction": rule.direction,
-                                "protocol": rule.protocol,
-                                "port": rule.port,
-                                "source_ips": rule.source_ips,
-                            }
-                            for rule in (firewall.rules or [])
-                        ],
-                        "servers": [
-                            resource.server.id
-                            for resource in (firewall.applied_to or [])
-                            if resource.server is not None
-                        ],
-                    }
-                    for firewall in firewalls
-                ],
-                indent=2,
-            )
-        )
+        _print_firewalls(env["HCLOUD_TOKEN"])
         return
     env["ANSIBLE_ROLES_PATH"] = str(roles / "roles")
     inventories = []
     for name in ("inventory.hcloud.yml", "inventory.ini"):
         path = working_dir / name
         inventories += ["-i", str(path if path.exists() else roles / name)]
-    play = [
-        {
-            "hosts": "provision-infrastructure",
-            "connection": "local",
-            "gather_facts": False,
-            "pre_tasks": [
-                {
-                    "name": "Read pinned network defaults without provisioning",
-                    "ansible.builtin.include_vars": {
-                        "file": str(roles / "roles/hetzner-network/defaults/main.yml"),
-                        "name": "startup_network_defaults",
-                    },
-                },
-                {
-                    "name": "Use the pinned network range when the project has no override",
-                    "ansible.builtin.set_fact": {
-                        "network_ip_range": "{{ startup_network_defaults.network_ip_range }}",
-                    },
-                    "when": "network_ip_range is not defined",
-                },
-            ],
-            "roles": ["hetzner-firewall"],
-        }
-    ]
     # The playbook must sit beside group_vars, not inside the shared checkout.
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".yml", prefix=".startup-firewall-", dir=working_dir
     ) as stream:
-        stream.write(yaml.safe_dump(play))
+        stream.write(yaml.safe_dump(playbook_inputs.firewall_play(roles)))
         stream.flush()
         _run_command(
-            [
-                _find_uv(),
-                "run",
-                "--project",
-                str(working_dir),
-                ansible_bin("ansible-playbook"),
+            _playbook_command(
+                working_dir,
                 stream.name,
                 *inventories,
-                "--vault-password-file",
-                "/bin/cat",
+                *VAULT_PASSWORD_FROM_STDIN,
                 *(["--check", "--diff"] if dry_run else []),
-            ],
+            ),
             cwd=working_dir,
             env=env,
             input_text=password,
         )
 
 
-def _extract_master_host(inventory_data: dict) -> str | None:
-    for group_name in ("k3s_masters", "masters", "control_plane"):
-        hosts = inventory_data.get(group_name, {}).get("hosts", [])
-        if hosts:
-            return hosts[0]
-
-    for group_name, group_data in inventory_data.items():
-        if group_name == "_meta":
-            continue
-        for host_name in group_data.get("hosts", []) or []:
-            if "master" in host_name:
-                return host_name
-    return None
-
-
-def _derive_context_name(remote_name: str, environment: str, env_suffix: bool) -> str:
-    # Nodes are named "<project>-<role>-<index>", e.g. my-app-master-0, so the
-    # project is what remains once that suffix is removed. The previous rule
-    # kept the first two dash-separated segments instead, which truncated every
-    # longer name ("book-reading-club" became "book-reading") and gave two
-    # projects sharing their first two segments the very same context.
-    stripped = re.sub(r"-(master|worker|agent)-\d+$", "", remote_name.lower())
-    project_name = re.sub(r"[^a-z0-9._-]+", "-", stripped)
-    context = project_name or f"k3s-{environment}"
-    if env_suffix and environment:
-        context = f"{context}-{environment}"
-    return context
+def _read_inventory(
+    working_dir: Path, inventory: str, shared_dir: str, env: dict[str, str]
+) -> dict:
+    inventory_path = working_dir / inventory
+    if not inventory_path.exists():
+        inventory_path = working_dir / shared_dir / inventory
+    result = _run_command(
+        _uv_run(working_dir, "ansible-inventory", "-i", str(inventory_path), "--list"),
+        cwd=working_dir,
+        env=env,
+        capture_output=True,
+    )
+    return json.loads(result.stdout)
 
 
-def _configure_kubeconfig_context(
-    kubeconfig: dict, context: str, namespace: str
-) -> None:
-    """Rename k3s' default identities and select the project's namespace."""
-    for item in kubeconfig.get("clusters", []):
-        if item.get("name") == "default":
-            item["name"] = context
-    for item in kubeconfig.get("users", []):
-        if item.get("name") == "default":
-            item["name"] = context
-    for item in kubeconfig.get("contexts", []):
-        if item.get("name") == "default":
-            item["name"] = context
-        context_config = item.setdefault("context", {})
-        if context_config.get("cluster") == "default":
-            context_config["cluster"] = context
-        if context_config.get("user") == "default":
-            context_config["user"] = context
-        context_config["namespace"] = namespace
-    if kubeconfig.get("current-context") == "default":
-        kubeconfig["current-context"] = context
+def _master_address(
+    inventory_data: dict, master_host: str | None, project_name: str
+) -> str:
+    """The address kubectl and scp use for the k3s master."""
+    resolved_master_host = master_host or kubeconfig_files.extract_master_host(
+        inventory_data
+    )
+    if not resolved_master_host:
+        raise click.ClickException(
+            "Could not auto-detect k3s master host from inventory. Specify --master-host."
+        )
+
+    hostvars = (
+        inventory_data.get("_meta", {})
+        .get("hostvars", {})
+        .get(resolved_master_host, {})
+    )
+    if tailnet.is_private_network_host(hostvars):
+        tailnet.ensure_tailnet_access(project_name, [resolved_master_host])
+
+    master_ip = (
+        playbook_inputs.normalize_inventory_value(hostvars.get("ansible_host"))
+        or playbook_inputs.normalize_inventory_value(hostvars.get("public_ipv4"))
+        or playbook_inputs.normalize_inventory_value(hostvars.get("public_ip"))
+    )
+    if not master_ip:
+        raise click.ClickException(
+            f"Could not resolve IP for host '{resolved_master_host}'."
+        )
+    return master_ip
+
+
+@contextlib.contextmanager
+def _ssh_identity_options(
+    byos: bool,
+    ssh_identity: str | None,
+    working_directory: str,
+    vault_password: str,
+    shared_dir: str,
+):
+    """``-i`` options for scp/ssh; byos falls back to the vault's deploy key."""
+    if ssh_identity:
+        yield ["-i", ssh_identity]
+    elif byos:
+        with byos_private_key_file(
+            working_directory, vault_password, shared_dir
+        ) as key_path:
+            yield ["-i", key_path]
+    else:
+        yield []
 
 
 def run_kubeconfig(
@@ -1401,111 +1320,71 @@ def run_kubeconfig(
     ssh_identity: str | None = None,
     ssh_port: int = 22,
 ) -> Path:
+    """Fetch the cluster's kubeconfig from the master and import it as a context."""
+    from cli.kube_access import configure_access, private_write
+
     working_dir = _resolve_working_dir(working_directory)
-    setup_ansible(
-        working_directory=working_directory,
-        shared_dir=shared_dir,
-        version=version,
-        repo_url=repo_url,
-        refresh=refresh,
-    )
+    _refresh_shared_roles(working_directory, shared_dir, version, repo_url, refresh)
     byos = _is_byos(working_dir)
     project_name = _resolve_project_name(working_dir)
     k8s_namespace = _resolve_k8s_namespace(working_dir)
-    env = _ansible_env(working_dir, shared_dir)
     if byos:
         # No Hetzner API; read the cluster's kubeconfig over SSH from the VPS.
+        env = _ansible_env(working_dir, shared_dir)
         inventory = BYOS_INVENTORY
     else:
-        hcloud_token = get_hcloud_token(
-            working_directory, vault_password, environment, shared_dir
-        )
-        env["HCLOUD_TOKEN"] = hcloud_token
+        env = _hcloud_env(working_directory, vault_password, environment, shared_dir)
 
-    inventory_path = working_dir / inventory
-    if not inventory_path.exists():
-        inventory_path = working_dir / shared_dir / inventory
-    inventory_result = _run_command(
-        [
-            _find_uv(),
-            "run",
-            "--project",
-            str(working_dir),
-            "ansible-inventory",
-            "-i",
-            str(inventory_path),
-            "--list",
-        ],
-        cwd=working_dir,
-        env=env,
-        capture_output=True,
+    master_ip = _master_address(
+        _read_inventory(working_dir, inventory, shared_dir, env),
+        master_host,
+        project_name,
     )
-    inventory_data = json.loads(inventory_result.stdout)
-    resolved_master_host = master_host or _extract_master_host(inventory_data)
-    if not resolved_master_host:
-        raise click.ClickException(
-            "Could not auto-detect k3s master host from inventory. Specify --master-host."
-        )
-
-    hostvars = (
-        inventory_data.get("_meta", {})
-        .get("hostvars", {})
-        .get(resolved_master_host, {})
-    )
-    if tailnet.is_private_network_host(hostvars):
-        tailnet.ensure_tailnet_access(project_name, [resolved_master_host])
-
-    master_ip = (
-        _normalize_inventory_value(hostvars.get("ansible_host"))
-        or _normalize_inventory_value(hostvars.get("public_ipv4"))
-        or _normalize_inventory_value(hostvars.get("public_ip"))
-    )
-    if not master_ip:
-        raise click.ClickException(
-            f"Could not resolve IP for host '{resolved_master_host}'."
-        )
-
-    output_path = (
-        Path(out).expanduser()
-        if out
-        else Path.home()
-        / ".kube"
-        / (
-            f"k3s-{project_name}-{environment}.yaml"
-            if byos
-            else f"k3s-{environment}.yaml"
-        )
-    )
+    output_path = kubeconfig_files.output_path(out, project_name, environment, byos)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
         tmp_path = Path(tmp_file.name)
 
-    # On byos, scp/ssh authenticate with the deploy key decrypted from the vault.
-    ssh_key_path: str | None = None
-    ssh_key_opts: list[str] = ["-i", ssh_identity] if ssh_identity else []
-    if byos and not ssh_identity:
-        ssh_key = get_byos_ssh_key(working_directory, vault_password, shared_dir)
-        fd, ssh_key_path = tempfile.mkstemp(prefix="byos-deploy-key-")
-        os.fchmod(fd, 0o600)
-        with os.fdopen(fd, "w") as fh:
-            fh.write(ssh_key if ssh_key.endswith("\n") else ssh_key + "\n")
-        ssh_key_opts = ["-i", ssh_key_path]
-
     try:
-        _run_command(
-            [
-                "scp",
-                "-P",
-                str(ssh_port),
-                *ssh_key_opts,
-                "-o",
-                "StrictHostKeyChecking=accept-new",
-                f"{ssh_user}@{master_ip}:/etc/rancher/k3s/k3s.yaml",
-                str(tmp_path),
-            ],
-            cwd=working_dir,
-        )
+        with _ssh_identity_options(
+            byos, ssh_identity, working_directory, vault_password, shared_dir
+        ) as identity_options:
+            _run_command(
+                [
+                    "scp",
+                    *kubeconfig_files.ssh_options(ssh_port, identity_options, "-P"),
+                    f"{ssh_user}@{master_ip}:/etc/rancher/k3s/k3s.yaml",
+                    str(tmp_path),
+                ],
+                cwd=working_dir,
+            )
+            if context_name:
+                context = context_name
+            elif byos:
+                context = (
+                    f"{project_name}-{environment}" if env_suffix else project_name
+                )
+            else:
+                remote_name = (
+                    _run_command(
+                        [
+                            "ssh",
+                            *kubeconfig_files.ssh_options(
+                                ssh_port, identity_options, "-p"
+                            ),
+                            f"{ssh_user}@{master_ip}",
+                            "hostname",
+                        ],
+                        cwd=working_dir,
+                        capture_output=True,
+                    )
+                    .stdout.splitlines()[0]
+                    .strip()
+                )
+                context = kubeconfig_files.derive_context_name(
+                    remote_name, environment, env_suffix
+                )
 
         kubeconfig = yaml.safe_load(tmp_path.read_text(encoding="utf-8"))
         # In private network mode master_ip is the node's MagicDNS name. That is
@@ -1514,35 +1393,7 @@ def run_kubeconfig(
         for cluster in kubeconfig.get("clusters", []):
             if cluster.get("cluster", {}).get("server"):
                 cluster["cluster"]["server"] = f"https://{master_ip}:6443"
-
-        if context_name:
-            context = context_name
-        elif byos:
-            context = f"{project_name}-{environment}" if env_suffix else project_name
-        else:
-            remote_name = (
-                _run_command(
-                    [
-                        "ssh",
-                        "-p",
-                        str(ssh_port),
-                        *ssh_key_opts,
-                        "-o",
-                        "StrictHostKeyChecking=accept-new",
-                        f"{ssh_user}@{master_ip}",
-                        "hostname",
-                    ],
-                    cwd=working_dir,
-                    capture_output=True,
-                )
-                .stdout.splitlines()[0]
-                .strip()
-            )
-            context = _derive_context_name(remote_name, environment, env_suffix)
-
         _configure_kubeconfig_context(kubeconfig, context, k8s_namespace)
-
-        from cli.kube_access import configure_access, private_write
 
         if not direct:
             kubeconfig = configure_access(
@@ -1558,87 +1409,16 @@ def run_kubeconfig(
             kubeconfig["users"] = kubeconfig["users"][-1:]
 
         private_write(output_path, kubeconfig)
-
         if not shutil.which("kubectl"):
             raise click.ClickException(
                 "kubectl not found in PATH. Please install kubectl."
             )
-
-        kube_dir = Path.home() / ".kube"
-        kube_dir.mkdir(parents=True, exist_ok=True)
-        main_config = kube_dir / "config"
-
-        from cli.kube_access import access_lock
-
-        with access_lock(kube_dir / "config.startup.lock"):
-            merged: dict = (
-                yaml.safe_load(main_config.read_text())
-                if main_config.exists()
-                else {
-                    "apiVersion": "v1",
-                    "kind": "Config",
-                    "contexts": [],
-                    "clusters": [],
-                    "users": [],
-                }
-            )
-            for kind in ("contexts", "clusters", "users"):
-                names = {entry["name"] for entry in kubeconfig[kind]}
-                merged[kind] = [
-                    entry
-                    for entry in merged.get(kind, [])
-                    if entry["name"] not in names
-                ] + kubeconfig[kind]
-            if make_current or not merged.get("current-context"):
-                merged["current-context"] = context
-            private_write(main_config, merged)
-
+        kubeconfig_files.merge_into_kube_config(kubeconfig, context, make_current)
         click.echo(f"Wrote kubeconfig to: {output_path}")
         click.echo(f"Imported context into ~/.kube/config as: {context}")
         return output_path
     finally:
         tmp_path.unlink(missing_ok=True)
-        if ssh_key_path:
-            with contextlib.suppress(OSError):
-                os.unlink(ssh_key_path)
-
-
-@contextlib.contextmanager
-def _project_data_playbook(
-    working_dir: Path, playbook: Path, environment: str = "production"
-):
-    """Import data-operation playbooks from the project's group_vars root."""
-    if playbook.parent == working_dir:
-        yield playbook
-        return
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        prefix=".startup-data-",
-        suffix=".yml",
-        dir=working_dir,
-        delete=False,
-    ) as wrapper:
-        tasks = [
-            {"ansible.builtin.include_vars": {"file": str(path)}, "no_log": True}
-            for path in (
-                working_dir / "group_vars" / "all.yml",
-                working_dir / "group_vars" / f"{environment}.yml",
-            )
-            if path.exists()
-        ]
-        wrapper.write(
-            yaml.safe_dump(
-                [
-                    {"hosts": "all", "gather_facts": False, "tasks": tasks},
-                    {"import_playbook": str(playbook)},
-                ]
-            )
-        )
-        wrapper_path = Path(wrapper.name)
-    try:
-        yield wrapper_path
-    finally:
-        wrapper_path.unlink(missing_ok=True)
 
 
 def run_backup(
@@ -1655,95 +1435,37 @@ def run_backup(
 ) -> None:
     _validated_environment(environment)
     working_dir = _resolve_working_dir(working_directory)
-    setup_ansible(
-        working_directory=working_directory,
-        shared_dir=shared_dir,
-        version=version,
-        repo_url=repo_url,
-        refresh=refresh,
-    )
+    _refresh_shared_roles(working_directory, shared_dir, version, repo_url, refresh)
 
-    playbook_path = _resolve_playbook_path(working_dir, playbook, "Backup", shared_dir)
-    with _project_data_playbook(
+    playbook_path = playbook_inputs.resolve_playbook_path(
+        working_dir, playbook, "Backup", shared_dir
+    )
+    project_name = _resolve_project_name(working_dir)
+    resolved_backup_dir = (
+        Path(backup_dir).expanduser()
+        if backup_dir
+        else Path.home() / "Backups" / project_name
+    )
+    # k8s_namespace is deliberately not passed here. Ansible resolves it from
+    # `group_vars/`, and an --extra-vars copy would outrank that - so a project
+    # that sets the namespace anywhere but the top of `all.yml` would deploy
+    # into one namespace and back up from another.
+    backup_extra_vars = (
+        f"project_name={project_name} "
+        f"backup_environment={environment} "
+        f"local_backup_root={resolved_backup_dir}"
+    )
+    with playbook_inputs.project_data_playbook(
         working_dir, playbook_path, environment
     ) as playbook_path:
-        project_name = _resolve_project_name(working_dir)
-        resolved_backup_dir = (
-            Path(backup_dir).expanduser()
-            if backup_dir
-            else Path.home() / "Backups" / project_name
+        _run_server_playbook(
+            working_directory,
+            vault_password,
+            environment,
+            shared_dir,
+            str(playbook_path),
+            extra_vars=backup_extra_vars,
         )
-        # k8s_namespace is deliberately not passed here. Ansible resolves it from
-        # `group_vars/`, and an --extra-vars copy would outrank that - so a project
-        # that sets the namespace anywhere but the top of `all.yml` would deploy
-        # into one namespace and back up from another.
-        backup_extra_vars = (
-            f"project_name={project_name} "
-            f"backup_environment={environment} "
-            f"local_backup_root={resolved_backup_dir}"
-        )
-        if _is_byos(working_dir):
-            _run_byos_playbook(
-                working_directory,
-                vault_password,
-                shared_dir,
-                playbook=str(playbook_path),
-                extra_vars=backup_extra_vars,
-            )
-            return
-        hcloud_token = get_hcloud_token(
-            working_directory, vault_password, environment, shared_dir
-        )
-        env = _ansible_env(working_dir, shared_dir)
-        env["HCLOUD_TOKEN"] = hcloud_token
-        _ensure_tailnet(working_dir, environment, shared_dir, env)
-
-        _run_command(
-            [
-                _find_uv(),
-                "run",
-                "--project",
-                str(working_dir),
-                ansible_bin("ansible-playbook"),
-                str(playbook_path),
-                "--vault-password-file",
-                "/bin/cat",
-                "--extra-vars",
-                backup_extra_vars,
-            ],
-            cwd=working_dir,
-            env=env,
-            input_text=vault_password,
-        )
-
-
-def _dns_target_ip(working_dir: Path) -> str:
-    """The public address of the first master in the project's static inventory."""
-    inventory_path = working_dir / BYOS_INVENTORY
-    if not inventory_path.exists():
-        raise click.ClickException(
-            "startup ansible dns needs a static inventory (shared-cluster attachment "
-            "or own server). Hetzner-provisioned projects manage DNS through "
-            "startup ansible infrastructure."
-        )
-    inventory = yaml.safe_load(inventory_path.read_text()) or {}
-
-    def masters(group: dict) -> list[str]:
-        found = []
-        for name, child_group in (group.get("children") or {}).items():
-            child = child_group or {}
-            if name == "hcloud_type_master":
-                found += [
-                    str(host.get("ansible_host") or host_name)
-                    for host_name, host in (child.get("hosts") or {}).items()
-                ]
-            found += masters(child)
-        return found
-
-    hosts = masters(inventory.get("all") or {})
-    if not hosts:
-        raise click.ClickException(f"No master node in {inventory_path}.")
-    return hosts[0]
 
 
 def run_dns(
@@ -1764,44 +1486,31 @@ def run_dns(
     """
     _validated_environment(environment)
     working_dir = _resolve_working_dir(working_directory)
-    target_ip = _dns_target_ip(working_dir)
-    setup_ansible(
-        working_directory=working_directory,
-        shared_dir=shared_dir,
-        version=version,
-        repo_url=repo_url,
-        refresh=refresh,
+    target_ip = playbook_inputs.dns_target_ip(working_dir)
+    _refresh_shared_roles(working_directory, shared_dir, version, repo_url, refresh)
+    playbook_path = playbook_inputs.resolve_playbook_path(
+        working_dir, playbook, "DNS", shared_dir
     )
-    playbook_path = _resolve_playbook_path(working_dir, playbook, "DNS", shared_dir)
-    env = _ansible_env(working_dir, shared_dir)
-    env["HCLOUD_TOKEN"] = get_hcloud_token(
-        working_directory, vault_password, environment, shared_dir
-    )
-    with _project_data_playbook(
+    env = _hcloud_env(working_directory, vault_password, environment, shared_dir)
+    extra_vars = {
+        "dns_target_ip": target_ip,
+        "ansible_python_interpreter": "{{ ansible_playbook_python }}",
+    }
+    with playbook_inputs.project_data_playbook(
         working_dir, playbook_path, environment
     ) as playbook_path:
         _run_command(
-            [
-                _find_uv(),
-                "run",
-                "--project",
-                str(working_dir),
-                ansible_bin("ansible-playbook"),
+            _playbook_command(
+                working_dir,
                 str(playbook_path),
                 "-i",
                 "localhost,",
                 "--connection",
                 "local",
-                "--vault-password-file",
-                "/bin/cat",
+                *VAULT_PASSWORD_FROM_STDIN,
                 "--extra-vars",
-                json.dumps(
-                    {
-                        "dns_target_ip": target_ip,
-                        "ansible_python_interpreter": "{{ ansible_playbook_python }}",
-                    }
-                ),
-            ],
+                json.dumps(extra_vars),
+            ),
             cwd=working_dir,
             env=env,
             input_text=vault_password,
@@ -1826,58 +1535,20 @@ def run_update_vms(
     require_cluster_owner(_resolve_working_dir(working_directory), "update-vms")
     _validated_environment(environment)
     working_dir = _resolve_working_dir(working_directory)
-    setup_ansible(
-        working_directory=working_directory,
-        shared_dir=shared_dir,
-        version=version,
-        repo_url=repo_url,
-        refresh=refresh,
-    )
-
-    playbook_path = _resolve_playbook_path(
+    _refresh_shared_roles(working_directory, shared_dir, version, repo_url, refresh)
+    playbook_path = playbook_inputs.resolve_playbook_path(
         working_dir, playbook, "Update VMs", shared_dir
     )
-    effective_limit = f"{environment},{limit}" if limit else environment
-    extra_vars = {
-        "update_reboot": reboot,
-        "update_environment": environment,
-    }
-
-    if _is_byos(working_dir):
-        _run_byos_playbook(
-            working_directory,
-            vault_password,
-            shared_dir,
-            playbook=str(playbook_path),
-            limit=[effective_limit],
-            extra_vars=json.dumps(extra_vars),
-        )
-        return
-    hcloud_token = get_hcloud_token(
-        working_directory, vault_password, environment, shared_dir
-    )
-    env = _ansible_env(working_dir, shared_dir)
-    env["HCLOUD_TOKEN"] = hcloud_token
-    _ensure_tailnet(working_dir, environment, shared_dir, env)
-
-    _run_command(
-        [
-            _find_uv(),
-            "run",
-            "--project",
-            str(working_dir),
-            ansible_bin("ansible-playbook"),
-            str(playbook_path),
-            "--vault-password-file",
-            "/bin/cat",
-            "-l",
-            effective_limit,
-            "--extra-vars",
-            json.dumps(extra_vars),
-        ],
-        cwd=working_dir,
-        env=env,
-        input_text=vault_password,
+    _run_server_playbook(
+        working_directory,
+        vault_password,
+        environment,
+        shared_dir,
+        str(playbook_path),
+        limit=f"{environment},{limit}" if limit else environment,
+        extra_vars=json.dumps(
+            {"update_reboot": reboot, "update_environment": environment}
+        ),
     )
 
 
@@ -1901,48 +1572,12 @@ def run_os_upgrade(
 
     require_cluster_owner(_resolve_working_dir(working_directory), "os-upgrade")
     _validated_environment(environment)
-    if not re.fullmatch(r"[0-9]{2}\.04", target_version) or int(target_version[:2]) % 2:
-        raise click.ClickException(
-            "--target-version must be an Ubuntu LTS version such as 26.04"
-        )
-    if execute and not backup_confirmed:
-        raise click.ClickException(
-            "--execute requires --backup-confirmed after verifying backups and a recovery plan"
-        )
-    if execute and not health_urls:
-        raise click.ClickException(
-            "--execute requires at least one --health-url for application verification"
-        )
-    if limit and not re.fullmatch(r"[A-Za-z0-9_*?.-]+", limit):
-        raise click.ClickException(
-            "--limit must be a single host, group or glob within the environment"
-        )
-    for url in health_urls:
-        # These URLs are printed by Ansible; never accept embedded credentials.
-        try:
-            parsed = urlsplit(url)
-        except ValueError as exc:
-            raise click.ClickException(
-                "--health-url must be a valid HTTPS URL"
-            ) from exc
-        if (
-            parsed.scheme != "https"
-            or not parsed.hostname
-            or parsed.username
-            or parsed.password
-        ):
-            raise click.ClickException(
-                "--health-url must be an HTTPS URL without embedded credentials"
-            )
+    playbook_inputs.validate_os_upgrade_options(
+        target_version, execute, backup_confirmed, health_urls, limit
+    )
     working_dir = _resolve_working_dir(working_directory)
     vault_password = resolve_vault_password(vault_password, working_directory)
-    setup_ansible(
-        working_directory=working_directory,
-        shared_dir=shared_dir,
-        version=version,
-        repo_url=repo_url,
-        refresh=refresh,
-    )
+    _refresh_shared_roles(working_directory, shared_dir, version, repo_url, refresh)
     # Always use the reviewed shared playbook, rather than a same-named local file.
     playbook_path = working_dir / shared_dir / "os-upgrade-playbook.yml"
     if not playbook_path.is_file():
@@ -1981,10 +1616,7 @@ def run_os_upgrade(
                 inventory_args=["-i", BYOS_INVENTORY, "--private-key", key_path],
             )
         return
-    env = _ansible_env(working_dir, shared_dir)
-    env["HCLOUD_TOKEN"] = get_hcloud_token(
-        working_directory, vault_password, environment, shared_dir
-    )
+    env = _hcloud_env(working_directory, vault_password, environment, shared_dir)
     _ensure_tailnet(working_dir, environment, shared_dir, env)
     _run_os_upgrade_playbook(
         working_dir,
@@ -2006,21 +1638,16 @@ def _run_os_upgrade_playbook(
     *,
     inventory_args: list[str] | None = None,
 ) -> None:
-    command = [
-        _find_uv(),
-        "run",
-        "--project",
-        str(working_dir),
-        ansible_bin("ansible-playbook"),
+    command = _playbook_command(
+        working_dir,
         str(playbook_path),
         *(inventory_args or []),
-        "--vault-password-file",
-        "/bin/cat",
+        *VAULT_PASSWORD_FROM_STDIN,
         "-l",
         effective_limit,
         "--extra-vars",
         extra_vars,
-    ]
+    )
     try:
         listing = _run_command(
             [*command, "--list-hosts"],
@@ -2060,58 +1687,21 @@ def run_k3s_upgrade(
     require_cluster_owner(_resolve_working_dir(working_directory), "k3s-upgrade")
     _validated_environment(environment)
     working_dir = _resolve_working_dir(working_directory)
-    setup_ansible(
-        working_directory=working_directory,
-        shared_dir=shared_dir,
-        version=version,
-        repo_url=repo_url,
-        refresh=refresh,
-    )
-
-    playbook_path = _resolve_playbook_path(
+    _refresh_shared_roles(working_directory, shared_dir, version, repo_url, refresh)
+    playbook_path = playbook_inputs.resolve_playbook_path(
         working_dir, playbook, "k3s upgrade", shared_dir
     )
-    effective_limit = f"{environment},{limit}" if limit else environment
     extra_vars: dict[str, object] = {"k3s_upgrade": True}
     if k3s_version:
         extra_vars["k3s_version"] = k3s_version
-
-    if _is_byos(working_dir):
-        _run_byos_playbook(
-            working_directory,
-            vault_password,
-            shared_dir,
-            playbook=str(playbook_path),
-            limit=[effective_limit],
-            extra_vars=json.dumps(extra_vars),
-        )
-        return
-
-    hcloud_token = get_hcloud_token(
-        working_directory, vault_password, environment, shared_dir
-    )
-    env = _ansible_env(working_dir, shared_dir)
-    env["HCLOUD_TOKEN"] = hcloud_token
-    _ensure_tailnet(working_dir, environment, shared_dir, env)
-
-    _run_command(
-        [
-            _find_uv(),
-            "run",
-            "--project",
-            str(working_dir),
-            ansible_bin("ansible-playbook"),
-            str(playbook_path),
-            "--vault-password-file",
-            "/bin/cat",
-            "-l",
-            effective_limit,
-            "--extra-vars",
-            json.dumps(extra_vars),
-        ],
-        cwd=working_dir,
-        env=env,
-        input_text=vault_password,
+    _run_server_playbook(
+        working_directory,
+        vault_password,
+        environment,
+        shared_dir,
+        str(playbook_path),
+        limit=f"{environment},{limit}" if limit else environment,
+        extra_vars=json.dumps(extra_vars),
     )
 
 
@@ -2141,88 +1731,35 @@ def run_restore(
         )
 
     working_dir = _resolve_working_dir(working_directory)
-    setup_ansible(
-        working_directory=working_directory,
-        shared_dir=shared_dir,
-        version=version,
-        repo_url=repo_url,
-        refresh=refresh,
+    _refresh_shared_roles(working_directory, shared_dir, version, repo_url, refresh)
+    playbook_path = playbook_inputs.resolve_playbook_path(
+        working_dir, playbook, "Restore", shared_dir
     )
-
-    playbook_path = _resolve_playbook_path(working_dir, playbook, "Restore", shared_dir)
-    with _project_data_playbook(
+    project_name = _resolve_project_name(working_dir)
+    search_root = (
+        Path(backup_dir).expanduser().resolve()
+        if backup_dir
+        else (Path.home() / "Backups" / project_name).resolve()
+    )
+    if not search_root.exists():
+        raise click.ClickException(f"Backup directory not found: {search_root}")
+    extra_vars = playbook_inputs.restore_extra_vars(
+        project_name,
+        environment,
+        search_root,
+        db_file=db_file,
+        media_file=media_file,
+        restore_db=restore_db,
+        restore_media=restore_media,
+    )
+    with playbook_inputs.project_data_playbook(
         working_dir, playbook_path, environment
     ) as playbook_path:
-        project_name = _resolve_project_name(working_dir)
-        search_root = (
-            Path(backup_dir).expanduser().resolve()
-            if backup_dir
-            else (Path.home() / "Backups" / project_name).resolve()
-        )
-        if not search_root.exists():
-            raise click.ClickException(f"Backup directory not found: {search_root}")
-
-        resolved_db_file = None
-        if restore_db:
-            resolved_db_file = _resolve_restore_file(
-                db_file,
-                search_root=search_root,
-                pattern=f"{project_name}-db-*.sql*",
-                label="Database",
-            )
-
-        resolved_media_file = None
-        if restore_media:
-            resolved_media_file = _resolve_restore_file(
-                media_file,
-                search_root=search_root,
-                pattern=f"{project_name}-media-*.tar*",
-                label="Media",
-            )
-
-        # See the note in the backup command: the namespace comes from group_vars,
-        # not from an --extra-vars copy that would outrank it.
-        extra_vars = {
-            "project_name": project_name,
-            "restore_environment": environment,
-            "restore_db": restore_db,
-            "restore_media": restore_media,
-            "db_backup_file": str(resolved_db_file) if resolved_db_file else "",
-            "media_backup_file": str(resolved_media_file)
-            if resolved_media_file
-            else "",
-        }
-
-        if _is_byos(working_dir):
-            _run_byos_playbook(
-                working_directory,
-                vault_password,
-                shared_dir,
-                playbook=str(playbook_path),
-                extra_vars=json.dumps(extra_vars),
-            )
-            return
-        hcloud_token = get_hcloud_token(
-            working_directory, vault_password, environment, shared_dir
-        )
-        env = _ansible_env(working_dir, shared_dir)
-        env["HCLOUD_TOKEN"] = hcloud_token
-        _ensure_tailnet(working_dir, environment, shared_dir, env)
-
-        _run_command(
-            [
-                _find_uv(),
-                "run",
-                "--project",
-                str(working_dir),
-                ansible_bin("ansible-playbook"),
-                str(playbook_path),
-                "--vault-password-file",
-                "/bin/cat",
-                "--extra-vars",
-                json.dumps(extra_vars),
-            ],
-            cwd=working_dir,
-            env=env,
-            input_text=vault_password,
+        _run_server_playbook(
+            working_directory,
+            vault_password,
+            environment,
+            shared_dir,
+            str(playbook_path),
+            extra_vars=json.dumps(extra_vars),
         )
