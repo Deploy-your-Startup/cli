@@ -244,6 +244,7 @@ front; browser account setup may still require a person to sign in.
 | Command | Purpose |
 |---|---|
 | `startup doctor` | Check local first-deploy prerequisites |
+| `startup lint-contract` | Check a project's `make.sh` format/lint contract and CI lint gate |
 | `startup bootstrap` | Create a project with guided account and deployment setup |
 | `startup ansible` | Provision, deploy, back up, restore and upgrade infrastructure |
 | `startup secrets` | Manage encrypted project configuration |
@@ -663,6 +664,25 @@ Read the admin password with `startup secrets get-field -f deployment/group_vars
 project's `kpis_enabled` setting to stop frontend tracking, without deleting
 stored analytics. Auth0 setup supports the shared `oauth2_proxy_enabled` toggle
 and retains `oauth_enabled` for older templates with a local proxy role.
+
+## Service lint contract
+
+Every service exposes `./make.sh format`, which writes fixes, and
+`./make.sh lint`, which only checks; CI calls only `lint`. Run
+`startup lint-contract --project-dir ./my-startup` to check the committed files
+without running any tools or changing anything. It fails when:
+
+- a `make.sh` lacks `set -e`, or implements `lint` without `format` (or the reverse);
+- a script or mise task calls `uvx` instead of tools pinned in `pyproject.toml`;
+- a Python service has no `.python-version`, ty is not pinned exactly
+  (`ty==<version>`), or a Django service lacks `django-stubs`;
+- `mise.toml` manages `uv` or `python`, or the project ships Git hooks such as
+  `.pre-commit-config.yaml`;
+- a workflow calling `build-and-deploy-service` has no `pull_request` trigger,
+  or a deployed service with `lint` is not gated by `run_lint: true`.
+
+A pass confirms the contract's structure, not that `./make.sh lint` succeeds;
+run that, or let CI run it, for the actual checks.
 
 ## Public legal information and consent
 
