@@ -297,6 +297,40 @@ def _collect_updates(updates, vault_fields, set_field, secret_length, verbose) -
     return updates_dict
 
 
+def _replace_inline_fields(
+    run: _SecretsRun, text: str, rel, updates_dict: dict, only_existing: bool
+) -> str | None:
+    """``text`` with every requested block replaced, or None if none matched."""
+    modified = False
+    for var, plain in updates_dict.items():
+        has_block = re.search(
+            rf"^[ \t]*{re.escape(var)}:\s*!vault \|", text, re.MULTILINE
+        )
+        if not has_block and only_existing:
+            if run.verbose:
+                print(f"Skip {var} in {rel}, no existing block.")
+            continue
+        if (
+            has_block
+            and run.verify_password
+            and not verify_inline_field(text, var, run.vault_password)
+        ):
+            print(
+                f"Error: Cannot decrypt existing vault for {var} in {rel}. Incorrect password."
+            )
+            raise _Abort(password_verification_failed=True)
+
+        new_block = regen_vault_string(var, plain, run.vault_password)
+        new_text, count = replace_block(text, var, new_block)
+        if count:
+            modified = True
+            text = new_text
+            run.written_fields.add(var)
+            if run.verbose:
+                print(f"Replaced {var} ({count}) in {rel}")
+    return text if modified else None
+
+
 def _update_inline_blocks(
     run: _SecretsRun, yaml_files, updates_dict: dict, only_existing: bool
 ) -> None:
@@ -310,36 +344,10 @@ def _update_inline_blocks(
         text = load_text(yml)
         if text is None:
             continue
-        modified = False
-        for var, plain in updates_dict.items():
-            has_block = re.search(
-                rf"^[ \t]*{re.escape(var)}:\s*!vault \|", text, re.MULTILINE
-            )
-            if not has_block and only_existing:
-                if run.verbose:
-                    print(f"Skip {var} in {rel}, no existing block.")
-                continue
-            if (
-                has_block
-                and run.verify_password
-                and not verify_inline_field(text, var, run.vault_password)
-            ):
-                print(
-                    f"Error: Cannot decrypt existing vault for {var} in {rel}. Incorrect password."
-                )
-                raise _Abort(password_verification_failed=True)
-
-            new_block = regen_vault_string(var, plain, run.vault_password)
-            new_text, count = replace_block(text, var, new_block)
-            if count:
-                modified = True
-                text = new_text
-                run.written_fields.add(var)
-                if run.verbose:
-                    print(f"Replaced {var} ({count}) in {rel}")
-        if modified:
+        new_text = _replace_inline_fields(run, text, rel, updates_dict, only_existing)
+        if new_text is not None:
             run.updated.append(rel)
-            run.write(yml, rel, text)
+            run.write(yml, rel, new_text)
 
 
 def _encrypted_yaml_files(run: _SecretsRun, repo_path: Path, yaml_files) -> list:
@@ -550,6 +558,33 @@ def _print_summary(
     return True, run.updated, False
 
 
+def _workspace(repo, repo_path: Path, is_file: bool) -> Path:
+    """The directory to scan; a repository URL is cloned into a temp dir."""
+    if repo_path.exists():
+        return repo_path.parent.resolve() if is_file else repo_path.resolve()
+    work_dir = Path(tempfile.mkdtemp(prefix="repo_scan_"))
+    print(f"Cloning {repo} into {work_dir}...")
+    subprocess.run(["git", "clone", repo, str(work_dir)], check=True)
+    return work_dir
+
+
+def _reset_dry_run_output(dry_run: bool) -> Path:
+    dry_dir = Path("dry-run-output")
+    if dry_run:
+        if dry_dir.exists():
+            shutil.rmtree(dry_dir)
+        dry_dir.mkdir()
+    return dry_dir
+
+
+def _files_to_scan(run: _SecretsRun, repo_path: Path) -> list:
+    if not run.is_file:
+        return find_yaml_files(run.work_dir)
+    if run.verbose:
+        print(f"Processing a single YAML file: {repo_path}")
+    return [repo_path]
+
+
 def update_secrets(
     repo,
     vault_password,
@@ -591,25 +626,13 @@ def update_secrets(
     """
     repo_path = Path(repo)
     is_file = repo_path.exists() and repo_path.is_file()
-    if not repo_path.exists():
-        work_dir = Path(tempfile.mkdtemp(prefix="repo_scan_"))
-        print(f"Cloning {repo} into {work_dir}...")
-        subprocess.run(["git", "clone", repo, str(work_dir)], check=True)
-    else:
-        work_dir = repo_path.parent.resolve() if is_file else repo_path.resolve()
-
-    dry_dir = Path("dry-run-output")
-    if dry_run:
-        if dry_dir.exists():
-            shutil.rmtree(dry_dir)
-        dry_dir.mkdir()
-
+    work_dir = _workspace(repo, repo_path, is_file)
     run = _SecretsRun(
         work_dir=work_dir,
         is_file=is_file,
         vault_password=vault_password,
         dry_run=dry_run,
-        dry_dir=dry_dir,
+        dry_dir=_reset_dry_run_output(dry_run),
         verbose=verbose,
         verify_password=verify_password,
     )
@@ -620,13 +643,7 @@ def update_secrets(
             print(NO_OPERATION_HELP.strip())
             return False, [], False
 
-        if is_file:
-            if verbose:
-                print(f"Processing a single YAML file: {repo_path}")
-            yaml_files = [repo_path]
-        else:
-            yaml_files = find_yaml_files(work_dir)
-
+        yaml_files = _files_to_scan(run, repo_path)
         if vault_files:
             _rotate_vault_files(run, vault_files)
         if updates or vault_fields or set_field:
