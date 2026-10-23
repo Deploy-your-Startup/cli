@@ -22,6 +22,7 @@ from cli.template_commands import (
     template,
     template_supports_shared_cluster,
 )
+from cli.user_config_commands import config
 from cli.verification import verify
 
 
@@ -57,6 +58,7 @@ cli.add_command(factory)
 cli.add_command(template)
 cli.add_command(auth0)
 cli.add_command(cluster)
+cli.add_command(config)
 cli.add_command(doctor)
 cli.add_command(skills)
 cli.add_command(verify)
@@ -615,7 +617,7 @@ def secrets():
     default=None,
     help=(
         "Vault password. Omit it to read the password from the configured "
-        "backend (default: macOS Keychain), the way `startup ansible` does."
+        "backend (`startup config`, default: macOS Keychain), the way `startup ansible` does."
     ),
 )
 @click.option(
@@ -805,7 +807,7 @@ def update_secrets(
     from cli.update_vault_secrets import update_secrets as update_vault_secrets
 
     # Same resolution `startup ansible` uses: an explicit --vault-password wins,
-    # otherwise the backend (macOS Keychain by default) is asked, keyed by the
+    # otherwise the configured backend (Keychain or 1Password) is asked, keyed by the
     # project the path belongs to. Before this, the password had to be passed on
     # the command line, where `ps` and the shell history can see it.
     #
@@ -911,6 +913,58 @@ def rotate_vault_password(
     raise click.exceptions.Exit(1)
 
 
+@secrets.command("copy-password")
+@click.option(
+    "--repo",
+    "-r",
+    default=".",
+    show_default=True,
+    help="Project directory (or its deployment directory)",
+)
+@click.option(
+    "--from",
+    "source",
+    required=True,
+    type=click.Choice(["keychain", "1password"]),
+    help="Backend that holds the vault password now",
+)
+@click.option(
+    "--to",
+    "target",
+    type=click.Choice(["keychain", "1password"]),
+    help="Backend to copy it to (default: the one `startup config` chose)",
+)
+def copy_vault_password(repo, source, target):
+    """Copy a project's vault password between password backends.
+
+    The password must open the project's vault before it is written; the
+    source entry stays. The password is never printed.
+
+    \b
+      startup config set vault-backend 1password --op-vault Startups
+      startup secrets copy-password -r . --from keychain
+    """
+    from cli.ansible_commands import _resolve_project_name
+    from cli.vault_backends import get_backend
+    from cli.vault_handoff import copy_vault_password as copy_password
+
+    source_backend = get_backend(source)
+    target_backend = get_backend(target)
+    if source_backend.name == target_backend.name:
+        raise click.UsageError(
+            f"--from and --to are both {source}. Pass --to, or choose another "
+            "backend with startup config set vault-backend."
+        )
+    working_dir = Path(_password_scope(repo))
+    entry = copy_password(
+        _resolve_project_name(working_dir), working_dir, source_backend, target_backend
+    )
+    click.echo(
+        f"Copied {entry} from {source_backend.label} to {target_backend.label}. "
+        f"The entry in {source_backend.label} is unchanged."
+    )
+
+
 @secrets.command("list-vaults")
 @click.option("--repo", "-r", default=".", help="Repository path")
 @click.option("--file", "-f", help="Specific file to check (optional)")
@@ -935,7 +989,7 @@ def list_vault_files(repo, file, verbose):
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
 def get_vault_file(file):
-    """Write a vaulted file to stdout for piping, using Keychain or the CI environment."""
+    """Write a vaulted file to stdout for piping, using the password backend or the CI environment."""
     from cli.ansible_commands import resolve_vault_password
     from cli.vault.process import VaultError, decrypt
 
@@ -963,7 +1017,7 @@ def get_vault_file(file):
     default=None,
     help=(
         "Vault password. Omit it to read the password from the configured "
-        "backend (default: macOS Keychain), the way `startup ansible` does."
+        "backend (`startup config`, default: macOS Keychain), the way `startup ansible` does."
     ),
 )
 @click.option("--verbose", "-V", is_flag=True, help="Verbose output")
@@ -1003,7 +1057,7 @@ def get_vault_field(file, field, vault_password, verbose):
     default=None,
     help=(
         "Vault password. Omit it to read the password from the configured "
-        "backend (default: macOS Keychain), the way `startup ansible` does."
+        "backend (`startup config`, default: macOS Keychain), the way `startup ansible` does."
     ),
 )
 @click.option("--verbose", "-V", is_flag=True, help="Verbose output")

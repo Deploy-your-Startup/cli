@@ -54,6 +54,13 @@ creation, wrong passwords, dry runs, rotation, credential transport and the
 built wheel's dependency/license boundary. The CLI process is also tested with
 Ansible Python imports blocked; Ansible runs in its own process.
 
+`test_one_password_integration.py` covers the 1Password password backend and
+`startup config`: a fake `op` on PATH keeps items in a JSON file and records
+its arguments, so the tests assert that the password never enters them. It
+covers configuration, backend precedence, a missing vault, a locked app,
+copying from the Keychain, recovery into 1Password and the bootstrap offer. It
+does not verify a real 1Password account or the app's approval prompt.
+
 The template matrix renders `django-backend-template` and `vue-django-template`
 from immutable public Git revisions pinned in
 `test_vault_templates_integration.py`. It checks single-field updates, mixed

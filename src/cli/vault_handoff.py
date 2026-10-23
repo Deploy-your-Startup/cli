@@ -1,14 +1,17 @@
-"""Move the vault password between the Keychain and the user's password manager.
+"""Move the vault password between the backend and the user's password manager.
 
-The Keychain entry is local to one Mac. The password manager is the copy that
-travels to other computers, so the CLI asks for it in two places:
+A Keychain entry is local to one Mac. The password manager is the copy that
+travels to other computers, so with the Keychain backend the CLI asks for it in
+two places:
 
   * bootstrap, right after the password is generated: copy it to the clipboard
     and wait until the user has saved it under ``VAULT_PASSWORD_<PROJECT>``;
-  * every command that needs it on a computer without the Keychain entry: ask
-    for it once, check that it opens the vault, and store it in the Keychain.
+  * every command that needs it on a computer without the entry: ask for it
+    once, check that it opens the vault, and store it in the backend.
 
-The password itself is never printed and never placed in process arguments.
+The 1Password backend *is* the password manager, so bootstrap skips the
+hand-off. The password itself is never printed and never placed in process
+arguments.
 """
 
 from __future__ import annotations
@@ -22,7 +25,7 @@ import click
 from cli import terminal_style as terminal
 from cli.vault.fields import contains_vault_blocks
 from cli.vault.files import check_can_decrypt_with_password, is_full_vault_file
-from cli.vault_backends import PasswordBackend, keychain_service_name
+from cli.vault_backends import PasswordBackend, get_backend, keychain_service_name
 
 RECOVERY_ATTEMPTS = 3
 
@@ -70,14 +73,24 @@ def _set_clipboard(value: str) -> bool:
     return True
 
 
-def hand_off_to_password_manager(project_name: str, vault_password: str) -> None:
+def hand_off_to_password_manager(
+    project_name: str, vault_password: str, backend: PasswordBackend | None = None
+) -> None:
     """Make sure a freshly generated vault password leaves this computer.
 
-    Interactive runs copy the password to the clipboard and block until the
-    user confirms it is saved. Non-interactive runs only explain where the
-    password is and under which name it belongs in the password manager.
+    A synced backend already did that. Otherwise interactive runs copy the
+    password to the clipboard and block until the user confirms it is saved;
+    non-interactive runs only explain where the password is and under which
+    name it belongs in the password manager.
     """
     entry = keychain_service_name(project_name)
+    backend = backend or get_backend()
+    if backend.synced:
+        click.echo(
+            f"    Other computers read the vault password from {backend.label} "
+            f"({entry})."
+        )
+        return
     click.echo()
     click.echo(
         terminal.style("  Save the vault password in your password manager", bold=True)
@@ -123,7 +136,7 @@ def _vault_dir(working_dir: Path) -> Path:
 def recover_from_password_manager(
     project_name: str, working_dir: Path, backend: PasswordBackend
 ) -> str | None:
-    """Ask for a vault password missing from the Keychain and store it there.
+    """Ask for a vault password missing from the backend and store it there.
 
     Returns ``None`` when nobody can answer (non-interactive runs), so the
     caller keeps its original error. A password is stored only after it opened
@@ -137,7 +150,7 @@ def recover_from_password_manager(
     vault_dir = _vault_dir(working_dir)
     can_verify = bool(iter_vault_files(vault_dir))
     click.echo(
-        f'  No vault password for "{project_name}" in this Mac\'s Keychain.', err=True
+        f'  No vault password for "{project_name}" in {backend.label}.', err=True
     )
     click.echo(f"  Paste it from your password manager ({entry}).", err=True)
 
@@ -162,11 +175,39 @@ def recover_from_password_manager(
             try:
                 backend.write(project_name, password)
             except click.ClickException as error:
-                # The password is verified; a missing Keychain only costs the
-                # next run another prompt.
+                # The password is verified; an unavailable backend only costs
+                # the next run another prompt.
                 click.echo(f"  {error.message} Using it for this run only.", err=True)
             else:
-                click.echo(f"  Saved to the Keychain as {entry}.", err=True)
+                click.echo(f"  Saved to {backend.label} as {entry}.", err=True)
             return password
         click.echo("  That password does not open this project's vault.", err=True)
     return None
+
+
+def copy_vault_password(
+    project_name: str,
+    working_dir: Path,
+    source: PasswordBackend,
+    target: PasswordBackend,
+) -> str:
+    """Copy a project's vault password from ``source`` to ``target``.
+
+    The password is written only after it opened every vault file of the
+    project, so a stale entry never overwrites a good one. ``source`` keeps
+    its entry. Returns the entry name.
+    """
+    entry = keychain_service_name(project_name)
+    vault_dir = _vault_dir(working_dir)
+    if not iter_vault_files(vault_dir):
+        raise click.ClickException(
+            f"No vault files under {vault_dir} to check the password against."
+        )
+    password = source.read(project_name)
+    if not vault_is_decryptable(vault_dir, password):
+        raise click.ClickException(
+            f"The password in {source.label} ({entry}) does not open this "
+            "project's vault. Nothing was copied."
+        )
+    target.write(project_name, password)
+    return entry

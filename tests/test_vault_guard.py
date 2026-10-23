@@ -90,32 +90,32 @@ def test_rotation_rejects_missing_vault_files(tmp_path):
     assert not vault_guard.vault_is_decryptable(tmp_path, None)
 
 
-# --- keychain helpers --------------------------------------------------------
+# --- password backend helpers --------------------------------------------------------
 
 
-def test_store_keychain_password_uses_safe_backend(monkeypatch):
+def test_store_vault_password_uses_safe_backend(monkeypatch):
     captured = []
     monkeypatch.setattr(
         vault_guard,
         "get_backend",
         lambda: SimpleNamespace(write=lambda *args: captured.append(args)),
     )
-    vault_guard.store_keychain_password("hallo", "s3cret")
+    vault_guard.store_vault_password("hallo", "s3cret")
     assert captured == [("hallo", "s3cret")]
 
 
-def test_read_keychain_password_returns_value(monkeypatch):
+def test_read_vault_password_returns_value(monkeypatch):
     monkeypatch.setattr(
         vault_guard, "get_backend", lambda: SimpleNamespace(read=lambda key: "s3cret")
     )
-    assert vault_guard.read_keychain_password("hallo") == "s3cret"
+    assert vault_guard.read_vault_password("hallo") == "s3cret"
 
 
-def test_read_keychain_password_returns_none_when_missing(monkeypatch):
+def test_read_vault_password_returns_none_when_missing(monkeypatch):
     def missing(key):
         raise click.ClickException("Not found")
 
     monkeypatch.setattr(
         vault_guard, "get_backend", lambda: SimpleNamespace(read=missing)
     )
-    assert vault_guard.read_keychain_password("hallo") is None
+    assert vault_guard.read_vault_password("hallo") is None

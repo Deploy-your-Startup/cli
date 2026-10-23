@@ -173,7 +173,7 @@ def summary_box(
     github_url: str | None,
     domain: str,
     kind: str = "fullstack",
-    keychain_service: str | None = None,
+    vault_password_location: str | None = None,
     provider: str = "hetzner",
     cluster_owner: str | None = None,
 ) -> None:
@@ -193,8 +193,8 @@ def summary_box(
         fields["Server"] = (
             "Your existing server (BYOS)" if provider == "byos" else "Hetzner Cloud"
         )
-    if keychain_service:
-        fields["Vault password"] = f"Saved in Keychain ({keychain_service})"
+    if vault_password_location:
+        fields["Vault password"] = f"Saved in {vault_password_location}"
     if github_url:
         fields["Deployment"] = "Requested via GitHub Actions"
     fields["Website status"] = "Not verified yet"

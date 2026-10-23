@@ -190,18 +190,18 @@ def run_wizard(ctx: BootstrapContext) -> None:
 
     # All steps done — show summary
     github_url = ctx.github_url if ctx.mode == "github" else None
-    keychain_service = None
+    vault_password_location = None
     if ctx.kind != "pitch":
-        from cli.ansible_commands import keychain_service_name
+        from cli.wizard.vault_guard import vault_password_label
 
-        keychain_service = keychain_service_name(ctx.project_name)
+        vault_password_location = vault_password_label(ctx.project_name)
     ui.summary_box(
         project_name=ctx.project_name,
         project_dir=str(ctx.project_dir),
         github_url=github_url,
         domain=ctx.base_domain,
         kind=ctx.kind,
-        keychain_service=keychain_service,
+        vault_password_location=vault_password_location,
         provider=ctx.provider,
         cluster_owner=ctx.cluster_config["owner"] if ctx.cluster_config else None,
     )

@@ -196,7 +196,7 @@ def test_completion_summary_links(tmp_path, kind, provider, owner):
         f"summary_box(project_name='demo', project_dir={folder!r}, "
         "github_url='https://github.com/example/demo', domain='demo.example', "
         f"kind={kind!r}, provider={provider!r}, cluster_owner={owner!r}, "
-        "keychain_service='VAULT_PASSWORD_DEMO')"
+        "vault_password_location='the macOS Keychain as VAULT_PASSWORD_DEMO')"
     )
     # WHEN the actual summary runs in a plain, narrow terminal environment.
     result = run(

@@ -12,7 +12,7 @@ from cli.sync_commands import _run_command
 
 from ..base import WizardStep, is_pushed, repo_exists
 from ..context import BootstrapContext
-from ..vault_guard import store_keychain_password
+from ..vault_guard import store_vault_password, vault_password_label
 
 
 def set_github_vault_secret(project_dir, password: str) -> None:
@@ -136,7 +136,7 @@ class FinalizeStep(WizardStep):
         if not ctx.vault_password:
             raise click.ClickException(
                 "Vault password is missing from setup. Rerun the project step "
-                "or check the password in Keychain."
+                "or check the stored vault password."
             )
         ui.action_start("Saving vault password as a GitHub secret...")
         set_github_vault_secret(ctx.project_dir, ctx.vault_password)
@@ -217,12 +217,13 @@ class FinalizeStep(WizardStep):
                 + (f" ({last_err})" if last_err else "")
             )
 
-        # 4g. Re-assert vault password in Keychain (already stored in step 3f;
+        # 4g. Re-assert the stored vault password (already stored in step 3f;
         # this is an idempotent safety net in case it was changed since).
-        ui.action_start("Saving vault password in Keychain...")
+        label = vault_password_label(ctx.project_name)
+        ui.action_start(f"Saving vault password in {label}...")
         try:
-            store_keychain_password(ctx.project_name, ctx.vault_password)
-            ui.action_done("Vault password saved in Keychain")
+            store_vault_password(ctx.project_name, ctx.vault_password)
+            ui.action_done(f"Vault password saved in {label}")
         except click.ClickException:
-            ui.action_fail("Could not save to Keychain")
-            ui.warning("Could not save the vault password to Keychain again.")
+            ui.action_fail(f"Could not save to {label}")
+            ui.warning(f"Could not save the vault password to {label} again.")

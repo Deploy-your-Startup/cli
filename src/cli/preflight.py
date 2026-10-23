@@ -77,6 +77,22 @@ def check_local_prerequisites(*, browser: bool = True, ssh_key: bool = True) -> 
         )
 
 
+def _vault_backend_checks() -> list[tuple[bool, str]]:
+    """Whether the backend chosen by `startup config` can be reached."""
+    from cli.vault_backends import ONE_PASSWORD_BACKEND, configured_backend_name
+
+    if configured_backend_name() != ONE_PASSWORD_BACKEND:
+        return []
+    from cli.vault_backends import OnePasswordBackend
+
+    try:
+        backend = OnePasswordBackend()
+        backend.check()
+    except click.ClickException as error:
+        return [(False, f"Vault passwords in 1Password: {error.message}")]
+    return [(True, f"Vault passwords in {backend.label}")]
+
+
 @click.command()
 @click.option(
     "--provider",
@@ -134,6 +150,7 @@ def doctor(provider=None, ssh_public_key=None, project_dir: Path | None = None):
                     "GitHub workflow + package scopes (gh auth refresh -h github.com -s repo,workflow,read:packages,write:packages)",
                 )
             )
+    checks.extend(_vault_backend_checks())
     for ok, label in checks:
         if ok:
             ui.success(label)
