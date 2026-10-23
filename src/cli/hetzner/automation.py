@@ -60,6 +60,18 @@ class HetznerAutomation:
             else await self._context.new_page()
         )
         self._page.set_default_timeout(config.DEFAULT_TIMEOUT)
+        await self._close_announcements_on_sight()
+
+    async def _close_announcements_on_sight(self) -> None:
+        """Close console announcements before they block a click or a fill.
+
+        They appear at unpredictable moments, so Playwright checks for one
+        before every action instead of create_project polling for it.
+        """
+        close_button = self.page.locator(config.SELECTORS_ANNOUNCEMENT_CLOSE)
+        await self.page.add_locator_handler(
+            close_button, lambda button: button.first.click()
+        )
 
     async def close(self):
         """Close browser. Session state is persisted automatically via user_data_dir."""
