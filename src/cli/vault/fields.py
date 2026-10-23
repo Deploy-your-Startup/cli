@@ -144,18 +144,40 @@ def get_inline_vault_value(
         return None
 
 
-def update_inline_vault_field(file_path, var_name, new_value, vault_password):
+def update_inline_vault_field(
+    file_path, var_name, new_value, vault_password, create=False
+):
+    """Replace every inline block named ``var_name``.
+
+    With ``create``, a field that has no block yet is appended to the file in
+    the same layout the replace path writes. Returns "updated", "created",
+    "missing" or "error".
+    """
     try:
         content = file_path.read_bytes().decode()
+        if content.startswith("$ANSIBLE_VAULT;"):
+            # Appending plaintext YAML to a fully encrypted file corrupts it.
+            print(
+                "Cannot edit inline fields of a fully encrypted file.", file=sys.stderr
+            )
+            return "error"
         new_block = regen_vault_string(var_name, new_value, vault_password)
         new_content, count = replace_block(content, var_name, new_block)
         if count:
             file_path.write_bytes(new_content.encode())
-            return True
-        return False
+            return "updated"
+        if not create:
+            return "missing"
+        if content and not content.endswith("\n"):
+            content += "\n"
+        separator = "\n" if content else ""
+        file_path.write_bytes(
+            (content + separator + normalize_vault_block(new_block)).encode()
+        )
+        return "created"
     except (OSError, UnicodeError, VaultError):
         print("Could not update the inline Vault field.", file=sys.stderr)
-        return False
+        return "error"
 
 
 def contains_vault_blocks(path):

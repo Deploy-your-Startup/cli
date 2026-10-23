@@ -504,27 +504,35 @@ Review the encrypted preview in `dry-run-output/`, then repeat without
 `--dry-run` to apply it. Coordinate changes with the affected service: updating
 a Vault field alone does not change a running database's password.
 
-For a supplied inline secret, use stdin so the value stays out of shell history
-and process arguments. This example uses zsh, the default macOS shell. Run the
-command, then enter the value at the hidden prompt:
+For a supplied inline secret, keep the value out of shell history and process
+arguments: omit `--value`, or pass `-` as the value of `--field-set`. In a
+terminal the CLI asks for the value twice at a hidden prompt; when stdin is
+piped, it reads the value from stdin instead:
 
-```zsh
+```bash
 vault_file="$PWD/deployment/group_vars/production.yml"
-read -rs "?Secret: " secret_value && printf '%s' "$secret_value" | startup secrets update \
-  -r "$vault_file" --field-stdin api_key --create-in "$vault_file" --dry-run
-unset secret_value
+startup secrets update -r "$vault_file" --field-set api_key - --create-in "$vault_file" --dry-run
 ```
 
 Review the preview, then repeat without `--dry-run` to apply it. `--create-in`
 adds a field without an existing Vault block; otherwise a missing field is an
 error. Use an absolute path because a relative `--create-in` is resolved against
-the directory selected by `-r`.
+the directory selected by `-r`. Repeat `--field-set <name> -` to be prompted for
+several fields in one run; piped stdin feeds only one field per invocation.
+
+To set or add a single field in one file, `update-inline-field` prompts the same
+way; `--create` appends the field when the file has no Vault block for it:
+
+```bash
+startup secrets update-inline-field -f deployment/group_vars/production.yml \
+  --field api_key --create
+```
 
 `get-field` prints a decrypted value. Advanced operations such as
 `rotate-password` require care: encryption-password rotation does not update
 the password backend or the GitHub Actions secret automatically. Inspect the relevant
-`startup secrets <command> --help` before proceeding. Prefer stdin over
-value-bearing arguments such as `--field-set`.
+`startup secrets <command> --help` before proceeding. Prefer a hidden prompt or stdin
+over a value in the arguments, such as `--field-set <name> <value>`.
 
 ## Update the shared deployment foundation
 

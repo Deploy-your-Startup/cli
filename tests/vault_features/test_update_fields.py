@@ -256,7 +256,7 @@ def test_direct_update_with_utility_function():
         )
 
         # THEN the field is updated with the provided value
-        assert result is True, "Failed to update field"
+        assert result == "updated", "Failed to update field"
 
         # Get the updated value
         updated_backend_db_password = get_inline_vault_value(
