@@ -253,9 +253,12 @@ user.
 - Generate a random value:
   `startup secrets update -r <file> --field-random <name> --dry-run`, then
   without `--dry-run`.
-- Set a value from the shell without exposing it in process arguments, using
-  absolute paths (a relative `--create-in` resolves against the `-r` file's
-  folder):
+- Set a value without exposing it in process arguments or shell history:
+  omit `--value` of `update-inline-field`, or pass `-` as the value of
+  `--field-set <name> -`. The CLI
+  reads stdin when it is piped and otherwise asks twice at a hidden prompt.
+  Use absolute paths (a relative `--create-in` resolves against the `-r`
+  file's folder):
 
   ```bash
   file="$(realpath deployment/group_vars/production.yml)"
@@ -263,12 +266,21 @@ user.
     --field-stdin <name> --create-in "$file"
   ```
 
-- When the user types a secret themselves, give them a hidden prompt rather
-  than asking them to paste it into the chat:
+  `--field-stdin <name>` is the same as `--field-set <name> -`.
 
-  ```zsh
-  read -rs "?Secret: " s && printf '%s' "$s" | startup secrets update -r "$PWD/deployment/group_vars/production.yml" --field-stdin <name> --create-in "$PWD/deployment/group_vars/production.yml"; unset s
+- When the user types a secret themselves, have them run the command in their
+  own terminal and answer the hidden prompt rather than pasting it into the
+  chat. `--create` appends the field when the file has none yet; without it a
+  missing field is an error:
+
+  ```bash
+  startup secrets update-inline-field -f deployment/group_vars/production.yml \
+    --field <name> --create
   ```
+
+  Several fields in one run prompt once each:
+  `startup secrets update -r "$file" --field-set <a> - --field-set <b> - --create-in "$file"`.
+  Piped stdin feeds only one field per invocation.
 
 - Replace an encrypted whole-file secret through stdin:
   `startup secrets update -r deployment --file-stdin <filename> --dry-run`,

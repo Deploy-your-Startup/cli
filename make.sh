@@ -42,6 +42,7 @@ if [ "$1" == "test_vault" ]; then
   uv run --extra dev pytest -v --durations=10 \
     tests/vault_features \
     tests/test_vault_process_integration.py \
+    tests/test_secret_input_integration.py \
     tests/test_vault_templates_integration.py \
     tests/test_vault_distribution_integration.py \
     tests/test_vault_guard.py \

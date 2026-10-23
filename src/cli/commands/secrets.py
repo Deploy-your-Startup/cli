@@ -5,6 +5,9 @@ from pathlib import Path
 
 import click
 
+# A value argument that asks for the secret on stdin instead.
+STDIN = "-"
+
 
 def _password_scope(repo: str) -> str:
     """The directory whose name identifies the project to the password backend.
@@ -80,16 +83,21 @@ def secrets():
     "-fs",
     multiple=True,
     nargs=2,
-    help="Set specific value for inline vault field: FIELD VALUE (can be repeated)",
+    help=(
+        "Set specific value for inline vault field: FIELD VALUE (can be "
+        "repeated). Pass - as VALUE to read it from stdin, or from a hidden "
+        "prompt in a terminal, instead of from the process arguments."
+    ),
 )
 @click.option(
     "--field-stdin",
     "-fi",
     default=None,
     help=(
-        "Set an inline vault field to a value read from stdin. Keeps the "
-        "secret out of the process arguments, where --field-set leaves it "
-        "readable to anyone who can run `ps`. One field per invocation."
+        "Set an inline vault field to a value read from stdin, or from a "
+        "hidden prompt in a terminal. Keeps the secret out of the process "
+        "arguments, where --field-set FIELD VALUE leaves it readable to anyone "
+        "who can run `ps`. Same as --field-set FIELD -."
     ),
 )
 @click.option(
@@ -207,8 +215,12 @@ def update_secrets(
       startup secrets update -r . -p PASSWORD --field-random backend_db_password
 
     \b
-      # Set specific value for a field
-      startup secrets update -r . -p PASSWORD --field-set api_key "my-key"
+      # Set a field from a hidden prompt (or from stdin when piped)
+      startup secrets update -r . --field-set api_key -
+
+    \b
+      # Add a field that has no vault block yet
+      startup secrets update -r FILE --field-set api_key - --create-in FILE
 
     \b
       # Update multiple fields at once
@@ -243,12 +255,16 @@ def update_secrets(
     # and add to their new counterparts.
     field_values = [*field_set, *set_field]
     if field_stdin:
-        # Strip only the trailing newline a shell or an editor adds, so a
-        # multi-line credential survives.
-        value = _non_empty(
-            sys.stdin.read().removesuffix("\n"), f"--field-stdin {field_stdin}"
+        field_values.append((field_stdin, STDIN))
+    secret_inputs = [name for name, value in field_values if value == STDIN]
+    if not sys.stdin.isatty() and len(secret_inputs) + bool(file_stdin) > 1:
+        raise click.UsageError(
+            "stdin holds one value. Read one field from stdin per invocation, "
+            "or run the command in a terminal to be prompted for each."
         )
-        field_values.append((field_stdin, value))
+    field_values = [
+        (name, _field_value(name, value, field_stdin)) for name, value in field_values
+    ]
     file_contents = [*file_content, *set_file_content]
     if file_stdin:
         file_contents.append((file_stdin, _non_empty(sys.stdin.read(), "--file-stdin")))
@@ -279,6 +295,31 @@ def _non_empty(stdin_value: str, option: str) -> str:
     if not stdin_value:
         raise click.ClickException(f"{option} was given but stdin was empty.")
     return stdin_value
+
+
+def _field_value(name: str, value: str, field_stdin: str | None) -> str:
+    if value != STDIN:
+        return value
+    option = f"--field-stdin {name}" if name == field_stdin else f"--field-set {name} -"
+    return read_secret(option, name)
+
+
+def read_secret(option: str, name: str) -> str:
+    """Read a secret value without it entering the process arguments.
+
+    Piped input is read whole, minus the one trailing newline a shell or an
+    editor adds, so a multi-line credential survives. In a terminal the value
+    is typed twice at a hidden prompt; the prompt goes to stderr so that stdout
+    stays clean for scripts.
+    """
+    if not sys.stdin.isatty():
+        return _non_empty(sys.stdin.read().removesuffix("\n"), option)
+    return click.prompt(
+        f"Value for {name}",
+        hide_input=True,
+        confirmation_prompt=True,
+        err=True,
+    )
 
 
 @secrets.command("rotate-password")
@@ -453,7 +494,20 @@ def get_vault_field(file, field, vault_password, verbose):
     "--file", "-f", required=True, help="Path to the file containing the vault field"
 )
 @click.option("--field", required=True, help="Name of the vault field to update")
-@click.option("--value", required=True, help="New value for the field")
+@click.option(
+    "--value",
+    default=STDIN,
+    help=(
+        "New value for the field. Omit it or pass - to read the value from "
+        "stdin, or from a hidden prompt in a terminal, so it stays out of the "
+        "shell history and the process arguments."
+    ),
+)
+@click.option(
+    "--create",
+    is_flag=True,
+    help="Append the field when the file has no vault block for it yet.",
+)
 @click.option(
     "--vault-password",
     "-p",
@@ -464,25 +518,53 @@ def get_vault_field(file, field, vault_password, verbose):
     ),
 )
 @click.option("--verbose", "-V", is_flag=True, help="Verbose output")
-def update_inline_vault_field_cmd(file, field, value, vault_password, verbose):
-    """Update the value of an inline vault field in a file"""
+def update_inline_vault_field_cmd(file, field, value, create, vault_password, verbose):
+    """Update the value of an inline vault field in a file.
+
+    \b
+      # Prompt for the value with hidden input
+      startup secrets update-inline-field -f FILE --field api_key
+    \b
+      # Pipe it in, and add the field if it does not exist yet
+      printf '%s' "$VALUE" | startup secrets update-inline-field \\
+        -f FILE --field api_key --create
+    """
     from cli.ansible_commands import resolve_vault_password
-    from cli.vault.fields import update_inline_vault_field
+    from cli.vault.fields import extract_vault_block, update_inline_vault_field
 
     file_path = Path(file)
     if not file_path.exists():
         click.echo(f"Error: File {file} does not exist", err=True)
         raise click.exceptions.Exit(1)
 
+    if not create and extract_vault_block(file_path.read_text(), field) is None:
+        # Say so before anyone types a secret that would be thrown away.
+        _missing_inline_field(file, field)
+
     vault_password = resolve_vault_password(vault_password, _password_scope(file))
+    if value == STDIN:
+        value = read_secret("--value", field)
 
     if verbose:
         click.echo(f"Updating value for field {field} in file {file}")
 
-    success = update_inline_vault_field(file_path, field, value, vault_password)
-    if not success:
+    result = update_inline_vault_field(
+        file_path, field, value, vault_password, create=create
+    )
+    if result == "missing":
+        _missing_inline_field(file, field)
+    if result == "error":
         click.echo(f"Error: Could not update value for field {field}", err=True)
         raise click.exceptions.Exit(1)
 
-    click.echo(f"Successfully updated value for {field}")
+    click.echo(f"Successfully {result} {field}")
     return 0
+
+
+def _missing_inline_field(file, field):
+    click.echo(
+        f"Error: {file} has no vault block for {field}. Nothing was written; "
+        "pass --create to add it.",
+        err=True,
+    )
+    raise click.exceptions.Exit(1)
