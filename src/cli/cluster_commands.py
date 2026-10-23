@@ -11,6 +11,7 @@ import click
 import yaml
 
 from cli import ansible_commands as ansible
+from cli import playbook_inputs
 from cli.kube_access import connect
 
 CLUSTER_FILE = "cluster.yml"
@@ -256,10 +257,13 @@ def export_cluster(working_directory, environment, output, repo_url, version, re
     nodes = []
     for name, values in sorted(hostvars.items()):
         labels = values.get("hcloud_labels", {})
-        role = ansible._normalize_inventory_value(labels.get("type"))
+        role = playbook_inputs.normalize_inventory_value(labels.get("type"))
         if role not in ("master", "worker"):
             continue
-        if ansible._normalize_inventory_value(labels.get("network")) == "private":
+        if (
+            playbook_inputs.normalize_inventory_value(labels.get("network"))
+            == "private"
+        ):
             raise click.ClickException(
                 "Shared-cluster bootstrap currently requires public SSH access."
             )
@@ -270,8 +274,10 @@ def export_cluster(working_directory, environment, output, repo_url, version, re
         nodes.append(
             {
                 "name": name,
-                "host": ansible._normalize_inventory_value(values["ansible_host"]),
-                "ssh_user": ansible._normalize_inventory_value(
+                "host": playbook_inputs.normalize_inventory_value(
+                    values["ansible_host"]
+                ),
+                "ssh_user": playbook_inputs.normalize_inventory_value(
                     values.get("ansible_user", "root")
                 ),
                 "role": role,
