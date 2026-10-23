@@ -223,7 +223,7 @@ To remove the managed CLI installation:
 curl -fsSL https://deploy-your-startup.com/uninstall.sh | bash
 ```
 
-Removal asks for confirmation and preserves projects, Keychain credentials and
+Removal asks for confirmation and preserves projects, stored Vault passwords and
 cloud resources. Servers continue running and billing until you remove them
 separately. Installations made directly with uv are managed with `uv tool uninstall deploy-your-startup-cli`; the website uninstaller handles its own installations.
 
@@ -291,7 +291,8 @@ attaching to a shared cluster.
 ## Deploy and operate
 
 Run from your generated project's root. Local commands retrieve the project's
-Vault password from macOS Keychain when `--vault-password` is omitted.
+Vault password from the configured backend (macOS Keychain or 1Password, see
+[Manage secrets](#manage-secrets)) when `--vault-password` is omitted.
 
 ```bash
 startup ansible deploy --working-directory deployment --environment production --service backend
@@ -465,12 +466,34 @@ when necessary, and uncordon a node only after it is healthy.
 
 ## Manage secrets
 
-Run from the generated project's root. Bootstrap stores the project Vault
-password in Keychain and waits until you have also saved it in your password
-manager as `VAULT_PASSWORD_<PROJECT>` (for example `VAULT_PASSWORD_EXAMPLE_APP`);
-omit `-p` to retrieve it. On another Mac, the first command that needs the
-password asks for that copy, checks it against the project's Vault and stores
-it in that Mac's Keychain. Preview changes first:
+Run from the generated project's root. Each project's Vault password is
+stored as `VAULT_PASSWORD_<PROJECT>` (for example `VAULT_PASSWORD_EXAMPLE_APP`)
+in the computer's password backend; omit `-p` to retrieve it.
+
+- **macOS Keychain** (default): bootstrap stores the password in Keychain and
+  waits until you have also saved it in your password manager under the same
+  name. On another Mac, the first command that needs the password asks for that
+  copy, checks it against the project's Vault and stores it in that Mac's
+  Keychain.
+- **1Password**: bootstrap stores the password as a Password item in a
+  1Password vault, so every computer signed in to that account can deploy. It
+  needs the [1Password CLI](https://www.1password.dev/cli/) with the desktop app
+  integration turned on (Settings → Developer → Integrate with 1Password CLI);
+  each read is approved in the 1Password app.
+
+Bootstrap offers 1Password once when `op` is signed in. Change the choice for
+this computer at any time; `STARTUP_VAULT_BACKEND=keychain|1password` overrides
+it for a single run:
+
+```bash
+startup config set vault-backend 1password --op-vault Startups
+startup config show
+startup secrets copy-password -r . --from keychain
+```
+
+The setting lives in `~/.config/startup/config.toml` and holds no secrets.
+`copy-password` checks the password against the project's Vault before it
+writes it and leaves the source entry in place. Preview secret changes first:
 
 ```bash
 startup secrets list-vaults --repo deployment
@@ -499,7 +522,7 @@ the directory selected by `-r`.
 
 `get-field` prints a decrypted value. Advanced operations such as
 `rotate-password` require care: encryption-password rotation does not update
-Keychain or the GitHub Actions secret automatically. Inspect the relevant
+the password backend or the GitHub Actions secret automatically. Inspect the relevant
 `startup secrets <command> --help` before proceeding. Prefer stdin over
 value-bearing arguments such as `--field-set`.
 

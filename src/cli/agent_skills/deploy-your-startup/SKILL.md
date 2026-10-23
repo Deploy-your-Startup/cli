@@ -156,7 +156,7 @@ successful production deployment.
 Run these from the project's root directory. `startup ansible` commands take
 `--working-directory deployment --environment production` (abbreviated as
 `…` below); `main` deploys to production. Omit `--vault-password` so the
-password comes from the Keychain.
+password comes from the configured backend (Keychain or 1Password).
 
 | Task | Command |
 |---|---|
@@ -239,10 +239,14 @@ supports `deploy_ref` when reviewing an unpublished shared workflow branch.
 
 Secrets live as inline Ansible Vault fields in
 `deployment/group_vars/<environment>.yml`. The vault password comes from the
-macOS Keychain when `-p` is omitted — always omit it. If this Mac has no
-Keychain entry, the command fails without a terminal; ask the user to run it
-once in their own terminal and paste the password from their password manager
-entry `VAULT_PASSWORD_<PROJECT>`. Never ask for the password in the conversation.
+computer's backend when `-p` is omitted — always omit it. `startup config show`
+names the backend: the macOS Keychain or a 1Password vault, whose reads the
+user approves in the 1Password app. If the backend has no entry
+`VAULT_PASSWORD_<PROJECT>`, the command fails without a terminal; ask the user
+to run it once in their own terminal and paste the password from their password
+manager. If 1Password is not signed in, ask the user to unlock the app. Never
+ask for the password in the conversation, and leave `startup config set` to the
+user.
 
 - Read a value: `startup secrets get-field -f <file> --field <name>`. Do not
   print secrets into the conversation unless the user asked to see that value.

@@ -45,6 +45,8 @@ if [ "$1" == "test_vault" ]; then
     tests/test_vault_templates_integration.py \
     tests/test_vault_distribution_integration.py \
     tests/test_vault_guard.py \
+    tests/test_vault_handoff_integration.py \
+    tests/test_one_password_integration.py \
     tests/test_ci_vault_integration.py \
     tests/test_cli_safety_integration.py
 fi

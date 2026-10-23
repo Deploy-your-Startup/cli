@@ -19,7 +19,7 @@ import yaml
 from . import tailnet
 from .ansible_bin import ansible_bin
 from .vault_backends import (
-    DEFAULT_VAULT_BACKEND,
+    PasswordNotFound,
     get_backend,
     keychain_service_name,  # re-exported for cli.wizard.*
 )
@@ -87,14 +87,15 @@ def _resolve_working_dir(working_directory: str) -> Path:
 def resolve_vault_password(
     vault_password: str | None,
     working_directory: str,
-    backend: str = DEFAULT_VAULT_BACKEND,
+    backend: str | None = None,
 ) -> str:
     """Resolve the vault password.
 
     An explicit ``--vault-password`` always wins. Otherwise the password is
-    read from the configured backend (default: macOS Keychain), keyed by the
-    project name derived from ``working_directory``. When the backend has no
-    entry, an interactive run asks for the password manager copy and stores it.
+    read from the configured backend (macOS Keychain unless `startup config`
+    chose 1Password), keyed by the project name derived from
+    ``working_directory``. When the backend has no entry, an interactive run
+    asks for the password manager copy and stores it.
     """
     if vault_password:
         return vault_password
@@ -110,15 +111,15 @@ def resolve_vault_password(
     }:
         raise click.ClickException(
             "No vault password provided. Pass --vault-password, or unset "
-            "STARTUP_DISABLE_KEYCHAIN_VAULT to allow the default keychain backend."
+            "STARTUP_DISABLE_KEYCHAIN_VAULT to allow the configured password backend."
         )
 
     password_backend = get_backend(backend)
     try:
         return password_backend.read(project_name)
-    except click.ClickException:
-        # A computer without the Keychain entry: ask for the password manager
-        # copy once instead of failing every command.
+    except PasswordNotFound:
+        # A computer without the entry: ask for the password manager copy once
+        # instead of failing every command.
         recovered = recover_from_password_manager(
             project_name, _resolve_working_dir(working_directory), password_backend
         )

@@ -25,7 +25,7 @@ def test_project_step_skip_restores_vault_password(monkeypatch, tmp_path):
 
     monkeypatch.setattr(project_step, "has_placeholders", lambda _path: False)
     monkeypatch.setattr(
-        project_step, "read_keychain_password", lambda _project_name: "stored-secret"
+        project_step, "read_vault_password", lambda _project_name: "stored-secret"
     )
     monkeypatch.setattr(
         project_step,

@@ -2,11 +2,11 @@
 
 These exist because a half-finished bootstrap used to leave the project vault
 encrypted with the *public* ``TEMPLATE_VAULT_PASSWORD`` constant while a
-different, freshly generated password was written to the Keychain / GitHub
+different, freshly generated password was written to the password backend / GitHub
 secret. Nothing verified the end state, so the mismatch went unnoticed.
 
 The helpers here let the wizard:
-  * persist the vault password to the Keychain the moment it exists, and
+  * persist the vault password to the password backend the moment it exists, and
   * assert after rotation that the vault decrypts with the *new* password and
     no longer with the template password — failing loudly if not.
 """
@@ -18,14 +18,15 @@ from pathlib import Path
 import click
 
 from cli.vault.files import check_can_decrypt_with_password
-from cli.vault_backends import get_backend
+from cli.vault_backends import get_backend, keychain_service_name
 from cli.vault_handoff import iter_vault_files, vault_is_decryptable
 
 __all__ = [
     "iter_vault_files",
-    "read_keychain_password",
-    "store_keychain_password",
+    "read_vault_password",
+    "store_vault_password",
     "vault_is_decryptable",
+    "vault_password_label",
     "verify_rotation",
 ]
 
@@ -68,14 +69,19 @@ def verify_rotation(
         )
 
 
-def store_keychain_password(project_name: str, vault_password: str) -> None:
-    """Store (or update) the vault password in the macOS Keychain."""
+def store_vault_password(project_name: str, vault_password: str) -> None:
+    """Store (or update) the vault password in the configured backend."""
     get_backend().write(project_name, vault_password)
 
 
-def read_keychain_password(project_name: str) -> str | None:
+def read_vault_password(project_name: str) -> str | None:
     """Read the stored vault password, or ``None`` if absent/unavailable."""
     try:
         return get_backend().read(project_name)
     except click.ClickException:
         return None
+
+
+def vault_password_label(project_name: str) -> str:
+    """Where the project's vault password is kept, for progress and summaries."""
+    return f"{get_backend().label} as {keychain_service_name(project_name)}"

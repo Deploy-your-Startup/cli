@@ -20,14 +20,16 @@ from cli.bootstrap import (
 )
 from cli.sync_commands import _run_command
 from cli.template_commands import ANSWERS_FILE, render_project
+from cli.user_config_commands import offer_one_password
 from cli.vault_handoff import hand_off_to_password_manager
 
 from ..base import WizardStep, has_placeholders, prompt_user_public_key, repo_exists
 from ..context import BootstrapContext
 from ..vault_guard import (
-    read_keychain_password,
-    store_keychain_password,
+    read_vault_password,
+    store_vault_password,
     vault_is_decryptable,
+    vault_password_label,
     verify_rotation,
 )
 
@@ -146,13 +148,13 @@ class ProjectStep(WizardStep):
             return False
 
         # "Configured" is not enough — the vault must actually be sealed with the
-        # password we have in the Keychain. A previous run that rotated the vault
+        # password we have in the password backend. A previous run that rotated the vault
         # but died before persisting (or vice versa) leaves a healthy-looking dir
         # with an undecryptable vault; re-run the step instead of skipping it.
-        keychain_password = read_keychain_password(ctx.project_name)
+        keychain_password = read_vault_password(ctx.project_name)
         if not vault_is_decryptable(ctx.deployment_dir, keychain_password):
             ui.info(
-                "Cannot decrypt vault with the Keychain password "
+                "Cannot decrypt vault with the stored vault password "
                 "— configuring secrets again..."
             )
             return False
@@ -311,17 +313,19 @@ class ProjectStep(WizardStep):
         # Verify the end state before trusting it: the vault must decrypt with the
         # new password and must NOT decrypt with the public template constant.
         # Without this, a partial rotation silently leaves the vault sealed with
-        # a well-known password while a different one lands in Keychain/CI.
+        # a well-known password while a different one lands in the backend/CI.
         verify_rotation(ctx.deployment_dir, ctx.vault_password, TEMPLATE_VAULT_PASSWORD)
         ui.action_done("Vault password rotated")
 
         # 3f. Persist the vault password immediately — it only lived in memory so
         # far, and every later step (token cleanup, repo creation, push) can fail
-        # and orphan the freshly rotated vault. Keychain first, fail loud.
-        ui.action_start("Saving vault password in Keychain...")
-        store_keychain_password(ctx.project_name, ctx.vault_password)
-        ui.action_done("Vault password saved in Keychain")
-        # The Keychain entry is local to this Mac; the password manager copy is
+        # and orphan the freshly rotated vault. Backend first, fail loud.
+        offer_one_password()
+        label = vault_password_label(ctx.project_name)
+        ui.action_start(f"Saving vault password in {label}...")
+        store_vault_password(ctx.project_name, ctx.vault_password)
+        ui.action_done(f"Vault password saved in {label}")
+        # A Keychain entry is local to this Mac; the password manager copy is
         # what lets another computer deploy the project later.
         hand_off_to_password_manager(ctx.project_name, ctx.vault_password)
 
