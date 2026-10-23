@@ -13,9 +13,9 @@ from cli.cluster_commands import cluster
 from cli.commands.ansible import ansible
 from cli.commands.deploy import deploy
 from cli.commands.hetzner import hetzner
+from cli.commands.lint_contract import lint_contract
 from cli.commands.secrets import _password_scope, secrets
 from cli.factory_commands import factory
-from cli.lint_contract import lint_contract
 from cli.preflight import doctor
 from cli.skill_commands import skills
 from cli.template_commands import template

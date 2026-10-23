@@ -11,10 +11,7 @@ import re
 import tomllib
 from pathlib import Path
 
-import click
 import yaml
-
-from cli import wizard_output as ui
 
 SKIPPED_DIRS = {"node_modules", ".venv", "venv", "dist", "build", "template"}
 HOOK_PATHS = (
@@ -213,27 +210,3 @@ def contract_findings(project: Path) -> list[str]:
             findings += mise_findings(service, label)
     findings += workflow_findings(project)
     return findings
-
-
-@click.command("lint-contract")
-@click.option(
-    "--project-dir",
-    type=click.Path(exists=True, file_okay=False, path_type=Path),
-    default=Path("."),
-    show_default=True,
-    help="Project root containing the services and .github/workflows.",
-)
-def lint_contract(project_dir: Path):
-    """Check the make.sh format/lint contract and its CI gate."""
-    project = project_dir.resolve()
-    services = service_dirs(project)
-    if not services:
-        raise click.ClickException(f"No make.sh found in {project} or its services.")
-    findings = contract_findings(project)
-    for finding in findings:
-        ui.error(finding)
-    if findings:
-        raise click.ClickException(
-            f"Lint contract: {len(findings)} issue(s); no files were changed."
-        )
-    ui.success(f"Lint contract kept by {len(services)} service(s).")
