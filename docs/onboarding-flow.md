@@ -143,7 +143,7 @@ not a measured statement/branch coverage percentage.
   Chrome is checked for the Hetzner browser path, not BYOS/basic setup.
 - `startup bootstrap` asks for name, template, parent folder, deployment target,
   GitHub account confirmation and final approval. Built-in
-  templates use pinned releases: Django/FastAPI v0.1.6, Vue v0.1.5, Astro v0.1.1.
+  templates use pinned releases: Django/FastAPI v0.1.7, Vue v0.1.6, Astro v0.1.2.
   Existing explicit flags remain supported; `--kind fullstack` bypasses the
   picker and keeps the Django/FastAPI default. `--yes` stays unattended.
 - GitHub confirmation shows the signed-in username and proposed repository.
