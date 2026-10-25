@@ -190,7 +190,7 @@ def test_shared_owner_launch_uses_the_compatible_published_default(tmp_path):
     readme = (ROOT / "README.md").read_text()
     assert "CLI `v0.1.26` pins the compatible Django template `v0.1.7`" in readme
     assert "startup bootstrap --kind pitch --template-version v0.1.2" in readme
-    assert "startup sync --source-version v0.1.6 --dry-run" in readme
+    assert "startup sync --source-version v0.1.7 --dry-run" in readme
 
 
 def run_interactive_bootstrap(
