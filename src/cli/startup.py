@@ -15,6 +15,7 @@ from cli.commands.deploy import deploy
 from cli.commands.hetzner import hetzner
 from cli.commands.lint_contract import lint_contract
 from cli.commands.secrets import _password_scope, secrets
+from cli.evidence_commands import evidence
 from cli.factory_commands import factory
 from cli.preflight import doctor
 from cli.skill_commands import skills
@@ -38,6 +39,7 @@ for command in (
     config,
     deploy,
     doctor,
+    evidence,
     factory,
     hetzner,
     lint_contract,
