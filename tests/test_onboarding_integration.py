@@ -121,7 +121,7 @@ def test_launch_plan_shows_the_pinned_default_template(tmp_path):
     result = launch(tmp_path, "my-startup\nexample.com\n\n\n")
     # THEN the plan names the tested template release this CLI pins.
     assert result.returncode == 0, result.stderr
-    assert "Template  Django/FastAPI v0.1.7" in result.stdout
+    assert "Template  Django/FastAPI v0.1.8" in result.stdout
 
 
 def test_explicit_or_custom_templates_keep_their_version(tmp_path):
@@ -184,11 +184,11 @@ def test_shared_owner_launch_uses_the_compatible_published_default(tmp_path):
     )
     # THEN no unpublished template ref or cloud resources are needed for the plan.
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "Template  Django/FastAPI v0.1.7" in result.stdout
+    assert "Template  Django/FastAPI v0.1.8" in result.stdout
     assert "Cancelled. No resources were created." in result.stdout
     assert not (tmp_path / "projects").exists()
     readme = (ROOT / "README.md").read_text()
-    assert "CLI `v0.1.26` pins the compatible Django template `v0.1.7`" in readme
+    assert "CLI `v0.1.28` pins the compatible Django template `v0.1.8`" in readme
     assert "startup bootstrap --kind pitch --template-version v0.1.2" in readme
     assert "startup sync --source-version v0.1.7 --dry-run" in readme
 
@@ -224,11 +224,11 @@ def run_interactive_bootstrap(
 def test_interactive_stack_and_target_choices_precede_credentials(tmp_path):
     # GIVEN a new user starting from bootstrap without fixed kind/provider flags.
     scenarios = [
-        ("1", "2\n1\nexample.com\n\nn\n", "Django/FastAPI v0.1.7", "Hetzner"),
+        ("1", "2\n1\nexample.com\n\nn\n", "Django/FastAPI v0.1.8", "Hetzner"),
         (
             "2",
             "1\nexample.com\n\nn\n",
-            "Vue + Django/FastAPI v0.1.6",
+            "Vue + Django/FastAPI v0.1.7",
             "Bring your own server",
         ),
         ("3", "example.com\nn\n", "Pitch v0.1.2", "Cloudflare Pages"),

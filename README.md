@@ -363,7 +363,7 @@ production environment. Review the selected target version before running them.
 
 ## Deploy several startups to one cluster
 
-CLI `v0.1.26` pins the compatible Django template `v0.1.7`. Create one cluster
+CLI `v0.1.28` pins the compatible Django template `v0.1.8`. Create one cluster
 owner with `startup bootstrap --kind fullstack --provider hetzner --shared-cluster`.
 This provisions infrastructure in your account and puts the owner's application
 in its own namespace. Verify Actions, DNS and HTTPS before attaching another
@@ -737,12 +737,12 @@ and approval. Sprowi remains optional and requires separate engine credentials.
 To create only the workspace:
 
 ```bash
-startup factory init --project-dir my-factory --version v0.1.6 --setup
+startup factory init --project-dir my-factory --version v0.1.11 --setup
 cd my-factory
 startup bootstrap
 ```
 
-Factory v0.1.6 is pinned by the CLI. `--template` and `--version` select a reviewed
+Factory v0.1.11 is pinned by the CLI. `--template` and `--version` select a reviewed
 alternative; new/empty destinations and matching existing Factories are accepted.
 A retry never applies template updates. Initialize Git and commit generated files
 including `.copier-answers.yml` before `startup template update`.
