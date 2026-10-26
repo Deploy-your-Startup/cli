@@ -244,6 +244,7 @@ front; browser account setup may still require a person to sign in.
 | Command | Purpose |
 |---|---|
 | `startup doctor` | Check local first-deploy prerequisites |
+| `startup evidence upload --pr <url> <image>...` | Push PR review screenshots to the private `evidence_repo` from the Factory `projects.yaml` (created on first use) and print Markdown links |
 | `startup lint-contract` | Check a project's `make.sh` format/lint contract and CI lint gate |
 | `startup bootstrap` | Create a project with guided account and deployment setup |
 | `startup ansible` | Provision, deploy, back up, restore and upgrade infrastructure |
