@@ -205,7 +205,11 @@ def test_bootstrap_path_completion_in_real_terminal(tmp_path, prefix, flow):
     assert not steps, output.decode()
     if flow == "factory":
         assert code == 1, output.decode()
-        assert "Chosen folder/" in output.decode(), output.decode()
+        # The completed existing folder must be rejected. An uncompleted prefix
+        # would instead enter setup, so verify CLI behavior rather than readline's
+        # platform-specific bell/redraw bytes between the typed text and suffix.
+        assert "Destination must be empty or an existing Factory" in output.decode()
+        assert "Choose another folder" in output.decode()
         assert (target / "owner.txt").read_text() == "preserve"
     else:
         assert code == 0, output.decode()
