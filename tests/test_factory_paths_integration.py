@@ -6,6 +6,7 @@ import pty
 import select
 import subprocess
 import sys
+import termios
 import time
 from pathlib import Path
 
@@ -149,6 +150,7 @@ def test_bootstrap_path_completion_in_real_terminal(tmp_path, prefix, flow):
         (target / "owner.txt").write_text("preserve")
         arguments = [sys.executable, "-m", "cli.startup", "factory", "onboard"]
     master, slave = pty.openpty()
+    termios.tcsetwinsize(slave, (40, 240))
     process = subprocess.Popen(
         arguments,
         cwd=tmp_path,
@@ -166,6 +168,7 @@ def test_bootstrap_path_completion_in_real_terminal(tmp_path, prefix, flow):
     if flow == "factory":
         steps = [
             (b"]: ", prefix.encode() + b"\t\n"),
+            (b"Choose another folder", b""),
             (b"]: ", b"\x04"),
         ]
     output = b""
@@ -202,7 +205,7 @@ def test_bootstrap_path_completion_in_real_terminal(tmp_path, prefix, flow):
     assert not steps, output.decode()
     if flow == "factory":
         assert code == 1, output.decode()
-        assert "Chosen folder/" in output.decode()
+        assert "Chosen folder/" in output.decode(), output.decode()
         assert (target / "owner.txt").read_text() == "preserve"
     else:
         assert code == 0, output.decode()
