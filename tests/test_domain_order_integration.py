@@ -82,8 +82,11 @@ document.getElementById('btnNextStep').addEventListener('click', () => {{
 </script></body></html>"""
 
 
-def summary_page(contact):
-    return f"""<html><body>
+def summary_page(contact, leave=False):
+    # Leaving the summary (another page, a reload) removes the order form but
+    # orders nothing.
+    script = "<script>setTimeout(() => location.href = '/', 2000)</script>"
+    return f"""<html><body>{script if leave else ""}
 <form method="post" name="billing_form" action="/order.php">
   <input type="hidden" name="step" value="13">
   <table class="order-summary">
@@ -108,6 +111,7 @@ def konsoleh(monkeypatch, tmp_path):
         "owner": None,
         "orders": [],
         "signed_in": True,
+        "leave_summary": False,
     }
 
     class KonsoleH(BaseHTTPRequestHandler):
@@ -159,7 +163,7 @@ def konsoleh(monkeypatch, tmp_path):
                 self.respond(owner_page(state["contacts"]))
             elif step == "4":
                 state["owner"] = state["contacts"][int(form["owner_index"]) - 1]
-                self.respond(summary_page(state["owner"]))
+                self.respond(summary_page(state["owner"], state["leave_summary"]))
             elif "accept_terms_and_conditions" not in form:
                 self.respond(summary_page(state["owner"]))
             else:
@@ -251,3 +255,16 @@ def test_signed_out_user_signs_in_before_the_order(konsoleh, monkeypatch):
     assert result.exit_code == 0, result.output
     assert "Please log in via the browser" in result.output
     assert konsoleh["orders"] == [("sample.de", "alex@example.com")]
+
+
+def test_leaving_the_summary_is_not_an_order(konsoleh):
+    # GIVEN a summary page the user leaves without ordering.
+    konsoleh["contacts"] = CONTACTS[:1]
+    konsoleh["leave_summary"] = True
+    # WHEN the order waits for the browser.
+    result = order("sample.de")
+    # THEN the CLI does not report an order and nothing was ordered.
+    assert result.exit_code == 1
+    assert "placed." not in result.output
+    assert "No order was placed before the timeout." in result.output
+    assert konsoleh["orders"] == []
