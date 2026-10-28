@@ -115,6 +115,18 @@ def main():
         assert (home / ".agents/skills/deploy-your-startup/SKILL.md").is_file()
         assert not (factory / "projects/startups/example-app").exists()
         assert "Sprowi (agent loop, beta) is not set up" in text
+        # A fresh CLI process discovers the saved folder and resumes real setup.
+        for options in (["status"], ["init", "--resume"]):
+            result = subprocess.run(
+                [sys.executable, "-m", "cli.startup", "factory", *options],
+                env=environment,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=180,
+            )
+            assert result.returncode == 0, result.stdout + result.stderr
+            assert str(factory) in result.stdout
         print(
             "Factory onboarding E2E passed: public source, real setup, startup plan and cancellation."
         )

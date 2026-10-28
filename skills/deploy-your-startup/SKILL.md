@@ -365,6 +365,14 @@ when available and uses mise to install runtimes and clone public tooling.
 Without Homebrew, follow the printed prerequisites and rerun the same folder.
 Retries preserve owner files; template updates remain a separate reviewed step.
 
+After an error or interruption, run `startup factory status` to recover the
+saved path and inspect actual files. Continue with `startup factory init --resume`,
+or `startup factory onboard --resume` to proceed into the first-startup wizard.
+Add `--project-dir <folder>` to select an earlier Factory. Resume restores saved
+public options, preserves owner files and rechecks setup commands. Do not delete
+a partial folder. Progress is stored locally outside the repository, without
+credentials or raw errors; it does not establish a live startup deployment.
+
 Run bootstrap from inside the Factory to use `projects/startups` automatically.
 Created Git repositories are registered in `projects.yaml`, including after a
 partial bootstrap. Do not invent `deployed`, `url` or `kubectl_context` values;
