@@ -165,10 +165,11 @@ def test_bootstrap_path_completion_in_real_terminal(tmp_path, prefix, flow):
     ]
     if flow == "factory":
         steps = [
-            (b"Factory folder", prefix.encode() + b"\t\n"),
-            (b"Choose another folder", b"\x04"),
+            (b"]: ", prefix.encode() + b"\t\n"),
+            (b"]: ", b"\x04"),
         ]
     output = b""
+    pending = b""
     deadline = time.monotonic() + 30
     try:
         # WHEN Tab completes the path and the user declines the launch plan.
@@ -184,11 +185,13 @@ def test_bootstrap_path_completion_in_real_terminal(tmp_path, prefix, flow):
             if not chunk:
                 break
             output += chunk
-            if steps and steps[0][0] in output:
-                _, answer = steps.pop(0)
+            pending += chunk
+            while steps and steps[0][0] in pending:
+                marker, answer = steps.pop(0)
+                pending = pending.split(marker, 1)[1]
                 os.write(master, answer)
         else:
-            pytest.fail("Terminal prompt timed out")
+            pytest.fail("Terminal prompt timed out: " + output.decode())
         code = process.wait(timeout=5)
     finally:
         os.close(master)
