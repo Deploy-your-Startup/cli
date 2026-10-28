@@ -784,6 +784,15 @@ alternative; new/empty destinations and matching existing Factories are accepted
 A retry never applies template updates. Initialize Git and commit generated files
 including `.copier-answers.yml` before `startup template update`.
 
+
+Outside a Factory, bootstrap also finds completed saved workspaces and Factories
+immediately under `~/Projects`, including older workspaces without a marker.
+A single match becomes the suggested parent folder; multiple matches offer a
+choice. With `--yes`, multiple matches require an explicit `--output-dir` or
+running inside the intended Factory. An explicit output folder always wins.
+Factory onboarding and bootstrap folder prompts support Tab completion, including
+home-directory shorthand (`~`) and spaces. The project path is shown before setup.
+
 Inside a Factory, bootstrap defaults to `projects/startups`. It registers the
 actual Git remote in `projects.yaml` even if a later step fails. Existing entries
 and comments survive, and conflicting repository mappings stop setup. Only name

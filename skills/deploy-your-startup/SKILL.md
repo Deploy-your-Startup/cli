@@ -381,3 +381,13 @@ folder, use `startup factory register projects/startups/<name>`. Sprowi is optio
 `mise exec -- ./scripts/init.sh --with-sprowi` requires Docker Sandboxes and an
 engine credential. Initialize Git and commit the Factory's `.copier-answers.yml`
 before using `startup template update`.
+
+### Factory folder selection
+
+Outside a Factory, bootstrap also finds completed saved workspaces and Factories
+immediately under `~/Projects`, including older workspaces without a marker.
+A single match becomes the suggested parent folder; multiple matches offer a
+choice. With `--yes`, multiple matches require an explicit `--output-dir` or
+running inside the intended Factory. An explicit output folder always wins.
+Factory onboarding and bootstrap folder prompts support Tab completion, including
+home-directory shorthand (`~`) and spaces. The project path is shown before setup.

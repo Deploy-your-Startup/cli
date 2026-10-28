@@ -251,3 +251,8 @@ publication, owner-file conflicts, differing resume options, actual-file status,
 credential URL rejection and missing state. External tool failures use a local
 mise boundary; owner files and persisted JSON are real. The macOS Factory E2E
 also checks status and resumes setup with real workspace tools.
+
+`test_factory_paths_integration.py` exercises real bootstrap processes for Factory
+discovery from nested and unrelated folders, saved custom locations, multiple
+Factories, explicit overrides, invalid paths, standalone fallback and cancellation.
+Pseudo-terminal scenarios verify Tab completion with `~` and spaces.

@@ -79,18 +79,9 @@ def numbered_choice(prompt: str, options: list[str]) -> int:
 
 def text_input(label: str, **kwargs) -> str:
     """Prompt for text input with consistent indentation."""
-    if not kwargs.get("hide_input") and sys.stdin.isatty() and sys.stdout.isatty():
-        try:
-            # Python scripts do not load readline automatically. Without it,
-            # input() relies on the terminal's single configured erase byte,
-            # so a different Backspace code becomes part of the project name.
-            import readline
-        except ImportError:
-            # Keep basic prompts available on Python builds without readline.
-            pass
-        else:
-            readline.set_auto_history(False)
-    return click.prompt(f"  {label}", **kwargs)
+    from cli.path_prompt import prompt
+
+    return prompt(label, **kwargs)
 
 
 def confirm(prompt: str, default: bool = True) -> bool:
