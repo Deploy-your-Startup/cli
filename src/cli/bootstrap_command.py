@@ -181,18 +181,23 @@ def _ask_stack(options: BootstrapOptions, cluster_config: dict | None) -> None:
 
 
 def _ask_output_dir(options: BootstrapOptions) -> None:
-    # A Factory supplies the shared startup location for every subsequent idea.
     from cli.factory_commands import factory_in_directory
 
     workspace = factory_in_directory(Path.cwd())
     if not options.output_dir and workspace:
         options.output_dir = str(workspace / "projects/startups")
     if not options.output_dir:
-        default = str(Path.home() / "Projects")
+        from cli.factory_paths import bootstrap_folder
+
+        default = str(bootstrap_folder(assume_yes=options.assume_yes))
         options.output_dir = (
             default
             if options.assume_yes
-            else ui.text_input("Project folder", default=default)
+            else ui.text_input(
+                "Project folder",
+                default=default,
+                type=click.Path(file_okay=False),
+            )
         )
     ui.info(f"Project path: {options.project_dir}")
 

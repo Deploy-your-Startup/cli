@@ -366,8 +366,12 @@ def onboard(
         # the chosen folder already holds something else.
         default = suggested_destination(source)
         while True:
-            project_dir = click.prompt(
-                "Factory folder", default=str(default), type=Path
+            project_dir = Path(
+                ui.text_input(
+                    "Factory folder",
+                    default=str(default),
+                    type=click.Path(file_okay=False),
+                )
             )
             problem = destination_problem(project_dir.expanduser().absolute(), source)
             if not problem:
