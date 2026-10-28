@@ -10,13 +10,13 @@ from pathlib import Path
 import click
 
 from cli import wizard_output as ui
+from cli.browser_setup import playwright_install_hint
 from cli.playwright_errors import playwright_error
 
 CF_SIGNUP_URL = "https://dash.cloudflare.com/sign-up"
 CF_TOKEN_URL = "https://dash.cloudflare.com/profile/api-tokens"
 CONFIG_DIR = Path.home() / ".config" / "cloudflare-bootstrap"
-CHROME_USER_DATA_DIR = CONFIG_DIR / "chrome-profile"
-CHROME_CHANNEL = "chrome"
+CHROMIUM_USER_DATA_DIR = CONFIG_DIR / "chromium-profile"
 DEFAULT_TIMEOUT = 60_000
 LOGIN_WAIT_TIMEOUT = 300_000
 FORM_READY_TIMEOUT = 45_000
@@ -37,12 +37,7 @@ def _check_playwright() -> bool:
 
 def _require_playwright() -> None:
     if not _check_playwright():
-        raise click.ClickException(
-            "Browser automation requires Playwright. It ships with a normal\n"
-            "CLI install but is pruned inside project deployments. Install it with:\n"
-            "  uv pip install playwright   (or reinstall deploy-your-startup-cli)\n"
-            "  playwright install chromium"
-        )
+        raise click.ClickException(playwright_install_hint())
 
 
 def create_api_token(
@@ -93,21 +88,16 @@ class CloudflareAutomation:
         from playwright_stealth import Stealth
 
         self._playwright = await async_playwright().start()
-        CHROME_USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
+        CHROMIUM_USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
         self._context = await self._playwright.chromium.launch_persistent_context(
-            user_data_dir=str(CHROME_USER_DATA_DIR),
-            channel=CHROME_CHANNEL,
+            user_data_dir=str(CHROMIUM_USER_DATA_DIR),
             headless=self.headless,
             viewport={"width": 1440, "height": 1000},
             locale="en-US",
             args=["--disable-blink-features=AutomationControlled"],
-            ignore_default_args=[
-                "--disable-extensions",
-                "--disable-component-extensions-with-background-pages",
-            ],
         )
         # Apply directly: the library's Playwright wrapper does not instrument
-        # launch_persistent_context. Preserve Chrome's actual OS and GPU values.
+        # launch_persistent_context. Preserve Chromium's actual OS and GPU values.
         await Stealth(
             navigator_platform=False,
             # Upstream accepts None at runtime but annotates this as str.

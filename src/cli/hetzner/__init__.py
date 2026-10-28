@@ -16,6 +16,8 @@ import importlib.util
 
 import click
 
+from cli.browser_setup import playwright_install_hint
+
 
 def _check_playwright() -> bool:
     """Check if playwright is importable."""
@@ -25,12 +27,7 @@ def _check_playwright() -> bool:
 def _require_playwright():
     """Raise a clear error if playwright is not installed."""
     if not _check_playwright():
-        raise click.ClickException(
-            "Browser automation requires Playwright. It ships with a normal\n"
-            "CLI install but is pruned inside project deployments. Install it with:\n"
-            "  uv pip install playwright   (or reinstall deploy-your-startup-cli)\n"
-            "  playwright install chromium"
-        )
+        raise click.ClickException(playwright_install_hint())
 
 
 # ── Public API ───────────────────────────────────────────────────────

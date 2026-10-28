@@ -30,29 +30,22 @@ class HetznerAutomation:
         await self.close()
 
     async def start(self):
-        """Launch real Chrome with a persistent profile.
+        """Launch managed Chromium with a persistent profile.
 
-        Uses the system Chrome (not Playwright's bundled Chromium) so that
-        native extensions like Apple Passwords work out of the box.
         Login sessions persist across runs via the user data directory.
         """
         from playwright.async_api import async_playwright
 
         self._playwright = await async_playwright().start()
 
-        config.CHROME_USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
+        config.CHROMIUM_USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
         self._context = await self._playwright.chromium.launch_persistent_context(
-            user_data_dir=str(config.CHROME_USER_DATA_DIR),
-            channel=config.CHROME_CHANNEL,
+            user_data_dir=str(config.CHROMIUM_USER_DATA_DIR),
             headless=self.headless,
             viewport={"width": 1280, "height": 900},
             locale="de-DE",
-            args=config.chrome_launch_args(),
-            ignore_default_args=[
-                "--disable-extensions",
-                "--disable-component-extensions-with-background-pages",
-            ],
+            args=config.chromium_launch_args(),
         )
         self._page = (
             self._context.pages[0]

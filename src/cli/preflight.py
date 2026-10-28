@@ -11,6 +11,7 @@ import click
 
 from cli import wizard_output as ui
 from cli.factory_prerequisites import factory_tool_checks, missing_factory_tools
+from cli.browser_setup import chromium_check
 from cli.ssh_keys import public_key_is_valid
 
 
@@ -53,16 +54,7 @@ def local_checks(
             )
         )
     if browser:
-        paths = [
-            Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
-            Path.home() / "Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-        ]
-        checks.append(
-            (
-                any(path.is_file() for path in paths),
-                "Google Chrome for browser setup",
-            )
-        )
+        checks.append(chromium_check())
     return checks
 
 

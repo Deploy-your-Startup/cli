@@ -144,10 +144,8 @@ def konsoleh(monkeypatch, tmp_path):
     root = f"http://127.0.0.1:{server.server_port}"
     monkeypatch.setattr(config, "KONSOLEH_BASE_URL", root)
     monkeypatch.setattr(config, "KONSOLEH_ORDER_URL", root + "/order.php")
-    # Playwright's bundled Chromium with a throwaway profile replaces the
-    # user's Chrome; the browser itself is real.
-    monkeypatch.setattr(config, "CHROME_CHANNEL", None)
-    monkeypatch.setattr(config, "CHROME_USER_DATA_DIR", tmp_path / "profile")
+    # Use managed Chromium with a throwaway persistent profile.
+    monkeypatch.setattr(config, "CHROMIUM_USER_DATA_DIR", tmp_path / "profile")
     monkeypatch.setattr(config, "ORDER_WAIT_TIMEOUT", 3000)
     yield state
     server.shutdown()

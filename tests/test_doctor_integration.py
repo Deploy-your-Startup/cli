@@ -284,3 +284,109 @@ def test_doctor_checks_factory_tools_without_installing(
         assert (binaries / tool).exists() == installed
     if not installed:
         assert "brew install mise yq" in result.stdout
+
+
+def _doctor_browser_probe(environment, cwd):
+    return subprocess.run(
+        [sys.executable, "-m", "cli.startup", "doctor", "--provider", "hetzner"],
+        env=environment,
+        cwd=cwd,
+        text=True,
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+
+
+@pytest.mark.parametrize("installed", [True, False])
+def test_doctor_checks_version_matched_chromium_without_launching(
+    tmp_path, doctor_environment, installed
+):
+    # GIVEN a separate browser cache and the real installed Playwright driver.
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        installed_executable = Path(playwright.chromium.executable_path)
+    assert installed_executable.is_file(), "Install full Chromium before running tests"
+    cache = tmp_path / "browser cache"
+    cache.mkdir()
+    doctor_environment["PLAYWRIGHT_BROWSERS_PATH"] = str(cache)
+    probe = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from playwright.sync_api import sync_playwright; "
+            "p = sync_playwright().start(); print(p.chromium.executable_path); p.stop()",
+        ],
+        env=doctor_environment,
+        text=True,
+        capture_output=True,
+        check=True,
+        timeout=30,
+    )
+    expected = Path(probe.stdout.strip())
+    assert expected.is_relative_to(cache)
+    if installed:
+        expected.parent.mkdir(parents=True)
+        expected.symlink_to(installed_executable)
+    else:
+        # A different revision must not satisfy this installation's requirement.
+        (cache / "chromium-old-revision").mkdir()
+    before = sorted(cache.rglob("*"))
+    # WHEN doctor checks the browser without a download or browser launch.
+    result = _doctor_browser_probe(doctor_environment, tmp_path)
+    # THEN only the matching executable passes, and the cache stays unchanged.
+    marker = "✓" if installed else "✗ Missing:"
+    assert f"{marker} Playwright Chromium for browser setup" in result.stdout
+    if not installed:
+        import shlex
+
+        assert (
+            f"{shlex.quote(sys.executable)} -m playwright install chromium"
+            in result.stdout
+        )
+    assert sorted(cache.rglob("*")) == before
+
+
+def test_doctor_reports_missing_playwright_and_keeps_other_profiles_independent(
+    tmp_path, doctor_environment
+):
+    # GIVEN a real isolated interpreter with CLI dependencies except Playwright.
+    import site
+    import venv
+
+    isolated = tmp_path / "without-playwright"
+    venv.EnvBuilder(with_pip=False, symlinks=True).create(isolated)
+    python = isolated / "bin" / "python"
+    packages = next((isolated / "lib").glob("python*/site-packages"))
+    for source in map(Path, site.getsitepackages()):
+        for entry in source.iterdir():
+            if (
+                entry.name.startswith(("playwright", "__editable__"))
+                or entry.suffix == ".pth"
+            ):
+                continue
+            target = packages / entry.name
+            if not target.exists():
+                target.symlink_to(entry, target_is_directory=entry.is_dir())
+    doctor_environment["PLAYWRIGHT_BROWSERS_PATH"] = str(tmp_path / "empty-cache")
+    # WHEN checking the Hetzner, basic and BYOS profiles via the actual CLI.
+    for arguments in (["--provider", "hetzner"], [], ["--provider", "byos"]):
+        result = subprocess.run(
+            [str(python), "-m", "cli.startup", "doctor", *arguments],
+            env=doctor_environment,
+            cwd=tmp_path,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=30,
+        )
+        # THEN missing Playwright has an actionable repair, only where needed.
+        assert "Traceback" not in result.stderr, result.stderr
+        if arguments == ["--provider", "hetzner"]:
+            assert "Missing: Browser automation requires Playwright" in result.stdout
+            assert "Reinstall deploy-your-startup-cli" in result.stdout
+            assert "-m playwright install chromium" in result.stdout
+        else:
+            assert "Playwright" not in result.stdout + result.stderr
+            assert "Chromium" not in result.stdout + result.stderr

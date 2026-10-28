@@ -10,7 +10,7 @@ key or cloud account cannot block installation completion.
 ```mermaid
 flowchart TD
     A[Install CLI and runtime] --> B[Require GitHub CLI; sign in]
-    B --> C[Full-stack doctor: SSH key and Chrome]
+    B --> C[Full-stack doctor: SSH key and Chromium]
     C -->|Missing| C
     C -->|Pass| D[Optional agent skill]
     D --> E[Bootstrap with fullstack and Hetzner fixed]
@@ -140,7 +140,7 @@ not a measured statement/branch coverage percentage.
 
 - Plain `startup doctor` checks Git, Git identity, GitHub CLI/auth/scopes and uv.
   Add `--provider hetzner` or `--provider byos` for deployment prerequisites.
-  Chrome is checked for the Hetzner browser path, not BYOS/basic setup.
+  Chromium is checked for the Hetzner browser path, not BYOS/basic setup.
 - `startup bootstrap` asks for name, template, parent folder, deployment target,
   GitHub account confirmation and final approval. Built-in
   templates use pinned releases: Django/FastAPI v0.1.7, Vue v0.1.6, Astro v0.1.2.

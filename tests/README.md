@@ -99,7 +99,7 @@ command with isolated local prerequisites and a GitHub CLI stand-in. It checks
 success/failure symbols, terminal colors, redirected output, login/scope guidance,
 nonzero exit status for missing requirements and credential-output redaction.
 It also checks that basic setup needs no server dependencies and that BYOS can
-select a custom public-key path without Chrome or a Hetzner account.
+select a custom public-key path without Chromium or a Hetzner account.
 
 `uv run --extra dev pytest tests/test_onboarding_integration.py tests/test_vault_guard.py`
 exercises the actual CLI prompts, the domain ownership choice, optional settings,
@@ -211,13 +211,13 @@ on a real BYOS VPS; those provider flows remain unverified by this local suite.
 ## Cloudflare browser setup
 
 `uv run --extra dev pytest tests/test_cloudflare_browser_integration.py` launches
-real installed Chrome with disposable persistent profiles against a local HTTP
+managed Chromium with disposable persistent profiles against a local HTTP
 provider. It checks ready, delayed and denied sessions, no repeated navigation
 while the token page loads, and Stealth scripts in the first tab, new tabs and
 iframes. The public token-creation entrypoint also fills every permission row,
 submits the form once and extracts a delayed one-time token from either the
 success box or curl example without printing it. Both template-picker and direct
-form entry are covered. Google Chrome must be installed. Live Cloudflare login,
+form entry are covered. Managed Chromium must be installed. Live Cloudflare login,
 challenges, permission selectors and API token creation require separate account
 verification; local provider checks cannot establish live compatibility.
 
@@ -229,3 +229,24 @@ publication, owner-file conflicts, differing resume options, actual-file status,
 credential URL rejection and missing state. External tool failures use a local
 mise boundary; owner files and persisted JSON are real. The macOS Factory E2E
 also checks status and resumes setup with real workspace tools.
+
+## Managed Chromium prerequisites and sessions
+
+Install the full browser before running the suite:
+`uv run --extra dev python -m playwright install chromium` (CI adds `--with-deps`).
+This includes the headed executable checked by doctor and the headless shell used
+by fixture scenarios. Browser downloads remain explicit. Use the same
+`PLAYWRIGHT_BROWSERS_PATH` for installation and test execution if overriding it.
+
+`test_doctor_integration.py` runs the real CLI against isolated browser caches
+with a matching executable, a missing revision and a runtime without Playwright.
+Basic and BYOS checks remain browser-independent. Doctor never launches or
+installs a browser. The Hetzner, KonsoleH and Cloudflare browser scenarios use
+managed Chromium against local provider fixtures, including persistent cookies
+across browser restarts and the shared Hetzner/KonsoleH profile.
+`test_auth0_browser_integration.py` verifies the public login entrypoint against
+a local TLS provider twice, checking managed launch arguments and fresh ephemeral
+sessions; only headed display and trust of the disposable certificate differ.
+Live account login, challenges and provider operations remain separate manual
+checks. A headed smoke check can use a disposable profile and local HTML without
+accessing any provider account.

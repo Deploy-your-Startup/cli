@@ -65,17 +65,53 @@ def test_create_project_clicks_through_console_announcement(
     # GIVEN the observed projects markup, optionally covered by the changelog.
     root, pending, created = console
     pending["announcement"] = announcement
-    monkeypatch.setattr(config, "CHROME_USER_DATA_DIR", tmp_path / "profile")
+    monkeypatch.setattr(config, "CHROMIUM_USER_DATA_DIR", tmp_path / "profile")
     monkeypatch.setattr(config, "HETZNER_BASE_URL", root)
     monkeypatch.setattr(config, "HETZNER_PROJECTS_URL", root + "/projects")
 
     async def scenario():
         async with HetznerAutomation(headless=True) as bot:
-            # WHEN the public step creates a project in a real Chrome session.
+            # WHEN the public step creates a project in a real Chromium session.
             result = await bot.create_project("sample-startup")
             # THEN it is created once and the browser ends up inside it.
             assert result is True
             assert created == ["sample-startup"]
             assert bot.page.url == f"{root}/projects/1002"
+
+    asyncio.run(scenario())
+
+
+def test_hetzner_sessions_survive_restart_and_are_shared_with_konsoleh(
+    monkeypatch, tmp_path, console
+):
+    # GIVEN the shared Chromium profile and a persistent provider session cookie.
+    from cli.hetzner.robot import HetznerKonsoleHAutomation
+
+    root, _, _ = console
+    monkeypatch.setattr(config, "CHROMIUM_USER_DATA_DIR", tmp_path / "chromium-profile")
+
+    async def scenario():
+        async with HetznerAutomation(headless=True) as bot:
+            await bot.page.goto(root + "/projects")
+            await bot.page.context.add_cookies(
+                [
+                    {
+                        "name": "session",
+                        "value": "local-fixture",
+                        "url": root,
+                        "expires": 4102444800,
+                    }
+                ]
+            )
+        # WHEN restarting both public browser entrypoints on the same profile.
+        for browser in (HetznerKonsoleHAutomation, HetznerAutomation):
+            async with browser(headless=True) as bot:
+                await bot.page.goto(root + "/projects")
+                # THEN the persistent cookie remains available after each restart.
+                cookies = await bot.page.context.cookies(root)
+                assert any(
+                    c["name"] == "session" and c["value"] == "local-fixture"
+                    for c in cookies
+                )
 
     asyncio.run(scenario())

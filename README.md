@@ -77,7 +77,7 @@ Redirected output keeps the symbols without terminal color codes.
 
 `startup doctor` checks CLI/GitHub setup and the Factory tools `mise` and `yq`.
 It prints an installation command for missing tools without installing anything.
-It does not require a server, an SSH key, a cloud account or Chrome. Use `startup doctor --provider hetzner` or
+It does not require a server, an SSH key, a cloud account or Chromium. Use `startup doctor --provider hetzner` or
 `startup doctor --provider byos` for target-specific checks. Custom public keys
 can be supplied to both doctor and bootstrap with `--ssh-public-key ~/.ssh/work.pub`.
 This is your **server-access public key**, separate from GitHub authentication and
@@ -135,9 +135,23 @@ k3s), builds and deploys the application. Local `make.sh setup`, `infrastructure
 and `deploy` commands are not required for this bootstrap path. Follow the Actions
 link, point the domain at your server, and verify DNS and HTTPS.
 
+### Browser setup
+
+Browser automation uses Playwright's managed Chromium. Browser downloads are
+explicit: run `startup doctor --provider hetzner` and use the installation
+command it prints (`<CLI-python> -m playwright install chromium`). This uses
+the CLI's Python interpreter to install the matching browser version. Re-run
+it after a Playwright upgrade. `PLAYWRIGHT_BROWSERS_PATH` is respected; use the
+same value during installation and when running the CLI. Doctor only checks
+for the expected executable; it never downloads or launches a browser.
+
+Hetzner Cloud and KonsoleH share a dedicated `chromium-profile` directory;
+Cloudflare has its own. Existing `chrome-profile` directories are left untouched.
+Sign in again after upgrading. Auth0 verification uses an ephemeral session.
+
 ### Landing page on Cloudflare Pages
 
-Cloudflare browser setup uses installed Google Chrome, a dedicated persistent
+Cloudflare browser setup uses managed Chromium, a dedicated persistent
 profile and `playwright-stealth`. Complete sign-in and any Cloudflare checks in
 the browser; setup waits for the rendered **User API Tokens** dashboard before
 continuing. Stealth does not guarantee acceptance by Cloudflare. If browser

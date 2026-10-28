@@ -49,10 +49,10 @@ def dashboard():
 def test_login_waits_for_dashboard_with_stealth(
     monkeypatch, tmp_path, dashboard, state
 ):
-    # GIVEN a fresh persistent Chrome profile and a local provider boundary.
+    # GIVEN a fresh persistent Chromium profile and a local provider boundary.
     root, requests = dashboard
     target = f"{root}/profile/api-tokens/{state}"
-    monkeypatch.setattr(cloudflare, "CHROME_USER_DATA_DIR", tmp_path / "profile")
+    monkeypatch.setattr(cloudflare, "CHROMIUM_USER_DATA_DIR", tmp_path / "profile")
     monkeypatch.setattr(cloudflare, "CF_TOKEN_URL", target)
     monkeypatch.setattr(cloudflare, "LOGIN_WAIT_TIMEOUT", 6000)
 
@@ -122,7 +122,7 @@ def test_create_token_with_current_cloudflare_form(
     server = ThreadingHTTPServer(("127.0.0.1", 0), Provider)
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    monkeypatch.setattr(cloudflare, "CHROME_USER_DATA_DIR", tmp_path / "profile")
+    monkeypatch.setattr(cloudflare, "CHROMIUM_USER_DATA_DIR", tmp_path / "profile")
     monkeypatch.setattr(
         cloudflare,
         "CF_TOKEN_URL",
@@ -132,7 +132,7 @@ def test_create_token_with_current_cloudflare_form(
     )
     monkeypatch.setattr(cloudflare, "FORM_READY_TIMEOUT", 1500)
     try:
-        # WHEN the public entrypoint drives a real Chrome session end to end.
+        # WHEN the public entrypoint drives a real Chromium session end to end.
         token = cloudflare.create_api_token(
             token_name="example-production", headless=True
         )
@@ -153,3 +153,36 @@ def test_create_token_with_current_cloudflare_form(
         server.shutdown()
         server.server_close()
         thread.join()
+
+
+def test_cloudflare_session_survives_browser_restart(monkeypatch, tmp_path, dashboard):
+    # GIVEN a dedicated persistent Chromium profile and local provider session.
+    root, _ = dashboard
+    monkeypatch.setattr(
+        cloudflare, "CHROMIUM_USER_DATA_DIR", tmp_path / "chromium-profile"
+    )
+
+    async def scenario():
+        async with cloudflare.CloudflareAutomation(headless=True) as bot:
+            await bot.page.goto(root + "/ready")
+            await bot.page.context.add_cookies(
+                [
+                    {
+                        "name": "session",
+                        "value": "local-fixture",
+                        "url": root,
+                        "expires": 4102444800,
+                    }
+                ]
+            )
+        # WHEN restarting Cloudflare automation.
+        async with cloudflare.CloudflareAutomation(headless=True) as bot:
+            await bot.page.goto(root + "/ready")
+            # THEN the session is still present in the dedicated profile.
+            cookies = await bot.page.context.cookies(root)
+            assert any(
+                c["name"] == "session" and c["value"] == "local-fixture"
+                for c in cookies
+            )
+
+    asyncio.run(scenario())

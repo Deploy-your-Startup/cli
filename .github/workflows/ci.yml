@@ -55,8 +55,8 @@ jobs:
           docker info >/dev/null
       # Domain-order integration tests drive a real headless browser against
       # a local KonsoleH stand-in.
-      - name: Install headless browser
-        run: uv run --extra dev playwright install --with-deps chromium-headless-shell
+      - name: Install managed Chromium
+        run: uv run --extra dev python -m playwright install --with-deps chromium
       - name: Run tests
         run: ./make.sh test --shard ${{ matrix.shard }}/3
         env:

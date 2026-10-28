@@ -25,13 +25,20 @@ hand-written scaffolding, raw `ansible-vault` or ad-hoc `ansible-playbook` runs.
    `~/.local/bin`. Early access supports macOS only. If Git is missing the user
    first runs `xcode-select --install`.
 2. Run `startup doctor` for basic CLI/GitHub setup and Factory tools (`mise`, `yq`). It is read-only and does not
-   require SSH, Chrome or a cloud account. After selecting a target, use
+   require SSH, Chromium or a cloud account. After selecting a target, use
    `startup doctor --provider hetzner` or `startup doctor --provider byos`.
    Fix each `✗ Missing:` line with the
    command it prints (for example `gh auth login --git-protocol https --scopes
    repo,workflow,read:packages,write:packages`). Commands that need the user's
    browser or password — GitHub login, Hetzner sign-up — are theirs to
    complete; tell them exactly what to run and wait.
+   Browser automation uses Playwright's managed Chromium, downloaded separately.
+   If doctor reports it missing, run the printed `<CLI-python> -m playwright
+   install chromium` command. Keep `PLAYWRIGHT_BROWSERS_PATH` the same when
+   installing and running. Downloads are explicit; doctor never opens a browser.
+   Dedicated `chromium-profile` sessions replace the old Chrome profiles without
+   changing them; existing users sign in again. Hetzner Cloud and KonsoleH share
+   one profile, Cloudflare uses another, and Auth0 sessions remain ephemeral.
 3. When in doubt about an option, read `startup <command> --help` instead of
    guessing. The help output is the source of truth for the installed version.
 
