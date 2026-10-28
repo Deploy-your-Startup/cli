@@ -61,6 +61,7 @@ def validate_browser_session(context, origin: str) -> None:
 
 def validate_live_login(origin: str, tenant: str, timeout: int) -> None:
     """Human completes login in an ephemeral browser; never persist auth state."""
+    from cli.browser_runtime import launch_options
     from cli.cloudflare import _require_playwright
     from cli.playwright_errors import playwright_error
 
@@ -69,7 +70,9 @@ def validate_live_login(origin: str, tenant: str, timeout: int) -> None:
 
     try:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(channel="chrome", headless=False)
+            browser = playwright.chromium.launch(
+                **launch_options(playwright.chromium), headless=False
+            )
             try:
                 context = browser.new_context()
                 try:
@@ -119,7 +122,7 @@ def validate_live_login(origin: str, tenant: str, timeout: int) -> None:
                 browser.close()
     except playwright_error():
         raise click.ClickException(
-            "Browser login did not complete. Check the deployment and Chrome, then try again. "
+            "Browser login did not complete. Check the deployment and selected browser, then try again. "
             "Browser details have been withheld to protect credentials."
         ) from None
     click.echo(

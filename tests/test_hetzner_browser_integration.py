@@ -64,6 +64,7 @@ def test_create_project_clicks_through_console_announcement(
 ):
     # GIVEN the observed projects markup, optionally covered by the changelog.
     root, pending, created = console
+    monkeypatch.setenv("STARTUP_BROWSER", "chromium")
     pending["announcement"] = announcement
     monkeypatch.setattr(config, "CHROME_USER_DATA_DIR", tmp_path / "profile")
     monkeypatch.setattr(config, "HETZNER_BASE_URL", root)

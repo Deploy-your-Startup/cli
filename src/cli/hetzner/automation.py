@@ -7,6 +7,7 @@ what happens and complete manual steps (login, 2FA, captcha).
 
 from __future__ import annotations
 
+from ..browser_runtime import launch_persistent_context
 from ..playwright_errors import playwright_error
 from . import _output as ui
 from . import config
@@ -30,21 +31,14 @@ class HetznerAutomation:
         await self.close()
 
     async def start(self):
-        """Launch real Chrome with a persistent profile.
-
-        Uses the system Chrome (not Playwright's bundled Chromium) so that
-        native extensions like Apple Passwords work out of the box.
-        Login sessions persist across runs via the user data directory.
-        """
+        """Launch the selected browser with its own persistent profile."""
         from playwright.async_api import async_playwright
 
         self._playwright = await async_playwright().start()
 
-        config.CHROME_USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-        self._context = await self._playwright.chromium.launch_persistent_context(
-            user_data_dir=str(config.CHROME_USER_DATA_DIR),
-            channel=config.CHROME_CHANNEL,
+        self._context = await launch_persistent_context(
+            self._playwright,
+            config.CHROME_USER_DATA_DIR,
             headless=self.headless,
             viewport={"width": 1280, "height": 900},
             locale="de-DE",
