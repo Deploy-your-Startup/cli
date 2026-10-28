@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import re
 import shlex
-import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -14,6 +13,7 @@ import click
 import yaml
 
 from cli import wizard_output as ui
+from cli.factory_prerequisites import ensure_factory_tools
 from cli.template_commands import ANSWERS_FILE, render_project
 
 FACTORY_TEMPLATE = "https://github.com/Deploy-your-Startup/startup-factory-template.git"
@@ -226,6 +226,8 @@ def initialize_factory(
     problem = destination_problem(destination, source)
     if problem:
         raise click.ClickException(problem)
+    if setup:
+        ensure_factory_tools()
     if destination.exists() and any(destination.iterdir()):
         ui.info(f"Using existing Factory at {destination}; owner files are preserved.")
     else:
@@ -242,24 +244,6 @@ def initialize_factory(
         ui.success(f"Factory created at {destination}.")
     registry_document(destination)
     if setup:
-        # kubectl is optional: only inspecting a full-stack cluster needs it.
-        missing = [
-            tool for tool in ("mise", "uv", "yq", "gh") if not shutil.which(tool)
-        ]
-        if missing and shutil.which("brew"):
-            ui.info(
-                "Installing missing Factory tools with Homebrew: " + ", ".join(missing)
-            )
-            subprocess.run(["brew", "install", *missing], check=True)
-            missing = [tool for tool in missing if not shutil.which(tool)]
-        if missing:
-            raise click.ClickException(
-                "Missing Factory tools: "
-                + ", ".join(missing)
-                + ". Install with `brew install "
-                + " ".join(missing)
-                + "`, then rerun this command; your Factory is preserved."
-            )
         subprocess.run(
             ["mise", "trust", str(destination / "mise.toml")],
             check=True,

@@ -24,7 +24,7 @@ hand-written scaffolding, raw `ansible-vault` or ad-hoc `ansible-playbook` runs.
    The installer brings its own Python and puts `startup` into
    `~/.local/bin`. Early access supports macOS only. If Git is missing the user
    first runs `xcode-select --install`.
-2. Run `startup doctor` for basic CLI/GitHub setup. It is read-only and does not
+2. Run `startup doctor` for basic CLI/GitHub setup and Factory tools (`mise`, `yq`). It is read-only and does not
    require SSH, Chrome or a cloud account. After selecting a target, use
    `startup doctor --provider hetzner` or `startup doctor --provider byos`.
    Fix each `✗ Missing:` line with the
@@ -360,7 +360,7 @@ account is required by the standard workflow.
 The guided installer runs `startup factory onboard` to create and set up the
 owner's Factory before bootstrap. For a workspace without a startup, use
 `startup factory init --project-dir <folder> --setup`. The CLI pins the public
-Factory template release. Setup installs missing workspace tools with Homebrew
+Factory template release. Setup checks tools before creating Factory files and installs missing workspace tools with Homebrew
 when available and uses mise to install runtimes and clone public tooling.
 Without Homebrew, follow the printed prerequisites and rerun the same folder.
 Retries preserve owner files; template updates remain a separate reviewed step.

@@ -164,8 +164,9 @@ def test_basic_doctor_needs_no_server_browser_or_cloud_account(
 ):
     # GIVEN GitHub and the CLI runtime, but no SSH key, browser or cloud account.
     binaries = Path(doctor_environment["PATH"])
-    (binaries / "uv").write_text("#!/bin/sh\nexit 0\n")
-    (binaries / "uv").chmod(0o755)
+    for tool in ("uv", "mise", "yq"):
+        (binaries / tool).write_text("#!/bin/sh\nexit 0\n")
+        (binaries / tool).chmod(0o755)
     # WHEN checking the installation through the actual CLI process.
     result = subprocess.run(
         [sys.executable, "-m", "cli.startup", "doctor"],
@@ -247,3 +248,39 @@ def test_doctor_does_not_report_invalid_keys_as_ready(tmp_path, doctor_environme
     assert result.returncode != 0
     assert "✗ Missing: SSH public key for server access" in result.stdout
     assert "malformed-synthetic-key" not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("installed", [False, True])
+def test_doctor_checks_factory_tools_without_installing(
+    tmp_path, doctor_environment, installed
+):
+    # GIVEN a working CLI/GitHub setup and missing or available workspace tools.
+    binaries = Path(doctor_environment["PATH"])
+    for tool in ("uv", "brew", *(("mise", "yq") if installed else ())):
+        path = binaries / tool
+        path.write_text("#!/bin/sh\nexit 99\n")
+        path.chmod(0o755)
+    brew_calls = tmp_path / "brew-calls"
+    (binaries / "brew").write_text(
+        f"#!{sys.executable}\nfrom pathlib import Path\n"
+        f"Path({str(brew_calls)!r}).write_text('unexpected install')\n"
+    )
+    # WHEN checking the machine through the real doctor command.
+    result = subprocess.run(
+        [sys.executable, "-m", "cli.startup", "doctor"],
+        env=doctor_environment,
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+    # THEN missing tools fail with a repair command, without executing Homebrew.
+    assert result.returncode == (0 if installed else 1), result.stdout + result.stderr
+    assert not brew_calls.exists()
+    marker = "✓" if installed else "✗ Missing:"
+    for tool in ("mise", "yq"):
+        assert f"{marker} {tool} executable on PATH" in result.stdout
+        assert (binaries / tool).exists() == installed
+    if not installed:
+        assert "brew install mise yq" in result.stdout

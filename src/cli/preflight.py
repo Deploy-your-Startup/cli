@@ -10,6 +10,7 @@ from pathlib import Path
 import click
 
 from cli import wizard_output as ui
+from cli.factory_prerequisites import factory_tool_checks, missing_factory_tools
 from cli.ssh_keys import public_key_is_valid
 
 
@@ -93,42 +94,8 @@ def _vault_backend_checks() -> list[tuple[bool, str]]:
     return [(True, f"Vault passwords in {backend.label}")]
 
 
-@click.command()
-@click.option(
-    "--provider",
-    type=click.Choice(["hetzner", "byos"]),
-    help="Also check server deployment prerequisites for this provider.",
-)
-@click.option(
-    "--ssh-public-key",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="Public key to check instead of the default SSH key paths.",
-)
-@click.option(
-    "--project-dir",
-    type=click.Path(exists=True, file_okay=False, path_type=Path),
-    help="Check project legal/consent configuration instead of machine prerequisites.",
-)
-def doctor(provider=None, ssh_public_key=None, project_dir: Path | None = None):
-    """Check CLI setup, a deployment target, or a project's policy."""
-    if project_dir is not None:
-        if provider is not None or ssh_public_key is not None:
-            raise click.UsageError(
-                "Use --project-dir separately from --provider and --ssh-public-key."
-            )
-        from cli.site_policy import check_project_policy
-
-        check_project_policy(project_dir.resolve())
-        return
-    if ssh_public_key and provider is None:
-        raise click.UsageError(
-            "Use --ssh-public-key with --provider hetzner or --provider byos."
-        )
-    checks = local_checks(
-        browser=provider == "hetzner",
-        server=provider is not None,
-        public_key_path=ssh_public_key,
-    )
+def _github_checks() -> list[tuple[bool, str]]:
+    checks = []
     if shutil.which("gh"):
         status = subprocess.run(
             ["gh", "auth", "status"], capture_output=True, text=True, check=False
@@ -150,12 +117,56 @@ def doctor(provider=None, ssh_public_key=None, project_dir: Path | None = None):
                     "GitHub workflow + package scopes (gh auth refresh -h github.com -s repo,workflow,read:packages,write:packages)",
                 )
             )
+    return checks
+
+
+@click.command()
+@click.option(
+    "--provider",
+    type=click.Choice(["hetzner", "byos"]),
+    help="Also check server deployment prerequisites for this provider.",
+)
+@click.option(
+    "--ssh-public-key",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Public key to check instead of the default SSH key paths.",
+)
+@click.option(
+    "--project-dir",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help="Check project legal/consent configuration instead of machine prerequisites.",
+)
+def doctor(provider=None, ssh_public_key=None, project_dir: Path | None = None):
+    """Check CLI/Factory setup, a deployment target, or a project's policy."""
+    if project_dir is not None:
+        if provider is not None or ssh_public_key is not None:
+            raise click.UsageError(
+                "Use --project-dir separately from --provider and --ssh-public-key."
+            )
+        from cli.site_policy import check_project_policy
+
+        check_project_policy(project_dir.resolve())
+        return
+    if ssh_public_key and provider is None:
+        raise click.UsageError(
+            "Use --ssh-public-key with --provider hetzner or --provider byos."
+        )
+    checks = local_checks(
+        browser=provider == "hetzner",
+        server=provider is not None,
+        public_key_path=ssh_public_key,
+    )
+    if provider is None:
+        checks.extend(factory_tool_checks())
+    checks.extend(_github_checks())
     checks.extend(_vault_backend_checks())
     for ok, label in checks:
         if ok:
             ui.success(label)
         else:
             ui.error(f"Missing: {label}")
+    if provider is None and (missing := missing_factory_tools()):
+        ui.info("Install missing Factory tools: brew install " + " ".join(missing))
     if provider == "hetzner":
         click.echo(
             "For this target, you need a Hetzner Cloud account and a domain whose DNS you can edit. Infrastructure is billed to your account."

@@ -479,16 +479,51 @@ def test_onboarding_offers_a_free_folder_when_the_default_is_taken(workspace, tm
         # System tools only: no Homebrew or workspace tools for setup.
         env={"HOME": str(home), "PATH": "/usr/bin:/bin"},
     )
-    # THEN the user is asked again and the Factory goes to the free folder.
+    # THEN the user is asked again, but missing tools prevent creating the Factory.
     output = result.stdout + result.stderr
     suggestion = home / "Projects/startup-factory-2"
     assert f"[{suggestion}]" in output
     assert "Choose another folder" in output
-    assert (suggestion / ".startup-factory.yml").is_file()
+    assert not suggestion.exists()
     assert (occupied / "notes").read_text() == "keep"
     assert sorted(p.name for p in occupied.iterdir()) == ["notes"]
     # The guided flow continues itself, so it prints no manual next steps.
     assert "Next: cd" not in output
     # Without workspace tools, setup stops with an actionable message.
     assert result.returncode != 0
-    assert "your Factory is preserved" in result.stderr
+    assert "existing Factory files are preserved" in result.stderr
+
+
+@pytest.mark.parametrize("command", ["init", "onboard"])
+@pytest.mark.parametrize("existing", [False, True])
+def test_missing_tools_stop_before_factory_creation(workspace, command, existing):
+    # GIVEN a machine without Homebrew and Factory workspace tools.
+    source, destination = workspace
+    before = {}
+    if existing:
+        assert initialize(workspace).returncode == 0
+        (destination / "owner-notes").write_text("keep")
+        before = {p.name: p.read_bytes() for p in destination.iterdir()}
+    # WHEN starting setup through either public Factory entrypoint.
+    result = cli(
+        source.parent,
+        "factory",
+        command,
+        "--template",
+        str(source),
+        "--version",
+        "v1.0.0",
+        "--project-dir",
+        str(destination),
+        *(["--setup"] if command == "init" else []),
+        env={"PATH": str(source.parent / "no-tools")},
+    )
+    # THEN the user sees all missing tools before any Factory files are written.
+    assert result.returncode == 1
+    assert "Missing Factory tools: mise, uv, yq, gh" in result.stderr
+    assert "brew install mise uv yq gh" in result.stderr
+    if existing:
+        assert {p.name: p.read_bytes() for p in destination.iterdir()} == before
+    else:
+        assert not destination.exists()
+    assert "Factory created" not in result.stdout

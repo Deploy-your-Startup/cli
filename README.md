@@ -75,8 +75,9 @@ startup bootstrap
 with a red `✗ Missing:` followed by the requirement and available setup guidance.
 Redirected output keeps the symbols without terminal color codes.
 
-`startup doctor` checks CLI/GitHub setup without requiring a server, an SSH key,
-a cloud account or Chrome. Use `startup doctor --provider hetzner` or
+`startup doctor` checks CLI/GitHub setup and the Factory tools `mise` and `yq`.
+It prints an installation command for missing tools without installing anything.
+It does not require a server, an SSH key, a cloud account or Chrome. Use `startup doctor --provider hetzner` or
 `startup doctor --provider byos` for target-specific checks. Custom public keys
 can be supplied to both doctor and bootstrap with `--ssh-public-key ~/.ssh/work.pub`.
 This is your **server-access public key**, separate from GitHub authentication and
@@ -727,8 +728,9 @@ startup factory onboard
 
 Choose a workspace folder (default `~/Projects/startup-factory`). When another
 folder already uses that name, onboarding suggests the next free one, such as
-`~/Projects/startup-factory-2`, and asks again instead of stopping. Setup installs
-missing workspace tools using Homebrew when available, installs the declared
+`~/Projects/startup-factory-2`, and asks again instead of stopping. Setup checks
+required tools before creating Factory files, installs missing workspace tools
+using Homebrew when available, installs the declared
 mise runtimes and clones public tooling. Without Homebrew it prints the missing
 prerequisites; install them and rerun with the same folder. Existing Factory files
 and applications are preserved. Cloud setup starts only after bootstrap's plan
