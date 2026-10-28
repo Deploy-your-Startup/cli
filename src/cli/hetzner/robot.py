@@ -76,17 +76,14 @@ class HetznerKonsoleHAutomation:
         """Navigate to KonsoleH and wait for user to log in."""
         target_url = config.KONSOLEH_ORDER_URL
 
-        # Check if already logged in
-        try:
-            await self.page.goto(target_url, wait_until="networkidle")
-            if _is_konsoleh(self.page.url) and "/404" not in self.page.url:
-                ui.success("Already logged in to KonsoleH (saved session).")
-                return True
-        except playwright_error():
-            pass
-
-        ui.info("Opening Hetzner KonsoleH login...")
-        await self.page.goto(target_url, wait_until="networkidle")
+        # Signed out, the order page leads to Hetzner's sign-in, whose browser
+        # check keeps navigating by script. A page load there can abort or
+        # never settle, so only the URL tells whether the session is valid,
+        # and the page is left alone while the user signs in.
+        await self._open_konsoleh(target_url)
+        if _signed_in_konsoleh(self.page.url):
+            ui.success("Already logged in to KonsoleH (saved session).")
+            return True
 
         ui.info(
             "Please log in via the browser:\n"
@@ -97,19 +94,25 @@ class HetznerKonsoleHAutomation:
 
         try:
             await self.page.wait_for_url(
-                f"{config.KONSOLEH_BASE_URL}/**",
+                lambda url: _is_konsoleh(url) and "/auth.php" not in url,
                 timeout=config.LOGIN_WAIT_TIMEOUT,
             )
-
-            if "console.hetzner.com/404" in self.page.url or "/404" in self.page.url:
-                ui.warning(
-                    "Hetzner redirected to a 404 page after login. Opening KonsoleH again..."
-                )
-                await self.page.goto(target_url, wait_until="networkidle")
-
-            return _is_konsoleh(self.page.url)
         except playwright_error():
             return False
+
+        if "/404" in self.page.url:
+            ui.warning(
+                "Hetzner redirected to a 404 page after login. Opening KonsoleH again..."
+            )
+            await self._open_konsoleh(target_url)
+        return _signed_in_konsoleh(self.page.url)
+
+    async def _open_konsoleh(self, url: str) -> None:
+        """Start a navigation; an aborted or unsettled load is judged by the URL."""
+        try:
+            await self.page.goto(url, wait_until="domcontentloaded")
+        except playwright_error():
+            pass
 
     # ── Handle Check/Creation ────────────────────────────────────────
 
@@ -624,6 +627,10 @@ def _split_domain(domain: str) -> tuple[str, str]:
 
 def _is_konsoleh(url: str) -> bool:
     return urlparse(url).netloc == urlparse(config.KONSOLEH_BASE_URL).netloc
+
+
+def _signed_in_konsoleh(url: str) -> bool:
+    return _is_konsoleh(url) and not any(part in url for part in ("/auth.php", "/404"))
 
 
 def _describe_contact(contact: dict) -> str:

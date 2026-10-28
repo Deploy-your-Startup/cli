@@ -2,6 +2,7 @@
 browser, THEN it picks the owner and only places the binding order when told to."""
 
 import html
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 from typing import Any
@@ -102,7 +103,12 @@ def summary_page(contact):
 @pytest.fixture
 def konsoleh(monkeypatch, tmp_path):
     """A stand-in for Hetzner's KonsoleH order pages, reached over real HTTP."""
-    state: dict[str, Any] = {"contacts": list(CONTACTS), "owner": None, "orders": []}
+    state: dict[str, Any] = {
+        "contacts": list(CONTACTS),
+        "owner": None,
+        "orders": [],
+        "signed_in": True,
+    }
 
     class KonsoleH(BaseHTTPRequestHandler):
         def respond(self, body):
@@ -111,8 +117,33 @@ def konsoleh(monkeypatch, tmp_path):
             self.end_headers()
             self.wfile.write(body.encode())
 
+        def redirect(self, location):
+            self.send_response(302)
+            self.send_header("Location", location)
+            self.end_headers()
+
         def do_GET(self):
-            self.respond(ORDER_PAGE)
+            # Signed out, KonsoleH sends the order page through /auth.php to
+            # Hetzner's sign-in host (localhost here), whose browser check
+            # keeps reloading itself by script, so page loads never settle.
+            # A few seconds later the user signs in and lands on the order page.
+            port = state["port"]
+            if self.path == "/auth.php":
+                state.setdefault("check_started", time.monotonic())
+                self.redirect(f"http://localhost:{port}/pow")
+            elif self.path == "/pow":
+                signed_in = time.monotonic() - state["check_started"] > 3
+                after = "/signin" if signed_in else "/pow"
+                self.respond(
+                    f"<script>setTimeout(() => location.replace('{after}'), 100)</script>"
+                )
+            elif self.path == "/signin":
+                state["signed_in"] = True
+                self.redirect(f"http://127.0.0.1:{port}/order.php")
+            elif not state["signed_in"]:
+                self.redirect("/auth.php")
+            else:
+                self.respond(ORDER_PAGE)
 
         def do_POST(self):
             length = int(self.headers["Content-Length"])
@@ -139,6 +170,7 @@ def konsoleh(monkeypatch, tmp_path):
             pass
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), KonsoleH)
+    state["port"] = server.server_port
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
     root = f"http://127.0.0.1:{server.server_port}"
@@ -205,3 +237,17 @@ def test_unconfirmed_order_waits_for_the_browser(konsoleh):
     assert "Price:  5,83 € (jährlich)" in result.output
     assert "No order was placed before the timeout." in result.output
     assert konsoleh["orders"] == []
+
+
+def test_signed_out_user_signs_in_before_the_order(konsoleh, monkeypatch):
+    # GIVEN no saved KonsoleH session, so the order page passes through
+    # Hetzner's script-driven sign-in redirects.
+    konsoleh["signed_in"] = False
+    konsoleh["contacts"] = CONTACTS[:1]
+    monkeypatch.setattr(config, "DEFAULT_TIMEOUT", 1000)
+    # WHEN the order runs and the user signs in.
+    result = order("--confirm-order", "sample.de")
+    # THEN the CLI waits for the sign-in instead of failing, then orders.
+    assert result.exit_code == 0, result.output
+    assert "Please log in via the browser" in result.output
+    assert konsoleh["orders"] == [("sample.de", "alex@example.com")]
