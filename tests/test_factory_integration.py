@@ -143,6 +143,11 @@ def test_setup_without_kubectl_prepares_workspace_without_installing_it(
     # GIVEN every required Factory tool except kubectl, and Homebrew available.
     binaries = tmp_path / "bin"
     binaries.mkdir()
+    # Keep the Git that created the fixture. Apple's /usr/bin/git is an Xcode
+    # launcher and can block on developer-tool setup instead of running Git.
+    git_executable = shutil.which("git")
+    assert git_executable is not None
+    (binaries / "git").symlink_to(git_executable)
     calls = tmp_path / "calls"
     for tool in ("mise", "uv", "yq", "gh", "brew"):
         (binaries / tool).write_text(

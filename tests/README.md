@@ -232,6 +232,11 @@ also checks status and resumes setup with real workspace tools.
 
 ## Managed Chromium prerequisites and sessions
 
+SSH container fixtures send their build contexts as tar archives on stdin. This
+keeps Docker and remote Podman builds independent of VM host-directory sharing,
+including pytest temporary directories on macOS. Build failures include the
+container engine's output rather than only a subprocess exit code.
+
 Install the full browser before running the suite:
 `uv run --extra dev python -m playwright install chromium` (CI adds `--with-deps`).
 This includes the headed executable checked by doctor and the headless shell used

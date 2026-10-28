@@ -22,6 +22,7 @@ from cli.bootstrap import TEMPLATE_VAULT_PASSWORD, template_replacements
 from cli.cluster_commands import configure_project_cluster
 from cli.template_commands import DEFAULT_TEMPLATE_VERSION, render_project
 from cli.wizard.context import BootstrapContext
+from tests.container_images import build_image
 
 ROOT = Path(__file__).resolve().parents[1]
 # Published releases only, so a developer's draft checkout cannot leak in.
@@ -146,7 +147,7 @@ def master(tmp_path_factory):
         "uv": UV,
     }.items():
         (context / name).write_text(content)
-    docker("build", "-q", "-t", IMAGE, str(context))
+    build_image(IMAGE, context)
     container = docker("run", "-d", "--rm", "-p", "127.0.0.1::22", IMAGE).stdout.strip()
     try:
         port = int(docker("port", container, "22/tcp").stdout.split(":")[-1])

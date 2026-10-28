@@ -16,6 +16,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.container_images import build_image
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -59,6 +61,10 @@ def ssh_server(tmp_path_factory):
         "/CN=test-ca",
         "-addext",
         "keyUsage=critical,keyCertSign,cRLSign",
+        "-addext",
+        "basicConstraints=critical,CA:TRUE",
+        "-addext",
+        "subjectKeyIdentifier=hash",
         "-days",
         "1",
         check=True,
@@ -80,9 +86,15 @@ def ssh_server(tmp_path_factory):
         )
         ext = root / f"{name}.ext"
         ext.write_text(
-            "subjectAltName=DNS:cluster.test,IP:127.0.0.1\nextendedKeyUsage=serverAuth\n"
-            if name == "server"
-            else "extendedKeyUsage=clientAuth\n"
+            "basicConstraints=critical,CA:FALSE\n"
+            "keyUsage=critical,digitalSignature,keyEncipherment\n"
+            "subjectKeyIdentifier=hash\n"
+            "authorityKeyIdentifier=keyid,issuer\n"
+            + (
+                "subjectAltName=DNS:cluster.test,IP:127.0.0.1\nextendedKeyUsage=serverAuth\n"
+                if name == "server"
+                else "extendedKeyUsage=clientAuth\n"
+            )
         )
         run(
             "openssl",
@@ -146,7 +158,7 @@ COPY . /fixtures/
 RUN cp /fixtures/k3s.yaml /etc/rancher/k3s/k3s.yaml
 CMD ["sh", "-c", "python3 /fixtures/server.py & exec /usr/sbin/sshd -D -e -o AllowTcpForwarding=yes"]
 """)
-    run("docker", "build", "-q", "-t", image, str(root), check=True)
+    build_image(image, root)
     container = run(
         "docker",
         "run",

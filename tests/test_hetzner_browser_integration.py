@@ -120,10 +120,10 @@ def test_hetzner_sessions_survive_restart_and_are_shared_with_konsoleh(
                 await bot.page.goto(root + "/projects")
                 # THEN the persistent cookie remains available after each restart.
                 if engine == "chrome":
-                    session = await bot.page.context.new_cdp_session(bot.page)
-                    arguments = (await session.send("Browser.getBrowserCommandLine"))[
-                        "arguments"
-                    ]
+                    # Chrome may omit --enable-automation, which gates the CDP
+                    # command. Its version page still shows the actual arguments.
+                    await bot.page.goto("chrome://version")
+                    arguments = await bot.page.locator("#command_line").inner_text()
                     assert "--disable-extensions" not in arguments
                     assert (
                         "--disable-component-extensions-with-background-pages"
