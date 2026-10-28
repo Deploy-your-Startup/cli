@@ -744,6 +744,29 @@ cd my-factory
 startup bootstrap
 ```
 
+Factory creation and setup save progress locally, outside the generated repository.
+After an error or interruption, recover the saved folder and continue:
+
+```bash
+startup factory status
+startup factory init --resume
+# To continue into the first-startup wizard:
+startup factory onboard --resume
+```
+
+These commands select the latest saved Factory. Add `--project-dir <folder>` to
+select another one. Status shows the absolute folder, template, last completed
+step, failed step and actual generated-file state. Resume restores the saved
+options, preserves owner files and rechecks tools and setup commands rather than
+trusting saved completion flags. Rendering uses a local snapshot; interrupted
+publication adds missing files and stops on conflicting owner edits.
+
+Progress lives under the local Startup configuration directory
+(`~/Library/Application Support/startup/workspaces` on macOS,
+`~/.config/startup/workspaces` on Linux). It stores public inputs and failure types,
+without credentials or raw error logs. This records local Factory setup; startup
+bootstrap and live deployment remain separate operations.
+
 Factory v0.1.11 is pinned by the CLI. `--template` and `--version` select a reviewed
 alternative; new/empty destinations and matching existing Factories are accepted.
 A retry never applies template updates. Initialize Git and commit generated files

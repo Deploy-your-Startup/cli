@@ -220,3 +220,12 @@ success box or curl example without printing it. Both template-picker and direct
 form entry are covered. Google Chrome must be installed. Live Cloudflare login,
 challenges, permission selectors and API token creation require separate account
 verification; local provider checks cannot establish live compatibility.
+
+
+Factory progress recovery scenarios in `tests/test_factory_integration.py` run
+real CLI processes with isolated state directories. They cover failure before
+folder creation, setup failure and resume from saved options, interrupted snapshot
+publication, owner-file conflicts, differing resume options, actual-file status,
+credential URL rejection and missing state. External tool failures use a local
+mise boundary; owner files and persisted JSON are real. The macOS Factory E2E
+also checks status and resumes setup with real workspace tools.

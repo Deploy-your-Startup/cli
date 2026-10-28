@@ -36,6 +36,12 @@ def cli(root, *args, answers="", env=None):
     )
 
 
+@pytest.fixture(autouse=True)
+def isolated_factory_state(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "state-home"))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "state-config"))
+
+
 @pytest.fixture
 def workspace(tmp_path):
     # GIVEN a real versioned Copier source with the Factory contract.
@@ -527,3 +533,145 @@ def test_missing_tools_stop_before_factory_creation(workspace, command, existing
     else:
         assert not destination.exists()
     assert "Factory created" not in result.stdout
+
+
+def progress(tmp_path):
+    import json
+
+    paths = list(tmp_path.rglob("state.json"))
+    assert len(paths) == 1
+    return paths[0], json.loads(paths[0].read_text())
+
+
+def test_factory_failure_before_folder_creation_is_discoverable(workspace, tmp_path):
+    # GIVEN missing setup prerequisites, WHEN creation fails before rendering.
+    source, destination = workspace
+    result = initialize(workspace, "--setup", env={"PATH": "/usr/bin:/bin"})
+    assert result.returncode != 0
+    assert not destination.exists()
+    # THEN a separate process recovers the exact folder, failed step and next command.
+    status = cli(tmp_path, "factory", "status")
+    assert status.returncode == 0, status.stderr
+    assert str(destination) in status.stdout
+    assert "Current step: prerequisites" in status.stdout
+    assert "Destination folder does not exist" in status.stdout
+    assert "startup factory init --resume" in result.stderr
+    _, saved = progress(tmp_path)
+    assert saved["source"] == str(source)
+    assert saved["setup_requested"] is True
+    assert saved["workflow_failure"] == "ClickException"
+
+
+def test_failed_setup_resumes_saved_folder_and_preserves_owner_files(
+    workspace, tmp_path
+):
+    # GIVEN installed tools whose runtime installation fails at the external mise boundary.
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    calls = tmp_path / "calls"
+    broken = tmp_path / "fail-install"
+    broken.touch()
+    for name in ("uv", "yq", "gh"):
+        tool = tools / name
+        tool.write_text("#!/bin/sh\nexit 0\n")
+        tool.chmod(0o755)
+    mise = tools / "mise"
+    mise.write_text(
+        f'#!/bin/sh\necho "$*" >> "{calls}"\nif [ "$1" = install ] && [ -f "{broken}" ]; then echo synthetic-private-error >&2; exit 17; fi\n'
+    )
+    mise.chmod(0o755)
+    environment = {"PATH": str(tools) + os.pathsep + os.environ["PATH"]}
+    first = initialize(workspace, "--setup", env=environment)
+    assert first.returncode != 0
+    _, destination = workspace
+    (destination / "README.md").write_text("owner changes")
+    _, saved = progress(tmp_path)
+    assert saved["workflow_step"] == "runtimes"
+    assert saved["workflow_last_completed"] == "trust"
+    assert "synthetic-private-error" not in str(saved)
+    # WHEN another CLI process resumes without the original folder or options.
+    broken.unlink()
+    second = cli(tmp_path, "factory", "init", "--resume", env=environment)
+    # THEN the saved setup completes and owner data survives; prerequisites are rechecked.
+    assert second.returncode == 0, second.stdout + second.stderr
+    assert (destination / "README.md").read_text() == "owner changes"
+    assert "exec -- ./scripts/init.sh" in calls.read_text()
+    _, saved = progress(tmp_path)
+    assert saved["workflow_step"] == "complete"
+    assert saved["workflow_failure"] is None
+    assert calls.read_text().count("trust ") == 2
+
+
+def test_resume_publication_uses_snapshot_without_source(workspace, tmp_path):
+    import json
+
+    # GIVEN a saved publication checkpoint after some files reached the destination.
+    assert initialize(workspace).returncode == 0
+    source, destination = workspace
+    path, saved = progress(tmp_path)
+    saved.update(step="publish", last_completed="render")
+    path.write_text(json.dumps(saved))
+    (destination / "README.md").unlink()
+    source.rename(source.with_name("source-unavailable"))
+    # WHEN resuming in another process, THEN missing files come from the verified snapshot.
+    result = cli(tmp_path, "factory", "init", "--resume")
+    assert result.returncode == 0, result.stderr
+    assert (destination / "README.md").read_text() == f"# {destination.name}\n"
+    assert progress(tmp_path)[1]["step"] == "complete"
+
+
+def test_resume_publication_preserves_conflicting_file(workspace, tmp_path):
+    import json
+
+    # GIVEN an interrupted publication and a conflicting owner edit.
+    assert initialize(workspace).returncode == 0
+    _, destination = workspace
+    path, saved = progress(tmp_path)
+    saved["step"] = "publish"
+    path.write_text(json.dumps(saved))
+    (destination / "README.md").write_text("owner edit")
+    # WHEN resumed, THEN it stops without overwriting or marking publication complete.
+    result = cli(tmp_path, "factory", "init", "--resume")
+    assert result.returncode != 0
+    assert "Existing file differs; preserved" in result.stderr
+    assert (destination / "README.md").read_text() == "owner edit"
+    assert progress(tmp_path)[1]["step"] == "publish"
+
+
+def test_resume_rejects_conflicting_plan_and_status_reads_actual_files(
+    workspace, tmp_path
+):
+    # GIVEN a saved Factory, WHEN resuming with another version, THEN reject the changed plan.
+    assert initialize(workspace).returncode == 0
+    _, destination = workspace
+    result = cli(tmp_path, "factory", "init", "--resume", "--version", "v999")
+    assert result.returncode != 0
+    assert "differ from the saved" in result.stderr
+    # WHEN an owner changes a generated file, THEN status reports disk state.
+    (destination / "README.md").write_text("owner changes")
+    status = cli(tmp_path, "factory", "status", "--project-dir", str(destination))
+    assert status.returncode == 0, status.stderr
+    assert "Generated file changed: README.md" in status.stdout
+
+
+def test_credential_urls_are_rejected_before_saving_or_printing(workspace, tmp_path):
+    # GIVEN a URL containing a credential, WHEN starting, THEN it never enters progress or output.
+    result = cli(
+        tmp_path,
+        "factory",
+        "init",
+        "--template",
+        "https://user:synthetic-secret@example.invalid/template",
+    )
+    assert result.returncode != 0
+    assert "credential-free" in result.stderr
+    assert "synthetic-secret" not in result.stdout + result.stderr
+    assert not list(tmp_path.rglob("state.json"))
+
+
+def test_resume_without_state_is_actionable(tmp_path):
+    # GIVEN no saved state, WHEN resuming, THEN fail without creating a new Factory.
+    result = cli(tmp_path, "factory", "init", "--resume")
+    assert result.returncode != 0
+    assert "No saved Factory setup" in result.stderr
+    assert not list(tmp_path.rglob("state.json"))

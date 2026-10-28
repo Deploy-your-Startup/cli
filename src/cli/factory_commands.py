@@ -14,7 +14,9 @@ import yaml
 
 from cli import wizard_output as ui
 from cli.factory_prerequisites import ensure_factory_tools
+from cli.factory_progress import checkpoint, resume_plan, setup_workspace, show_status
 from cli.template_commands import ANSWERS_FILE, render_project
+from cli.workspace_state import WorkspaceState
 
 FACTORY_TEMPLATE = "https://github.com/Deploy-your-Startup/startup-factory-template.git"
 FACTORY_VERSION = "v0.1.11"
@@ -214,6 +216,48 @@ def suggested_destination(source: str) -> Path:
     return candidate
 
 
+def creation_state(
+    destination: Path, source: str, version: str, setup: bool
+) -> WorkspaceState:
+    state = WorkspaceState.find(destination)
+    if state and (
+        state.data["source"] != source
+        or (state.data["step"] != "complete" and state.data["version"] != version)
+    ):
+        raise click.ClickException(
+            "Factory plan differs from saved creation; use --resume."
+        )
+    if state is None or state.data["step"] == "complete":
+        problem = destination_problem(destination, source)
+        if problem:
+            raise click.ClickException(problem)
+    if state is None:
+        state = WorkspaceState.start(
+            destination, source, version, {"project_name": destination.name}
+        )
+        if destination.exists() and any(destination.iterdir()):
+            state.data.update(step="complete", last_completed="existing Factory")
+    state.data.update(
+        factory=True, setup_requested=setup or state.data.get("setup_requested", False)
+    )
+    state.save()
+    return state
+
+
+def prepare_factory_files(state: WorkspaceState) -> None:
+    destination = state.destination
+    if state.data["step"] == "complete":
+        ui.info(f"Using existing Factory at {destination}; owner files are preserved.")
+    else:
+        state.run(render_project)
+        ui.success(f"Factory created at {destination}.")
+    if not is_factory(destination):
+        raise click.ClickException(
+            "Selected template does not declare a supported Factory schema."
+        )
+    registry_document(destination)
+
+
 def initialize_factory(
     destination: Path,
     source: str,
@@ -222,37 +266,18 @@ def initialize_factory(
     show_next_steps: bool = True,
 ) -> Path:
     source = resolve_source(source)
+    WorkspaceState.validate_source(source)
     destination = destination.expanduser().absolute()
-    problem = destination_problem(destination, source)
-    if problem:
-        raise click.ClickException(problem)
+    state = creation_state(destination, source, version, setup)
     if setup:
-        ensure_factory_tools()
-    if destination.exists() and any(destination.iterdir()):
-        ui.info(f"Using existing Factory at {destination}; owner files are preserved.")
-    else:
-        render_project(
-            destination,
-            {"project_name": destination.name},
-            source=source,
-            version=version,
-        )
-        if not is_factory(destination):
-            raise click.ClickException(
-                "Selected template does not declare a supported Factory schema."
-            )
-        ui.success(f"Factory created at {destination}.")
-    registry_document(destination)
+        checkpoint(state, "prerequisites", ensure_factory_tools)
+    checkpoint(state, "files", lambda: prepare_factory_files(state))
     if setup:
-        subprocess.run(
-            ["mise", "trust", str(destination / "mise.toml")],
-            check=True,
-            cwd=destination,
-        )
-        subprocess.run(["mise", "install"], check=True, cwd=destination)
-        subprocess.run(
-            ["mise", "exec", "--", "./scripts/init.sh"], check=True, cwd=destination
-        )
+        setup_workspace(state)
+    state.data.update(
+        workflow_step="complete" if setup else "setup pending", workflow_failure=None
+    )
+    state.save()
     if show_next_steps:
         ui.info(f"Next: cd {shlex.quote(str(destination))} && startup bootstrap")
         ui.info(
@@ -271,32 +296,71 @@ def factory():
 @click.option(
     "--project-dir",
     type=click.Path(file_okay=False, path_type=Path),
-    default=lambda: Path.home() / "Projects/startup-factory",
-    show_default="~/Projects/startup-factory",
+    help="Factory folder (default: ~/Projects/startup-factory; latest saved folder with --resume).",
 )
-@click.option("--template", "source", default=FACTORY_TEMPLATE, show_default=True)
-@click.option("--version", default=FACTORY_VERSION, show_default=True)
+@click.option("--template", "source", help="Factory template URL or path.")
+@click.option("--version", help="Factory template release; defaults to the CLI pin.")
 @click.option(
     "--setup",
     is_flag=True,
     help="Check tools, install workspace runtimes and clone registered tooling.",
 )
-def init(project_dir: Path, source: str, version: str, setup: bool):
+@click.option(
+    "--resume",
+    is_flag=True,
+    help="Continue the saved Factory plan (latest by default).",
+)
+def init(
+    project_dir: Path | None,
+    source: str | None,
+    version: str | None,
+    setup: bool,
+    resume: bool,
+):
     """Create or resume a Factory without provisioning cloud resources."""
     try:
-        initialize_factory(project_dir, source, version, setup)
+        project_dir, source, version, state = resume_plan(
+            project_dir, source, version, resume
+        )
+        initialize_factory(
+            project_dir,
+            source or FACTORY_TEMPLATE,
+            version or FACTORY_VERSION,
+            setup or bool(state and state.data.get("setup_requested")),
+        )
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         raise click.ClickException(str(exc)) from exc
 
 
+@factory.command("status")
+@click.option("--project-dir", type=click.Path(file_okay=False, path_type=Path))
+def status(project_dir: Path | None):
+    """Show saved Factory progress and inspect its folder (latest by default)."""
+    show_status(project_dir)
+
+
 @factory.command("onboard")
 @click.option("--project-dir", type=click.Path(file_okay=False, path_type=Path))
-@click.option("--template", "source", default=FACTORY_TEMPLATE, hidden=True)
-@click.option("--version", default=FACTORY_VERSION, hidden=True)
+@click.option("--template", "source", hidden=True)
+@click.option("--version", hidden=True)
+@click.option(
+    "--resume", is_flag=True, help="Resume the saved Factory and continue onboarding."
+)
 @click.pass_context
-def onboard(ctx: click.Context, project_dir: Path | None, source: str, version: str):
+def onboard(
+    ctx: click.Context,
+    project_dir: Path | None,
+    source: str | None,
+    version: str | None,
+    resume: bool,
+):
     """Set up your Factory, then guide you through your first startup."""
-    source = resolve_source(source)
+    if resume:
+        project_dir, source, version, _state = resume_plan(
+            project_dir, source, version, True
+        )
+    source = resolve_source(source or FACTORY_TEMPLATE)
+    version = version or FACTORY_VERSION
     if project_dir is None:
         # Suggest a free folder and ask again instead of ending onboarding when
         # the chosen folder already holds something else.
