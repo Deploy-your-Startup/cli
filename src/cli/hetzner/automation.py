@@ -137,7 +137,14 @@ class HetznerAutomation:
             pass
 
         ui.info("Opening Hetzner login page...")
-        await self.page.goto(config.HETZNER_LOGIN_URL, wait_until="domcontentloaded")
+        # The sign-in's browser check navigates by script and can abort this
+        # load; the page stays usable, and the wait below decides.
+        try:
+            await self.page.goto(
+                config.HETZNER_LOGIN_URL, wait_until="domcontentloaded"
+            )
+        except playwright_error():
+            pass
 
         ui.info(
             "Please log in via the browser:\n"
