@@ -88,6 +88,12 @@ an Ubuntu release for production.
 
 ## Guided onboarding integration checks
 
+Factory prerequisite regressions exercise real `startup doctor`, `factory init
+--setup` and `factory onboard` processes with isolated PATHs: missing tools fail
+before workspace creation, doctor never installs tools, and existing owner files
+remain intact. The public Factory onboarding E2E still covers real workspace setup
+and launch cancellation.
+
 `uv run --extra dev pytest tests/test_doctor_integration.py` runs the real doctor
 command with isolated local prerequisites and a GitHub CLI stand-in. It checks
 success/failure symbols, terminal colors, redirected output, login/scope guidance,
