@@ -155,8 +155,18 @@ def test_create_token_with_current_cloudflare_form(
         thread.join()
 
 
-def test_cloudflare_session_survives_browser_restart(monkeypatch, tmp_path, dashboard):
+@pytest.mark.parametrize("engine", ["chromium", "chrome"])
+def test_cloudflare_session_survives_browser_restart(
+    monkeypatch, tmp_path, dashboard, engine
+):
     # GIVEN a dedicated persistent Chromium profile and local provider session.
+    from cli.browser_setup import browser_check
+
+    monkeypatch.setenv("STARTUP_BROWSER", engine)
+    if engine == "chrome" and not browser_check()[0]:
+        pytest.skip(
+            "System Chrome is required for the optional Chrome session scenario"
+        )
     root, _ = dashboard
     monkeypatch.setattr(
         cloudflare, "CHROMIUM_USER_DATA_DIR", tmp_path / "chromium-profile"

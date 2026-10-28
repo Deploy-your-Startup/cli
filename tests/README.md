@@ -250,3 +250,19 @@ sessions; only headed display and trust of the disposable certificate differ.
 Live account login, challenges and provider operations remain separate manual
 checks. A headed smoke check can use a disposable profile and local HTML without
 accessing any provider account.
+
+Chrome selection scenarios set `STARTUP_BROWSER=chrome` and use the existing
+`chrome-profile` name separately from managed Chromium. The Hetzner/KonsoleH,
+Cloudflare and Auth0 session tests also run with installed system Chrome;
+these optional cases explicitly skip when Chrome is absent. Hetzner checks the
+actual browser arguments to ensure extension-disabling defaults are removed.
+Doctor tests reject invalid selections and check Chrome without a Chromium cache.
+The terminal-output test drains the PTY concurrently, avoiding macOS buffer
+backpressure while still checking real ANSI colors and secret redaction.
+
+Manual release checks remain required: on macOS, enable Apple Passwords in the
+dedicated Chrome profile, unlock it and complete headed Hetzner Cloud/KonsoleH,
+Cloudflare login/challenges and Auth0 verification. Record the browser/macOS
+versions and outcomes without credentials. Auth0 profiles are ephemeral and need
+extension setup each time. Headless fixture passes do not establish these live
+provider or Apple Passwords checks.

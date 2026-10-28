@@ -81,13 +81,24 @@ def test_create_project_clicks_through_console_announcement(
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("engine", ["chromium", "chrome"])
 def test_hetzner_sessions_survive_restart_and_are_shared_with_konsoleh(
-    monkeypatch, tmp_path, console
+    monkeypatch, tmp_path, console, engine
 ):
     # GIVEN the shared Chromium profile and a persistent provider session cookie.
+    from cli.browser_setup import browser_check
     from cli.hetzner.robot import HetznerKonsoleHAutomation
 
+    monkeypatch.setenv("STARTUP_BROWSER", engine)
+    if engine == "chrome" and not browser_check()[0]:
+        pytest.skip(
+            "System Chrome is required for the optional Chrome session scenario"
+        )
     root, _, _ = console
+    legacy = tmp_path / "chrome-profile"
+    legacy.mkdir()
+    marker = legacy / "preserved.txt"
+    marker.write_text("existing extension/profile state")
     monkeypatch.setattr(config, "CHROMIUM_USER_DATA_DIR", tmp_path / "chromium-profile")
 
     async def scenario():
@@ -108,6 +119,16 @@ def test_hetzner_sessions_survive_restart_and_are_shared_with_konsoleh(
             async with browser(headless=True) as bot:
                 await bot.page.goto(root + "/projects")
                 # THEN the persistent cookie remains available after each restart.
+                if engine == "chrome":
+                    session = await bot.page.context.new_cdp_session(bot.page)
+                    arguments = (await session.send("Browser.getBrowserCommandLine"))[
+                        "arguments"
+                    ]
+                    assert "--disable-extensions" not in arguments
+                    assert (
+                        "--disable-component-extensions-with-background-pages"
+                        not in arguments
+                    )
                 cookies = await bot.page.context.cookies(root)
                 assert any(
                     c["name"] == "session" and c["value"] == "local-fixture"
@@ -115,3 +136,9 @@ def test_hetzner_sessions_survive_restart_and_are_shared_with_konsoleh(
                 )
 
     asyncio.run(scenario())
+    assert marker.read_text() == "existing extension/profile state"
+    assert (
+        tmp_path
+        / ("chrome-profile" if engine == "chrome" else "chromium-profile")
+        / "Default"
+    ).is_dir()

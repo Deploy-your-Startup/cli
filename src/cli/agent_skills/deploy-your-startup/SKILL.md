@@ -36,6 +36,13 @@ hand-written scaffolding, raw `ansible-vault` or ad-hoc `ansible-playbook` runs.
    If doctor reports it missing, run the printed `<CLI-python> -m playwright
    install chromium` command. Keep `PLAYWRIGHT_BROWSERS_PATH` the same when
    installing and running. Downloads are explicit; doctor never opens a browser.
+   On macOS, `STARTUP_BROWSER=chrome` selects installed Google Chrome and
+   preserves the existing `chrome-profile` sessions with extensions enabled.
+   Use this for Apple Passwords; install/enable the extension in that dedicated
+   profile and unlock it during headed login. Set the same selection for doctor
+   and browser commands. Verify real provider login manually; fixtures cannot
+   establish Apple Passwords or challenge compatibility. Auth0 is ephemeral,
+   so configure its extension per verification.
    Dedicated `chromium-profile` sessions replace the old Chrome profiles without
    changing them; existing users sign in again. Hetzner Cloud and KonsoleH share
    one profile, Cloudflare uses another, and Auth0 sessions remain ephemeral.

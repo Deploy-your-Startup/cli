@@ -13,6 +13,8 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 
 import click
 
+from cli.browser_setup import browser_launch_options
+
 
 def auth0_json(*args: str):
     result = subprocess.run(
@@ -69,7 +71,9 @@ def validate_live_login(origin: str, tenant: str, timeout: int) -> None:
 
     try:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=False)
+            browser = playwright.chromium.launch(
+                headless=False, **browser_launch_options()
+            )
             try:
                 context = browser.new_context()
                 try:

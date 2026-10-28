@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from threading import Event, Thread
 
 import pytest
 
@@ -126,7 +127,25 @@ def test_doctor_uses_green_checks_and_red_crosses_in_a_terminal(
 ):
     # GIVEN the same prerequisite checks in an interactive terminal.
     master, slave = pty.openpty()
-    output = b""
+    chunks = []
+    finished = Event()
+    os.set_blocking(master, False)
+
+    def drain():
+        while True:
+            try:
+                if chunk := os.read(master, 65536):
+                    chunks.append(chunk)
+                    continue
+            except BlockingIOError:
+                pass
+            if finished.is_set():
+                return
+            finished.wait(0.01)
+
+    # Drain concurrently: macOS PTYs can fill before Doctor finishes writing.
+    reader = Thread(target=drain)
+    reader.start()
     try:
         # WHEN the real doctor command writes to a terminal instead of a pipe.
         result = subprocess.run(
@@ -139,20 +158,16 @@ def test_doctor_uses_green_checks_and_red_crosses_in_a_terminal(
             timeout=30,
             check=False,
         )
-        # macOS can discard unread PTY output when the last slave closes.
-        # The child has exited: drain its output before closing our slave fd.
-        os.set_blocking(master, False)
-        try:
-            while chunk := os.read(master, 65536):
-                output += chunk
-        except BlockingIOError:
-            pass
     finally:
+        # Keep the slave open until all output is read; macOS may discard it.
+        finished.set()
+        reader.join(timeout=5)
+        assert not reader.is_alive()
         os.close(slave)
         os.close(master)
 
     # THEN the symbols carry the terminal colors and labels stay readable.
-    text = output.decode("utf-8")
+    text = b"".join(chunks).decode("utf-8")
     assert result.returncode == 1, text
     assert "\x1b[32m\x1b[1m  ✓ \x1b[0mgit executable on PATH" in text
     assert "\x1b[31m\x1b[1m  ✗ \x1b[0mMissing: uv executable on PATH" in text
@@ -390,3 +405,28 @@ def test_doctor_reports_missing_playwright_and_keeps_other_profiles_independent(
         else:
             assert "Playwright" not in result.stdout + result.stderr
             assert "Chromium" not in result.stdout + result.stderr
+
+
+def test_doctor_rejects_invalid_browser_selection(tmp_path, doctor_environment):
+    # GIVEN a misspelled browser selection.
+    doctor_environment["STARTUP_BROWSER"] = "chorme"
+    # WHEN checking the selected browser through the public CLI.
+    result = _doctor_browser_probe(doctor_environment, tmp_path)
+    # THEN it fails with the accepted choices, before any browser opens.
+    assert result.returncode == 1
+    assert "STARTUP_BROWSER must be chromium or chrome" in result.stderr
+
+
+def test_doctor_checks_selected_chrome_without_requiring_chromium(
+    tmp_path, doctor_environment
+):
+    # GIVEN selected system Chrome and an empty managed-browser cache.
+    doctor_environment["STARTUP_BROWSER"] = "chrome"
+    doctor_environment["PLAYWRIGHT_BROWSERS_PATH"] = str(tmp_path / "empty-cache")
+    # WHEN checking prerequisites through the public CLI.
+    result = _doctor_browser_probe(doctor_environment, tmp_path)
+    # THEN doctor checks Chrome, without recommending a Chromium download.
+    assert "Google Chrome for browser setup" in result.stdout
+    assert "playwright install chromium" not in result.stdout
+    assert "Playwright Chromium for browser setup" not in result.stdout
+    assert not (tmp_path / "empty-cache").exists()

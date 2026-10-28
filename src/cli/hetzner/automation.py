@@ -7,6 +7,8 @@ what happens and complete manual steps (login, 2FA, captcha).
 
 from __future__ import annotations
 
+from cli.browser_setup import browser_launch_options, browser_profile
+
 from ..playwright_errors import playwright_error
 from . import _output as ui
 from . import config
@@ -38,10 +40,12 @@ class HetznerAutomation:
 
         self._playwright = await async_playwright().start()
 
-        config.CHROMIUM_USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
+        profile = browser_profile(config.CHROMIUM_USER_DATA_DIR)
+        profile.mkdir(parents=True, exist_ok=True)
 
         self._context = await self._playwright.chromium.launch_persistent_context(
-            user_data_dir=str(config.CHROMIUM_USER_DATA_DIR),
+            user_data_dir=str(profile),
+            **browser_launch_options(),
             headless=self.headless,
             viewport={"width": 1280, "height": 900},
             locale="de-DE",

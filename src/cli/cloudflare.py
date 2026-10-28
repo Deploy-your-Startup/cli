@@ -10,7 +10,11 @@ from pathlib import Path
 import click
 
 from cli import wizard_output as ui
-from cli.browser_setup import playwright_install_hint
+from cli.browser_setup import (
+    browser_launch_options,
+    browser_profile,
+    playwright_install_hint,
+)
 from cli.playwright_errors import playwright_error
 
 CF_SIGNUP_URL = "https://dash.cloudflare.com/sign-up"
@@ -88,9 +92,11 @@ class CloudflareAutomation:
         from playwright_stealth import Stealth
 
         self._playwright = await async_playwright().start()
-        CHROMIUM_USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
+        profile = browser_profile(CHROMIUM_USER_DATA_DIR)
+        profile.mkdir(parents=True, exist_ok=True)
         self._context = await self._playwright.chromium.launch_persistent_context(
-            user_data_dir=str(CHROMIUM_USER_DATA_DIR),
+            user_data_dir=str(profile),
+            **browser_launch_options(),
             headless=self.headless,
             viewport={"width": 1440, "height": 1000},
             locale="en-US",

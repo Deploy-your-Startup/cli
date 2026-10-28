@@ -137,7 +137,7 @@ link, point the domain at your server, and verify DNS and HTTPS.
 
 ### Browser setup
 
-Browser automation uses Playwright's managed Chromium. Browser downloads are
+Browser automation defaults to Playwright's managed Chromium. Browser downloads are
 explicit: run `startup doctor --provider hetzner` and use the installation
 command it prints (`<CLI-python> -m playwright install chromium`). This uses
 the CLI's Python interpreter to install the matching browser version. Re-run
@@ -148,6 +148,18 @@ for the expected executable; it never downloads or launches a browser.
 Hetzner Cloud and KonsoleH share a dedicated `chromium-profile` directory;
 Cloudflare has its own. Existing `chrome-profile` directories are left untouched.
 Sign in again after upgrading. Auth0 verification uses an ephemeral session.
+
+For Apple Passwords on macOS, install Google Chrome and set
+`STARTUP_BROWSER=chrome` when running doctor and browser commands. This selects
+system Chrome, retains the existing `chrome-profile` directories and enables
+extensions by removing Playwright's `--disable-extensions` and
+`--disable-component-extensions-with-background-pages` default arguments.
+Install and enable Apple Passwords in that dedicated profile, then unlock it
+when prompted. Auth0 uses the selected browser with an ephemeral session;
+extensions must be configured there for each verification. Unset the variable
+(or use `STARTUP_BROWSER=chromium`) to return to managed Chromium. Other values
+are rejected. Real headed login and Apple Passwords compatibility require manual
+verification; local fixtures do not establish provider or extension acceptance.
 
 ### Landing page on Cloudflare Pages
 

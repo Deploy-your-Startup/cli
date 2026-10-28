@@ -10,8 +10,8 @@ from pathlib import Path
 import click
 
 from cli import wizard_output as ui
+from cli.browser_setup import browser_check
 from cli.factory_prerequisites import factory_tool_checks, missing_factory_tools
-from cli.browser_setup import chromium_check
 from cli.ssh_keys import public_key_is_valid
 
 
@@ -54,7 +54,7 @@ def local_checks(
             )
         )
     if browser:
-        checks.append(chromium_check())
+        checks.append(browser_check())
     return checks
 
 

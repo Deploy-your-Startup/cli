@@ -14,7 +14,12 @@ def isolated_ansible_home(tmp_path_factory):
         # The developer's own `startup config` (e.g. 1Password as vault
         # backend) must not change which backend a test talks to.
         patch.setenv("STARTUP_CONFIG_HOME", str(tmp_path_factory.mktemp("config")))
-        for name in ("STARTUP_VAULT_BACKEND", "STARTUP_OP_VAULT", "OP_ACCOUNT"):
+        for name in (
+            "STARTUP_VAULT_BACKEND",
+            "STARTUP_OP_VAULT",
+            "OP_ACCOUNT",
+            "STARTUP_BROWSER",
+        ):
             patch.delenv(name, raising=False)
         yield home
 

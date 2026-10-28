@@ -90,8 +90,16 @@ def login_provider(tmp_path):
         thread.join()
 
 
-def test_auth0_managed_browser_does_not_reuse_login_state(monkeypatch, login_provider):
+@pytest.mark.parametrize("engine", ["chromium", "chrome"])
+def test_auth0_managed_browser_does_not_reuse_login_state(
+    monkeypatch, login_provider, engine
+):
     # GIVEN a local Auth0/protected API boundary and a disposable TLS certificate.
+    from cli.browser_setup import browser_check, browser_launch_options
+
+    monkeypatch.setenv("STARTUP_BROWSER", engine)
+    if engine == "chrome" and not browser_check()[0]:
+        pytest.skip("System Chrome is required for the optional Chrome Auth0 scenario")
     origin, state = login_provider
     launch = BrowserType.launch
     new_context = Browser.new_context
@@ -100,10 +108,12 @@ def test_auth0_managed_browser_does_not_reuse_login_state(monkeypatch, login_pro
     def headless_launch(browser_type, *args, **kwargs):
         # Only display availability differs from the production launch.
         launches.append(kwargs.copy())
-        return launch(browser_type, *args, **{**kwargs, "headless": True})
+        kwargs["headless"] = True
+        return launch(browser_type, *args, **kwargs)
 
     def local_tls_context(browser, *args, **kwargs):
-        return new_context(browser, *args, **{**kwargs, "ignore_https_errors": True})
+        kwargs["ignore_https_errors"] = True
+        return new_context(browser, *args, **kwargs)
 
     monkeypatch.setattr(BrowserType, "launch", headless_launch)
     monkeypatch.setattr(Browser, "new_context", local_tls_context)
@@ -111,6 +121,6 @@ def test_auth0_managed_browser_does_not_reuse_login_state(monkeypatch, login_pro
     for _ in range(2):
         validate_live_login(origin, "tenant.example", timeout=10)
     # THEN production requests headed managed Chromium, and every run signs in anew.
-    assert launches == [{"headless": False}, {"headless": False}]
+    assert launches == [{"headless": False, **browser_launch_options()}] * 2
     assert state["logins"] == 2
     assert state["initial_sessions"] == ["", "", "", ""]

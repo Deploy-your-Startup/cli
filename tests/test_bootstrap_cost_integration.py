@@ -358,6 +358,11 @@ sys.exit(1)
     env.update(
         {
             "HOME": str(home),
+            # Isolate operator data while retaining the installed macOS browser cache.
+            "PLAYWRIGHT_BROWSERS_PATH": os.environ.get(
+                "PLAYWRIGHT_BROWSERS_PATH",
+                str(Path.home() / "Library/Caches/ms-playwright"),
+            ),
             "PATH": str(commands) + os.pathsep + env["PATH"],
             "GH_LOG": str(log),
             "SHARED_REPO": str(shared),
