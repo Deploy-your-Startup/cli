@@ -148,8 +148,9 @@ class HetznerKonsoleHAutomation:
         whose e-mail matches ``contact_email``, or the one the user picks. New
         contacts are never created here. ``confirm_order`` True places the
         binding order without asking; False never clicks it; None asks in an
-        interactive terminal. Without that click the user orders in the browser
-        and the flow waits until Hetzner has accepted the order.
+        interactive terminal, where declining ends the flow without an order.
+        Otherwise the user orders in the browser and the flow waits until the
+        summarised order is submitted with Hetzner's terms accepted.
         """
         nameservers = nameservers or config.HETZNER_NAMESERVERS
         ui.info(f'Registering domain "{domain}"...')
@@ -195,6 +196,9 @@ class HetznerKonsoleHAutomation:
                 "Place this binding order now (accepts Hetzner's terms)?",
                 default=False,
             )
+            if not confirm_order:
+                ui.info("No order was placed.")
+                return False
         if confirm_order:
             return await self._place_order(domain)
 
@@ -290,19 +294,22 @@ class HetznerKonsoleHAutomation:
 
     async def _place_order(self, domain: str) -> bool:
         """Accept the terms and submit the order form Hetzner just summarised."""
+        order_form = await self._read_order_form()
         try:
-            await self.page.locator(config.SELECTORS_KONSOLEH_ACCEPT_TERMS).first.check(
-                timeout=5000
-            )
-            await self.page.locator(config.SELECTORS_KONSOLEH_PLACE_ORDER).first.click(
-                timeout=5000
-            )
+            async with self._order_submission(order_form, 30_000) as submitted:
+                await self.page.locator(
+                    config.SELECTORS_KONSOLEH_ACCEPT_TERMS
+                ).first.check(timeout=5000)
+                await self.page.locator(
+                    config.SELECTORS_KONSOLEH_PLACE_ORDER
+                ).first.click(timeout=5000)
+            placed = await _accepted(await submitted.value)
         except playwright_error():
-            ui.error("Could not submit the order; finish it in the browser.")
-            return await self._wait_for_order_placed(config.ORDER_WAIT_TIMEOUT)
-        if not await self._wait_for_order_placed(30_000):
+            placed = False
+        if not placed:
             ui.error(
-                "Hetzner did not accept the order. Check the browser for a message."
+                "Hetzner did not confirm the order. Check the browser and your "
+                "KonsoleH orders before trying again."
             )
             return False
         ui.success(
@@ -312,18 +319,35 @@ class HetznerKonsoleHAutomation:
         return True
 
     async def _wait_for_order_placed(self, timeout: int) -> bool:
-        """The order is placed once Hetzner replaces the order form."""
+        """Wait until the user submits the summarised order with accepted terms.
+
+        Only that submission counts: leaving or reloading the summary page
+        removes the order form too, but orders nothing.
+        """
+        order_form = await self._read_order_form()
         try:
-            await self.page.wait_for_function(
-                """(selector) => document.readyState === 'complete'
-                    && !document.querySelector(selector)""",
-                arg=config.SELECTORS_KONSOLEH_ORDER_FORM,
-                timeout=timeout,
-                polling=1000,
-            )
-            return True
+            async with self._order_submission(order_form, timeout) as submitted:
+                pass
+            return await _accepted(await submitted.value)
         except playwright_error():
             return False
+
+    async def _read_order_form(self) -> dict | None:
+        try:
+            return await self.page.evaluate(
+                _READ_ORDER_FORM_JS,
+                [
+                    config.SELECTORS_KONSOLEH_ORDER_FORM,
+                    config.SELECTORS_KONSOLEH_ACCEPT_TERMS,
+                ],
+            )
+        except playwright_error():
+            return None
+
+    def _order_submission(self, order_form: dict | None, timeout: int):
+        return self.page.expect_request(
+            lambda request: _submits_order(request, order_form), timeout=timeout
+        )
 
     # ── Nameserver change (existing domain) ──────────────────────────
 
@@ -642,6 +666,28 @@ def _describe_contact(contact: dict) -> str:
 
 # KonsoleH fills the owner form from a per-option script on "change"; reading the
 # filled fields is the only way to tell contacts with the same name apart.
+_READ_ORDER_FORM_JS = """([form, terms]) => {
+  const order = document.querySelector(form);
+  const accept = document.querySelector(terms);
+  return order && accept ? {action: order.action, terms: accept.name} : null;
+}"""
+
+
+def _submits_order(request, order_form: dict | None) -> bool:
+    """The summarised form, posted with Hetzner's terms accepted."""
+    return bool(
+        order_form
+        and request.method == "POST"
+        and request.url.split("#")[0] == order_form["action"]
+        and f"{order_form['terms']}=" in (request.post_data or "")
+    )
+
+
+async def _accepted(request) -> bool:
+    response = await request.response()
+    return response is not None and response.ok
+
+
 _READ_CONTACTS_JS = """
 () => {
     const select = document.querySelector('#domain_owners');
