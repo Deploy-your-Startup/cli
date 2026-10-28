@@ -1,7 +1,9 @@
 # First-deploy beta test
 
 Run this with a tester's own accounts on macOS. Do not use maintainer credentials.
-The tester needs Git, Chrome, GitHub CLI, a Hetzner account and a domain they own.
+The tester needs Git, GitHub CLI, a Hetzner account and a domain they own.
+Chrome is optional: browser setup downloads matching Playwright Chromium when
+Chrome is absent. Use `STARTUP_BROWSER=chrome` for configured Apple Passwords.
 Cloud resources incur provider charges.
 
 Follow the published [quickstart](https://deploy-your-startup.com/get-started).

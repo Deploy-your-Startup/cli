@@ -10,13 +10,13 @@ from pathlib import Path
 import click
 
 from cli import wizard_output as ui
+from cli.browser_runtime import launch_persistent_context
 from cli.playwright_errors import playwright_error
 
 CF_SIGNUP_URL = "https://dash.cloudflare.com/sign-up"
 CF_TOKEN_URL = "https://dash.cloudflare.com/profile/api-tokens"
 CONFIG_DIR = Path.home() / ".config" / "cloudflare-bootstrap"
 CHROME_USER_DATA_DIR = CONFIG_DIR / "chrome-profile"
-CHROME_CHANNEL = "chrome"
 DEFAULT_TIMEOUT = 60_000
 LOGIN_WAIT_TIMEOUT = 300_000
 FORM_READY_TIMEOUT = 45_000
@@ -93,10 +93,9 @@ class CloudflareAutomation:
         from playwright_stealth import Stealth
 
         self._playwright = await async_playwright().start()
-        CHROME_USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
-        self._context = await self._playwright.chromium.launch_persistent_context(
-            user_data_dir=str(CHROME_USER_DATA_DIR),
-            channel=CHROME_CHANNEL,
+        self._context = await launch_persistent_context(
+            self._playwright,
+            CHROME_USER_DATA_DIR,
             headless=self.headless,
             viewport={"width": 1440, "height": 1000},
             locale="en-US",

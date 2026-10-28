@@ -56,10 +56,7 @@ TOKEN_FILE = Path(
     os.environ.get("HETZNER_BOOTSTRAP_TOKEN_FILE", CONFIG_DIR / "hetzner.env")
 )
 
-# ── Chrome Profile (for Apple Passwords extension support) ───────────
-# Uses real Chrome instead of Playwright's bundled Chromium so that
-# native extensions like Apple Passwords work.
-CHROME_CHANNEL = "chrome"  # Use system Chrome
+# Keep existing Chrome sessions; managed Chromium uses a sibling profile.
 CHROME_USER_DATA_DIR = CONFIG_DIR / "chrome-profile"
 
 

@@ -9,6 +9,11 @@ import pytest
 from cli import cloudflare
 
 
+@pytest.fixture(autouse=True)
+def managed_browser(monkeypatch):
+    monkeypatch.setenv("STARTUP_BROWSER", "chromium")
+
+
 @pytest.fixture
 def dashboard():
     requests = []

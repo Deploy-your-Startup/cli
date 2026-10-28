@@ -28,7 +28,11 @@ __all__ = ["_password_scope", "bootstrap", "cli"]  # imported by tests and facto
 
 @click.group()
 def cli():
-    """Startup CLI - Command line tool for Deploy Your Startup operations"""
+    """Startup CLI - Command line tool for Deploy Your Startup operations.
+
+    Browser setup: STARTUP_BROWSER=auto (default), chrome (Apple Passwords),
+    or chromium. Auto prefers Chrome, otherwise downloads matching Chromium.
+    """
 
 
 # Command groups live in their own modules; `bootstrap` and `sync` follow below.

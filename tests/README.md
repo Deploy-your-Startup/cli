@@ -211,13 +211,35 @@ on a real BYOS VPS; those provider flows remain unverified by this local suite.
 ## Cloudflare browser setup
 
 `uv run --extra dev pytest tests/test_cloudflare_browser_integration.py` launches
-real installed Chrome with disposable persistent profiles against a local HTTP
+real managed Chromium with disposable persistent profiles against a local HTTP
 provider. It checks ready, delayed and denied sessions, no repeated navigation
 while the token page loads, and Stealth scripts in the first tab, new tabs and
 iframes. The public token-creation entrypoint also fills every permission row,
 submits the form once and extracts a delayed one-time token from either the
 success box or curl example without printing it. Both template-picker and direct
-form entry are covered. Google Chrome must be installed. Live Cloudflare login,
+form entry are covered. Matching Chromium is installed by CI or on first use.
+`test_browser_runtime_integration.py` covers automatic selection with/without
+Chrome, explicit selections, shared Hetzner sessions, provider/profile isolation,
+read-only doctor, invalid selection in async and sync Auth0 entrypoints, and safe
+installer failure handling. Explicit Chrome coverage skips if Chrome is absent.
+The real cache-empty download/version-match/cache-reuse scenario is opt-in:
+
+```bash
+STARTUP_TEST_BROWSER_DOWNLOAD=1 ./make.sh test tests/test_browser_runtime_integration.py
+```
+
+Read-only live sign-in-page checks open headed browsers without creating tokens
+or ordering resources. Use disposable profile roots:
+
+```bash
+uv run --extra dev python scripts/check_browser_onboarding_live.py --browser chromium --profile-root /path/to/disposable/chromium-check
+uv run --extra dev python scripts/check_browser_onboarding_live.py --browser chrome --profile-root /path/to/disposable/chrome-check
+```
+
+These assert visible login fields, not successful authentication. Native Apple
+Passwords autofill and full provider sign-in need user interaction. Deployed-app
+Auth0 verification additionally needs the actual origin and tenant.
+Live Cloudflare login,
 challenges, permission selectors and API token creation require separate account
 verification; local provider checks cannot establish live compatibility.
 

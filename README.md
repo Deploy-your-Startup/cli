@@ -137,8 +137,20 @@ link, point the domain at your server, and verify DNS and HTTPS.
 
 ### Landing page on Cloudflare Pages
 
-Cloudflare browser setup uses installed Google Chrome, a dedicated persistent
-profile and `playwright-stealth`. Complete sign-in and any Cloudflare checks in
+Browser setup for Hetzner Cloud/KonsoleH, Cloudflare and Auth0 prefers installed
+Google Chrome and falls back to Playwright-managed, version-matched Chromium.
+Missing Chromium is downloaded on first use using the CLI's own runtime; network
+access and a writable Playwright cache are required. `startup doctor` is read-only
+and never downloads a browser.
+
+Set `STARTUP_BROWSER=chromium` to force managed Chromium, or
+`STARTUP_BROWSER=chrome` to require Chrome explicitly for macOS Apple Passwords
+(Chrome and the extension must be installed/configured). The default is `auto`.
+Chrome and Chromium keep separate profiles; Hetzner Cloud and KonsoleH share
+the selected browser's profile. Auth0 verification never persists login state.
+
+Cloudflare uses a dedicated persistent profile and `playwright-stealth`.
+Complete sign-in and any Cloudflare checks in
 the browser; setup waits for the rendered **User API Tokens** dashboard before
 continuing. Stealth does not guarantee acceptance by Cloudflare. If browser
 setup stays blocked, choose **Paste an existing token** in the wizard and enter

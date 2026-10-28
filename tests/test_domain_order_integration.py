@@ -146,7 +146,7 @@ def konsoleh(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "KONSOLEH_ORDER_URL", root + "/order.php")
     # Playwright's bundled Chromium with a throwaway profile replaces the
     # user's Chrome; the browser itself is real.
-    monkeypatch.setattr(config, "CHROME_CHANNEL", None)
+    monkeypatch.setenv("STARTUP_BROWSER", "chromium")
     monkeypatch.setattr(config, "CHROME_USER_DATA_DIR", tmp_path / "profile")
     monkeypatch.setattr(config, "ORDER_WAIT_TIMEOUT", 3000)
     yield state

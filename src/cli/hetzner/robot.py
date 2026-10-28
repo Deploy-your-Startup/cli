@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 
 import click
 
+from ..browser_runtime import launch_persistent_context
 from ..playwright_errors import playwright_error
 from . import _output as ui
 from . import config
@@ -35,21 +36,14 @@ class HetznerKonsoleHAutomation:
         await self.close()
 
     async def start(self):
-        """Launch real Chrome with a persistent profile.
-
-        Shares the same Chrome profile as HetznerAutomation so that
-        login sessions carry over between Cloud Console and KonsoleH.
-        Apple Passwords and other native extensions work automatically.
-        """
+        """Share the selected browser's profile with Hetzner Cloud."""
         from playwright.async_api import async_playwright
 
         self._playwright = await async_playwright().start()
 
-        config.CHROME_USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-        self._context = await self._playwright.chromium.launch_persistent_context(
-            user_data_dir=str(config.CHROME_USER_DATA_DIR),
-            channel=config.CHROME_CHANNEL,
+        self._context = await launch_persistent_context(
+            self._playwright,
+            config.CHROME_USER_DATA_DIR,
             headless=self.headless,
             viewport={"width": 1280, "height": 900},
             locale="de-DE",
