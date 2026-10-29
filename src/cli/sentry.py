@@ -1,74 +1,33 @@
 """Project-specific Sentry projects; the DSN only travels through captured stdin.
 
-The login belongs to `sentry-cli login`, which keeps the token in
-~/.sentryclirc. Like the Auth0 CLI's login it is reused, never printed or
-passed as an argument; in a terminal without one, `sentry-cli login` runs
-first. SENTRY_AUTH_TOKEN, SENTRY_URL and SENTRY_ORG override the file, as they
-do for sentry-cli.
+The login is a personal token in ~/.sentryclirc (see `cli.sentry_login`); it is
+reused, never printed or passed as an argument.
 """
 
 from __future__ import annotations
 
-import configparser
 import os
-import shutil
-import subprocess
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 import click
 import httpx
 
+from cli.sentry_login import (
+    LOGIN_HINT,
+    ensure_sentry_login,
+    saved_token,
+    sentry_url,
+    sentryclirc,
+)
 from cli.vault_fields import store_vault_fields
 
-DEFAULT_URL = "https://sentry.io"
 DSN_FIELD = "backend_sentry_dsn"
 PLATFORM = "python-django"
-LOGIN_HINT = (
-    "Run `sentry-cli login` (install: `brew install getsentry/tools/sentry-cli`); "
-    "for an EU organization run `sentry-cli --url https://de.sentry.io login`."
-)
-
-
-def _sentryclirc() -> configparser.ConfigParser:
-    config = configparser.ConfigParser()
-    config.read(Path.home() / ".sentryclirc")
-    return config
-
-
-def _interactive() -> bool:
-    return sys.stdin.isatty() and sys.stderr.isatty()
-
-
-def _token(config: configparser.ConfigParser) -> str:
-    return os.environ.get("SENTRY_AUTH_TOKEN") or config.get(
-        "auth", "token", fallback=""
-    )
-
-
-def ensure_sentry_login() -> None:
-    """Run `sentry-cli login` in a terminal that has no login yet."""
-    if _token(_sentryclirc()) or not _interactive():
-        return
-    if not shutil.which("sentry-cli"):
-        raise click.ClickException(
-            "sentry-cli is missing: run `brew install getsentry/tools/sentry-cli` "
-            "or `npm install -g @sentry/cli`, then try again."
-        )
-    click.echo(
-        "No Sentry login found; starting `sentry-cli login`. Its token needs "
-        "org:read, team:read, project:read and project:write."
-    )
-    command = ["sentry-cli"]
-    if os.environ.get("SENTRY_URL"):
-        command += ["--url", os.environ["SENTRY_URL"]]
-    if subprocess.run([*command, "login"], check=False).returncode:
-        raise click.ClickException(f"Sentry login did not complete. {LOGIN_HINT}")
 
 
 def default_org() -> str | None:
-    return os.environ.get("SENTRY_ORG") or _sentryclirc().get(
+    return os.environ.get("SENTRY_ORG") or sentryclirc().get(
         "defaults", "org", fallback=None
     )
 
@@ -81,14 +40,11 @@ class SentryApi:
     @classmethod
     def from_login(cls) -> SentryApi:
         ensure_sentry_login()
-        config = _sentryclirc()
-        token = _token(config)
+        config = sentryclirc()
+        token = saved_token(config)
         if not token:
             raise click.ClickException(f"No Sentry login found. {LOGIN_HINT}")
-        url = os.environ.get("SENTRY_URL") or config.get(
-            "defaults", "url", fallback=DEFAULT_URL
-        )
-        return cls(url.rstrip("/"), token)
+        return cls(sentry_url(config), token)
 
     def request(self, method: str, path: str, payload: dict | None = None):
         """Return the JSON body, or None for 404; never echo provider output."""
@@ -108,8 +64,7 @@ class SentryApi:
             return None
         if response.status_code in (401, 403):
             raise click.ClickException(
-                "Sentry rejected the login or a required scope (org:read, "
-                f"team:read, project:read, project:write). {LOGIN_HINT}"
+                f"Sentry rejected the login or a required scope. {LOGIN_HINT}"
             )
         if response.is_error:
             raise click.ClickException(
