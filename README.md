@@ -265,6 +265,7 @@ front; browser account setup may still require a person to sign in.
 | `startup sync` | Update shared workflows and roles in your GitHub account |
 | `startup template` | Adopt and update application templates with Copier |
 | `startup auth0` | Configure and validate optional application login |
+| `startup sentry` | Configure optional error tracking with Sentry |
 | `startup hetzner` | Set up Hetzner projects, tokens and domains through a browser |
 | `startup deploy` | Create a repository from a GitHub template |
 
@@ -615,14 +616,30 @@ separate `startup sync` operation.
 ## Optional Auth0 login
 
 Templates declaring Auth0 support in `startup-template.yml` can configure login
-during bootstrap with `--auth0-tenant <tenant>`. Install the official Auth0 CLI
-and run `auth0 login` first. For non-interactive bootstrap with such a template,
-pass the tenant or explicitly choose `--without-auth`.
+during bootstrap with `--auth0-tenant <tenant>`. Install the official Auth0 CLI;
+in a terminal without a usable login, the CLI starts `auth0 login` for you.
+Unattended runs need that login beforehand. For non-interactive bootstrap with
+such a template, pass the tenant or explicitly choose `--without-auth`.
 
 For an existing project, use `startup auth0 setup --help`. After deployment,
 `startup auth0 validate --tenant <tenant> --base-domain <domain>` opens a temporary
 browser for a real login and checks the protected API and secure HttpOnly
 session without saving authentication state.
+
+## Optional Sentry error tracking
+
+Full-stack bootstrap asks whether to set up Sentry. Install `sentry-cli`; in a
+terminal without a login, the CLI starts `sentry-cli login` for you (set
+`SENTRY_URL=https://de.sentry.io` for an EU organization). Unattended runs need
+that login beforehand. Its token needs `org:read`, `team:read`, `project:read`
+and `project:write`. Bootstrap then creates a Django project named after the
+startup, or reuses it, and saves its DSN as `backend_sentry_dsn` in the
+project vault. Non-interactive bootstrap skips Sentry unless you pass
+`--sentry-org <org>`; `--sentry-dsn` still accepts an existing DSN.
+
+For an existing project, run `startup sentry check` and then
+`startup sentry setup --project-name <name>` in its repository, and deploy.
+The organization defaults to `[defaults] org` in `~/.sentryclirc`.
 
 ## Contributing
 
