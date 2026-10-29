@@ -19,7 +19,7 @@ from cli.factory_commands import FACTORY_TEMPLATE, FACTORY_VERSION
 
 
 def main():
-    required = ("mise", "uv", "yq", "git")
+    required = ("mise", "uv", "yq", "git", "gh")
     missing = [tool for tool in required if not shutil.which(tool)]
     if missing:
         raise SystemExit("Install E2E prerequisites: " + ", ".join(missing))
@@ -34,6 +34,7 @@ def main():
             '#!/bin/sh\ncase "$*" in\n'
             "  *--version*) echo 'gh identity boundary' ;;\n"
             "  *api*user*) echo example-owner ;;\n"
+            '  skill\\ install*|skills\\ install*) exec "$STARTUP_E2E_REAL_GH" "$@" ;;\n'
             "  *) echo 'Unexpected GitHub mutation' >&2; exit 99 ;;\nesac\n"
         )
         gh.chmod(0o755)
@@ -50,6 +51,7 @@ def main():
             "NO_COLOR": "1",
             "GH_TOKEN": "",
             "GITHUB_TOKEN": "",
+            "STARTUP_E2E_REAL_GH": shutil.which("gh") or "",
         }
         # GIVEN a new home and the real published Factory source and runtimes.
         process = subprocess.Popen(

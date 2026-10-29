@@ -70,7 +70,7 @@ jobs:
         with:
           enable-cache: true
       - name: Install Factory workspace tools
-        run: brew install mise yq
+        run: brew install mise yq gh
       - name: Exercise public Factory setup and launch cancellation
         run: uv run --extra dev python scripts/check_factory_onboarding_e2e.py
 
