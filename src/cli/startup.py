@@ -15,6 +15,7 @@ from cli.commands.deploy import deploy
 from cli.commands.hetzner import hetzner
 from cli.commands.lint_contract import lint_contract
 from cli.commands.secrets import _password_scope, secrets
+from cli.commands.tunnel import tunnel
 from cli.evidence_commands import evidence
 from cli.factory_commands import factory
 from cli.preflight import doctor
@@ -50,6 +51,7 @@ for command in (
     secrets,
     skills,
     template,
+    tunnel,
     verify,
 ):
     cli.add_command(command)

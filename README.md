@@ -126,6 +126,53 @@ verification; a custom application can use `--health-path` for an endpoint
 returning HTTP 200 with `{"status":"ok"}`. For local development, follow the
 generated project's README.
 
+### Test a local server over HTTPS
+
+Start your development server, install [cloudflared](https://developers.cloudflare.com/tunnel/downloads/)
+(`brew install cloudflared` on macOS), then run:
+
+```bash
+startup tunnel --url http://localhost:8000
+```
+
+The command prints `HTTPS URL: https://….trycloudflare.com` after cloudflared
+reports a connected tunnel. Use that URL as your iOS app's development API base
+URL, keeping any API path your app requires. Make a request from the device to
+verify end-to-end access. The connection uses a publicly trusted HTTPS certificate;
+no local certificate installation or iOS App Transport Security exception is needed.
+
+**Anyone with the URL can reach your service.** Use test data and application
+authentication; HTTPS is not access control. Requests pass through Cloudflare.
+Do not expose admin/debug interfaces or production credentials. The CLI checks
+that the loopback port is reachable, not that the application is secure or healthy.
+Only HTTP(S) loopback origins are accepted, without URL credentials, query
+parameters or fragments. Existing cloudflared configuration and `TUNNEL_*`
+environment settings are not reused; no account, DNS or deployment changes occur.
+
+Keep the command running; Ctrl+C stops its cloudflared process. The temporary
+hostname changes each run, needs no Cloudflare account or domain, has no uptime
+guarantee and does not support SSE (Server-Sent Events). Quick Tunnels allow up
+to 200 in-flight requests. Use `--startup-timeout 120` on slow networks. Stable
+hostnames, named tunnels and Cloudflare Access setup are outside this command's scope.
+
+If your backend rejects the hostname, explicitly allow the generated host in
+development settings. Browser clients may also need reviewed CSRF trusted origins,
+CORS settings and secure-cookie/proxy configuration; native iOS HTTP clients do
+not use browser CORS. Keep those changes development-only—do not disable host,
+CSRF or authentication checks globally. OAuth providers with fixed callback URLs
+may require a stable named tunnel instead.
+
+For iOS apps that load the site in a `WKWebView`, check
+[App-Bound Domains](https://webkit.org/blog/10882/app-bound-domains/).
+When the app uses `WKAppBoundDomains` and
+`WKWebViewConfiguration.limitsNavigationsToAppBoundDomains = true`, the tunnel
+hostname must be covered by the app's configured domains; otherwise navigation
+fails with “App-bound domain failure” even though HTTPS is valid. Because Quick
+Tunnel hostnames change each run, you may need to update the development app's
+`Info.plist` and rebuild for each new hostname, or use a stable hostname outside
+this command's scope. Keep development domains separate from production
+restrictions. This requirement does not apply to native API calls via `URLSession`.
+
 ### Bring your own server
 
 BYOS bootstrap installs the deploy SSH key using your existing server access
