@@ -812,10 +812,27 @@ prerequisites; install them and rerun with the same folder. Existing Factory fil
 and applications are preserved. Cloud setup starts only after bootstrap's plan
 and approval. Sprowi remains optional and requires separate engine credentials.
 
+The Factory becomes its own Git repository with a first commit of its files.
+Onboarding then offers to back it up to a private GitHub repository named after
+the folder, under the connected account. Declining or a GitHub error keeps the
+Factory local and prints the command to retry. An existing repository of that
+name is never changed. Startups registered later are committed to the Factory,
+and pushed when it has a GitHub remote. Startup repositories stay separate:
+`projects/` is ignored by the Factory's Git history.
+
+For a Factory created earlier without Git or GitHub, run:
+
+```bash
+startup factory init --github --project-dir ~/Projects/startup-factory
+```
+
+It asks before committing an existing folder's files and before creating the
+repository.
+
 To create only the workspace:
 
 ```bash
-startup factory init --project-dir my-factory --version v0.1.22 --setup
+startup factory init --project-dir my-factory --version v0.1.23 --setup
 cd my-factory
 startup bootstrap
 ```
@@ -843,10 +860,10 @@ Progress lives under the local Startup configuration directory
 without credentials or raw error logs. This records local Factory setup; startup
 bootstrap and live deployment remain separate operations.
 
-Factory v0.1.22 is pinned by the CLI. `--template` and `--version` select a reviewed
+Factory v0.1.23 is pinned by the CLI. `--template` and `--version` select a reviewed
 alternative; new/empty destinations and matching existing Factories are accepted.
-A retry never applies template updates. Initialize Git and commit generated files
-including `.copier-answers.yml` before `startup template update`.
+A retry never applies template updates. `startup template update` needs the
+committed Factory, including `.copier-answers.yml`.
 
 
 Outside a Factory, bootstrap also finds completed saved workspaces and Factories

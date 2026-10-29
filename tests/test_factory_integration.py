@@ -85,7 +85,7 @@ def workspace(tmp_path):
     return source, destination
 
 
-def initialize(workspace, *options, env=None):
+def initialize(workspace, *options, env=None, answers=""):
     source, destination = workspace
     return cli(
         source.parent,
@@ -98,6 +98,7 @@ def initialize(workspace, *options, env=None):
         "--project-dir",
         str(destination),
         *options,
+        answers=answers,
         env=env,
     )
 
@@ -509,7 +510,7 @@ def test_missing_tools_stop_before_factory_creation(workspace, command, existing
     if existing:
         assert initialize(workspace).returncode == 0
         (destination / "owner-notes").write_text("keep")
-        before = {p.name: p.read_bytes() for p in destination.iterdir()}
+        before = {p.name: p.read_bytes() for p in destination.iterdir() if p.is_file()}
     # WHEN starting setup through either public Factory entrypoint.
     result = cli(
         source.parent,
@@ -529,7 +530,9 @@ def test_missing_tools_stop_before_factory_creation(workspace, command, existing
     assert "Missing Factory tools: mise, uv, yq, gh" in result.stderr
     assert "brew install mise uv yq gh" in result.stderr
     if existing:
-        assert {p.name: p.read_bytes() for p in destination.iterdir()} == before
+        assert {
+            p.name: p.read_bytes() for p in destination.iterdir() if p.is_file()
+        } == before
     else:
         assert not destination.exists()
     assert "Factory created" not in result.stdout
@@ -675,3 +678,212 @@ def test_resume_without_state_is_actionable(tmp_path):
     assert result.returncode != 0
     assert "No saved Factory setup" in result.stderr
     assert not list(tmp_path.rglob("state.json"))
+
+
+FAKE_GH = """import json, os, subprocess, sys
+args = sys.argv[1:]
+with open(os.environ['GH_CALLS'], 'a') as calls:
+    calls.write(json.dumps(args) + '\\n')
+login = os.environ.get('GH_LOGIN', '')
+if args[:1] == ['api'] and 'user' in args:
+    if not login: sys.exit(1)
+    print('42\\t' + login if '@tsv' in args[-1] else login); sys.exit(0)
+if args[:2] == ['repo', 'view']:
+    if os.environ.get('GH_EXISTING'): print('{"visibility": "PUBLIC"}'); sys.exit(0)
+    sys.exit(1)
+if args[:2] == ['repo', 'create']:
+    source = args[args.index('--source') + 1]
+    subprocess.run(['git', 'init', '-q', '--bare', '-b', 'main', os.environ['GH_REMOTE']], check=True)
+    subprocess.run(['git', '-C', source, 'remote', 'add', 'origin', os.environ['GH_REMOTE']], check=True)
+    subprocess.run(['git', '-C', source, 'push', '-q', '-u', 'origin', 'HEAD'], check=True)
+    sys.exit(0)
+sys.exit(99)
+"""
+
+
+@pytest.fixture
+def github(tmp_path):
+    """A gh stand-in whose created repository is a real bare Git remote."""
+    binaries = tmp_path / "gh-bin"
+    binaries.mkdir()
+    gh = binaries / "gh"
+    gh.write_text(f"#!{sys.executable}\n" + FAKE_GH)
+    gh.chmod(0o755)
+    calls = tmp_path / "gh-calls"
+    calls.touch()
+    environment = {
+        "PATH": str(binaries) + os.pathsep + os.environ["PATH"],
+        "GH_CALLS": str(calls),
+        "GH_LOGIN": "example-owner",
+        "GH_REMOTE": str(tmp_path / "github-remote.git"),
+        # No global Git identity, like a new Mac.
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_NOSYSTEM": "1",
+    }
+
+    def recorded():
+        import json
+
+        return [json.loads(line) for line in calls.read_text().splitlines()]
+
+    return environment, recorded, tmp_path / "github-remote.git"
+
+
+def log(root, *args):
+    return git(root, "log", "--format=%an <%ae>|%s", *args).stdout.splitlines()
+
+
+def test_init_commits_factory_and_backs_it_up_privately(workspace, github):
+    environment, recorded, remote = github
+    _, destination = workspace
+    # WHEN a new Factory is created with --github and the owner accepts the backup.
+    result = initialize(workspace, "--github", env=environment, answers="\n")
+    # THEN its files form the first commit, authored as the connected GitHub account.
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert log(destination) == [
+        "example-owner <42+example-owner@users.noreply.github.com>|chore: create Factory"
+    ]
+    tracked = git(destination, "ls-files").stdout.split()
+    assert {".copier-answers.yml", "projects.yaml", ".startup-factory.yml"} <= set(
+        tracked
+    )
+    assert git(destination, "status", "--porcelain").stdout == ""
+    # AND a private repository named after the folder holds that commit.
+    created = [call for call in recorded() if call[:2] == ["repo", "create"]]
+    assert created == [
+        [
+            "repo",
+            "create",
+            "example-owner/owner-s-factory",
+            "--private",
+            "--source",
+            str(destination),
+            "--push",
+        ]
+    ]
+    assert log(remote) == log(destination)
+    assert "https://github.com/example-owner/owner-s-factory" in result.stdout
+    # WHEN init runs again, THEN nothing is committed or created twice.
+    again = initialize(workspace, "--github", env=environment, answers="\n")
+    assert again.returncode == 0, again.stderr
+    assert len(log(destination)) == 1
+    assert len([call for call in recorded() if call[:2] == ["repo", "create"]]) == 1
+    assert "origin is already configured" in again.stdout
+
+
+def test_registration_is_committed_and_pushed_to_the_factory_repository(
+    workspace, github
+):
+    environment, _recorded, remote = github
+    assert (
+        initialize(workspace, "--github", env=environment, answers="\n").returncode == 0
+    )
+    _, destination = workspace
+    project = project_in(destination)
+    # WHEN a startup is registered, THEN only the registry change is recorded and pushed.
+    (destination / "owner-notes.md").write_text("not committed")
+    result = cli(destination, "factory", "register", str(project), env=environment)
+    assert result.returncode == 0, result.stderr
+    assert log(destination, "-1") == [
+        "example-owner <42+example-owner@users.noreply.github.com>|chore: register example-app"
+    ]
+    assert git(destination, "show", "--name-only", "--format=").stdout.split() == [
+        "projects.yaml"
+    ]
+    assert "?? owner-notes.md" in git(destination, "status", "--porcelain").stdout
+    assert log(remote) == log(destination)
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        ({"GH_EXISTING": "1"}, "already exists (public); nothing was changed"),
+        (
+            {
+                "GH_LOGIN": "",
+                "GIT_CONFIG_COUNT": "2",
+                "GIT_CONFIG_KEY_0": "user.name",
+                "GIT_CONFIG_VALUE_0": "Owner",
+                "GIT_CONFIG_KEY_1": "user.email",
+                "GIT_CONFIG_VALUE_1": "owner@example.invalid",
+            },
+            "GitHub is not connected; your Factory stays local",
+        ),
+        ({"GH_LOGIN": "", "NO_AUTHOR": "1"}, "Git has no author yet"),
+        ({"ANSWER": "n"}, "Your Factory stays local. Later: gh repo create"),
+    ],
+)
+def test_factory_stays_local_when_github_is_unavailable_or_declined(
+    workspace, github, change, message
+):
+    environment, recorded, remote = github
+    answer = change.pop("ANSWER", "")
+    no_author = change.pop("NO_AUTHOR", None)
+    source, destination = workspace
+    # WHEN the backup cannot or should not be created.
+    result = cli(
+        source.parent,
+        "factory",
+        "init",
+        "--template",
+        str(source),
+        "--version",
+        "v1.0.0",
+        "--project-dir",
+        str(destination),
+        "--github",
+        answers=answer + "\n",
+        env={**environment, **change},
+    )
+    # THEN setup still succeeds, the local history exists and GitHub is untouched.
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert message in result.stdout + result.stderr
+    assert git(destination, "remote").stdout == ""
+    assert not remote.exists()
+    assert not [call for call in recorded() if call[:2] == ["repo", "create"]]
+    if no_author:
+        # Without any author, files are staged and the owner is told what to set.
+        assert "commit the Factory files first" in result.stdout
+        assert git(destination, "diff", "--cached", "--name-only").stdout
+        # WHEN rerun once an author is available, THEN the first commit is made.
+        rerun = initialize(workspace, env=environment, answers="n\n")
+        assert rerun.returncode == 0, rerun.stdout + rerun.stderr
+        assert log(destination)[0].endswith("|chore: create Factory")
+    else:
+        assert len(log(destination)) == 1
+
+
+def test_existing_factory_without_git_is_versioned_after_confirmation(
+    workspace, github
+):
+    environment, recorded, remote = github
+    source, destination = workspace
+    # GIVEN a Factory folder created without Git and without saved CLI progress.
+    assert initialize(workspace).returncode == 0
+    shutil.rmtree(destination / ".git")
+    # Saved progress lives in the macOS or XDG configuration folder.
+    for state in source.parent.glob("state-*/**/state.json"):
+        state.unlink()
+    (destination / "owner-notes.md").write_text("keep")
+    arguments = (
+        "factory",
+        "init",
+        "--template",
+        str(source),
+        "--version",
+        "v1.0.0",
+        "--project-dir",
+        str(destination),
+        "--github",
+    )
+    # WHEN the owner declines the commit, THEN the folder stays untouched.
+    declined = cli(source.parent, *arguments, answers="n\n", env=environment)
+    assert declined.returncode == 0, declined.stdout + declined.stderr
+    assert "not a Git repository yet" in declined.stdout
+    assert not (destination / ".git").exists()
+    assert not recorded()
+    # WHEN the owner accepts both questions, THEN owner files are committed and backed up.
+    accepted = cli(source.parent, *arguments, answers="y\ny\n", env=environment)
+    assert accepted.returncode == 0, accepted.stdout + accepted.stderr
+    assert "owner-notes.md" in git(destination, "ls-files").stdout.split()
+    assert log(remote) == log(destination)
