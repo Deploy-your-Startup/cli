@@ -68,3 +68,14 @@ another client/device, then stop the command and check that its child exited.
 For an iOS integration, also verify the app's actual API request from the device.
 Record these checks as unverified when cloudflared, network access or a device is
 unavailable. No credentials are needed for a Quick Tunnel.
+
+For iOS, distinguish native `URLSession` API requests from navigation inside a
+`WKWebView`. If the app uses `WKAppBoundDomains` together with
+`limitsNavigationsToAppBoundDomains = true`, verify that an unlisted tunnel
+hostname is rejected and that navigation succeeds after adding the appropriate
+development domain and rebuilding. Start a new Quick Tunnel and confirm that its
+changed hostname is covered by the development configuration before repeating
+the request. Keep production domain restrictions unchanged. These domain checks
+do not apply to `URLSession`; a successful native request does not establish
+WKWebView compatibility. See
+[WebKit's App-Bound Domains documentation](https://webkit.org/blog/10882/app-bound-domains/).

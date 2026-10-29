@@ -256,6 +256,17 @@ security checks globally. Native iOS clients do not require browser CORS or an A
 exception for the public HTTPS endpoint. Stable hostnames and Access configuration
 are not provided; browser email authentication is unsuitable for native API clients.
 
+For a `WKWebView` app using `WKAppBoundDomains` and
+`limitsNavigationsToAppBoundDomains = true`, check that the tunnel hostname is
+covered by its configured domains before testing navigation. Otherwise WebKit
+rejects it with “App-bound domain failure” despite valid HTTPS. A new Quick Tunnel
+hostname may require updating the development `Info.plist` and rebuilding the app;
+use a stable hostname outside this command's scope if repeated changes are
+impractical. Keep development domains separate from production restrictions.
+App-Bound Domains do not apply to native API calls via `URLSession`; do not add
+this configuration for that case. See
+[WebKit's App-Bound Domains documentation](https://webkit.org/blog/10882/app-bound-domains/).
+
 ## 5. Secrets
 
 Secrets live as inline Ansible Vault fields in
