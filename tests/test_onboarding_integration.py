@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def launch(tmp_path, answers, *options, domain_option=("--domain-owned",)):
+    (tmp_path / "home").mkdir(exist_ok=True)
     return subprocess.run(
         [
             sys.executable,
@@ -38,6 +39,8 @@ def launch(tmp_path, answers, *options, domain_option=("--domain-owned",)):
             "PYTHONPATH": str(ROOT / "src"),
             "SENTRY_DSN": "",
             "NO_COLOR": "1",
+            "HOME": str(tmp_path / "home"),
+            "XDG_CONFIG_HOME": str(tmp_path / "home/.config"),
         },
         timeout=30,
     )
@@ -196,6 +199,7 @@ def test_shared_owner_launch_uses_the_compatible_published_default(tmp_path):
 def run_interactive_bootstrap(
     tmp_path, answers, *options, detect_account=False, environment=None
 ):
+    (tmp_path / "home").mkdir(exist_ok=True)
     return subprocess.run(
         [
             sys.executable,
@@ -216,6 +220,8 @@ def run_interactive_bootstrap(
             "PYTHONPATH": str(ROOT / "src"),
             "SENTRY_DSN": "",
             "NO_COLOR": "1",
+            "HOME": str(tmp_path / "home"),
+            "XDG_CONFIG_HOME": str(tmp_path / "home/.config"),
             **(environment or {}),
         },
     )
@@ -232,6 +238,12 @@ def test_interactive_stack_and_target_choices_precede_credentials(tmp_path):
             "Bring your own server",
         ),
         ("3", "example.com\nn\n", "Pitch v0.1.2", "Cloudflare Pages"),
+        (
+            "4",
+            "1\nexample.com\n\nn\n",
+            "Vue + NestJS 2163a66ca39df4bbfd12473e6c87ec3d1c6348da",
+            "Bring your own server",
+        ),
     ]
     for stack, answers, template, target in scenarios:
         # WHEN choosing a stack and destination, then declining the launch plan.

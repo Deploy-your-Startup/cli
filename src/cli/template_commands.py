@@ -16,6 +16,8 @@ from copier.main import Worker
 DEFAULT_TEMPLATE = "https://github.com/Deploy-your-Startup/django-backend-template.git"
 VUE_TEMPLATE = "https://github.com/Deploy-your-Startup/vue-django-template.git"
 VUE_TEMPLATE_VERSION = "v0.1.7"
+VUE_NESTJS_TEMPLATE = "https://github.com/Deploy-your-Startup/vue-nestjs-template.git"
+VUE_NESTJS_TEMPLATE_VERSION = "2163a66ca39df4bbfd12473e6c87ec3d1c6348da"
 PITCH_TEMPLATE = "https://github.com/Deploy-your-Startup/pitch-template.git"
 # The tested release of DEFAULT_TEMPLATE that this CLI release bootstraps. This
 # is the only place the default template version is pinned; installers and
@@ -146,6 +148,8 @@ def default_template_version(source: str) -> str:
         return DEFAULT_TEMPLATE_VERSION
     if source == VUE_TEMPLATE:
         return VUE_TEMPLATE_VERSION
+    if source == VUE_NESTJS_TEMPLATE:
+        return VUE_NESTJS_TEMPLATE_VERSION
     if source == PITCH_TEMPLATE:
         return PITCH_TEMPLATE_VERSION
     return "HEAD"
