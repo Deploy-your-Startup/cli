@@ -861,7 +861,8 @@ def test_existing_factory_without_git_is_versioned_after_confirmation(
     # GIVEN a Factory folder created without Git and without saved CLI progress.
     assert initialize(workspace).returncode == 0
     shutil.rmtree(destination / ".git")
-    for state in (source.parent / "state-home").rglob("state.json"):
+    # Saved progress lives in the macOS or XDG configuration folder.
+    for state in source.parent.glob("state-*/**/state.json"):
         state.unlink()
     (destination / "owner-notes.md").write_text("keep")
     arguments = (
