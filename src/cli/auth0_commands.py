@@ -7,11 +7,13 @@ import json
 import secrets
 import shutil
 import subprocess
-import tempfile
+import sys
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 import click
+
+from cli.vault_fields import read_vault_field, store_vault_fields
 
 
 def auth0_json(*args: str):
@@ -30,11 +32,22 @@ def auth0_json(*args: str):
 
 
 def check_auth0_login(tenant: str) -> None:
+    """Check tenant access; in a terminal, run `auth0 login` once if it fails."""
     if shutil.which("auth0") is None:
         raise click.ClickException(
             "Auth0 CLI is missing: run `brew install auth0/auth0-cli/auth0`, then `auth0 login`."
         )
-    auth0_json("apps", "list", "--tenant", tenant)
+    try:
+        auth0_json("apps", "list", "--tenant", tenant)
+    except click.ClickException:
+        if not (sys.stdin.isatty() and sys.stderr.isatty()):
+            raise
+        click.echo(f"No usable Auth0 login for {tenant}; starting `auth0 login`.")
+        if subprocess.run(["auth0", "login"], check=False).returncode:
+            raise click.ClickException(
+                "Auth0 login did not complete. Run `auth0 login` and try again."
+            ) from None
+        auth0_json("apps", "list", "--tenant", tenant)
     auth0_json("apis", "list", "--tenant", tenant)
 
 
@@ -212,24 +225,9 @@ def configure_auth0(
             "read:session",
         )
     target = (project_dir / "deployment" / "group_vars" / "production.yml").resolve()
-    cookie = subprocess.run(
-        [
-            "startup",
-            "secrets",
-            "get-field",
-            "-f",
-            str(target),
-            "--field",
-            "oauth2_proxy_cookie_secret",
-        ],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
     cookie_secret = (
-        cookie.stdout.strip()
-        if cookie.returncode == 0
-        else base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
+        read_vault_field(target, "oauth2_proxy_cookie_secret")
+        or base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
     )
     if len(cookie_secret) == 43:
         # Padding preserves the key; Ansible's decoder requires it.
@@ -242,42 +240,7 @@ def configure_auth0(
         "auth_audience": audience,
         proxy_toggle: "true",
     }
-    for field, value in values.items():
-        current = subprocess.run(
-            ["startup", "secrets", "get-field", "-f", str(target), "--field", field],
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        if current.returncode == 0 and current.stdout.strip() == value:
-            continue
-        command = [
-            "startup",
-            "secrets",
-            "update",
-            "-r",
-            str(target),
-            "--field-stdin",
-            field,
-            "--create-in",
-            str(target),
-        ]
-        for dry_run in (True, False):
-            with tempfile.TemporaryDirectory(
-                prefix="startup-auth0-preview-"
-            ) as preview:
-                result = subprocess.run(
-                    command + (["--dry-run"] if dry_run else []),
-                    cwd=preview if dry_run else project_dir,
-                    input=value,
-                    text=True,
-                    capture_output=True,
-                    check=False,
-                )
-            if result.returncode:
-                raise click.ClickException(
-                    "Could not save Auth0 configuration in the vault."
-                )
+    store_vault_fields(project_dir, target, values, "Auth0")
     click.echo(
         f"Auth0 app {project_name} configured in {tenant}; credentials saved in the project vault."
     )

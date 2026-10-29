@@ -122,7 +122,6 @@ ignore = [
 "src/cli/rotate_vault.py" = ["C901", "PLR0912", "PLR0915"]
 "src/cli/template_commands.py" = ["C901"]
 "src/cli/verification.py" = ["C901", "PLR0912", "PLR0915"]
-"src/cli/wizard/runner.py" = ["C901", "PLR0912"]
 "src/cli/wizard/steps/cost.py" = ["C901", "PLR0912", "PLR0915"]
 "src/cli/wizard/steps/finalize.py" = ["C901", "PLR0912", "PLR0915"]
 "src/cli/wizard/steps/project.py" = ["C901", "PLR0912", "PLR0915"]

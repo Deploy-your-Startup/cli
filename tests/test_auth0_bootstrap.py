@@ -132,3 +132,25 @@ def test_live_login_requires_private_api_and_safe_session(
         with pytest.raises(click.ClickException) as error:
             auth.validate_browser_session(context, "https://demo.example")
         assert "private-session" not in str(error.value)
+
+
+def test_failed_auth0_access_starts_auth0_login_in_a_terminal(monkeypatch):
+    # GIVEN a terminal whose Auth0 login has expired.
+    calls, logged_in = [], []
+
+    def run(command, **kwargs):
+        calls.append(command)
+        if command == ["auth0", "login"]:
+            logged_in.append(True)
+            return CompletedProcess(command, 0)
+        return CompletedProcess(command, 0 if logged_in else 1, "[]", "")
+
+    monkeypatch.setattr(auth.shutil, "which", lambda name: name)
+    monkeypatch.setattr(auth.subprocess, "run", run)
+    monkeypatch.setattr(auth.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(auth.sys.stderr, "isatty", lambda: True)
+
+    # WHEN access is checked, THEN `auth0 login` runs once and access is retried.
+    auth.check_auth0_login("tenant.eu.auth0.com")
+    assert calls.count(["auth0", "login"]) == 1
+    assert calls[-1][:3] == ["auth0", "apis", "list"]

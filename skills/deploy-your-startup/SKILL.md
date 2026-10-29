@@ -71,8 +71,9 @@ Ask **one** bundled question with only what is missing:
   server's host; whether the domain is **already owned** (default) or should
   be bought.
 
-Optional, ask only if the user brings it up: extra domains, a Sentry DSN, the
-Vue template, Auth0 login (`--auth0-tenant`; otherwise pass `--without-auth`).
+Optional, ask only if the user brings it up: extra domains, the Vue template,
+Auth0 login (`--auth0-tenant`; otherwise pass `--without-auth`), Sentry error
+tracking (`--sentry-org` after `sentry-cli login`; otherwise `--without-sentry`).
 
 If your account already has a shared deployment repository, preview
 `startup sync --source-version v0.1.7 --dry-run`, review it, then run

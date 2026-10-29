@@ -19,6 +19,7 @@ from cli.commands.tunnel import tunnel
 from cli.evidence_commands import evidence
 from cli.factory_commands import factory
 from cli.preflight import doctor
+from cli.sentry_commands import sentry
 from cli.skill_commands import skills
 from cli.template_commands import template
 from cli.user_config_commands import config
@@ -49,6 +50,7 @@ for command in (
     hetzner,
     lint_contract,
     secrets,
+    sentry,
     skills,
     template,
     tunnel,
@@ -95,7 +97,7 @@ for command in (
 @click.option("--project-name", help="Project name in kebab-case.")
 @click.option("--base-domain", help="Domain the project is served under.")
 @click.option("--additional-domains", help="Comma-separated extra domains.")
-@click.option("--sentry-dsn", help="Sentry DSN (full-stack only).")
+@click.option("--sentry-dsn", help="Existing Sentry DSN instead of creating a project.")
 @click.option("--github-username", help="GitHub user or org (default: gh user).")
 @click.option("--output-dir", help="Directory the project is created in.")
 @click.option(
@@ -129,6 +131,14 @@ for command in (
 )
 @click.option(
     "--without-auth", is_flag=True, help="Explicitly skip optional template login."
+)
+@click.option(
+    "--sentry-org",
+    help="Create a Sentry project in this organization (needs sentry-cli login).",
+)
+@click.option("--sentry-team", help="Sentry team for the new project.")
+@click.option(
+    "--without-sentry", is_flag=True, help="Explicitly skip optional error tracking."
 )
 @click.option("--hetzner-token", help="Use this token instead of creating one.")
 @click.option(

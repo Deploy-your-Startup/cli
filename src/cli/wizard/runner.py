@@ -22,6 +22,7 @@ from .steps.hetzner import HetznerStep
 from .steps.pitch_finalize import PitchFinalizeStep
 from .steps.pitch_project import PitchProjectStep
 from .steps.project import ProjectStep
+from .steps.sentry import SentryStep
 from .steps.shared_deployment import SharedDeploymentStep
 
 FULLSTACK_STEPS: list[type[WizardStep]] = [
@@ -66,20 +67,13 @@ def steps_for(ctx: BootstrapContext) -> list[type[WizardStep]]:
             steps[finalize:finalize] = [AttachedDnsStep, DomainStep]
     if ctx.auth0_tenant:
         steps.insert(-1, Auth0Step)
+    if ctx.sentry_org:
+        steps.insert(-1, SentryStep)
     return steps
 
 
-def check_prerequisites(ctx: BootstrapContext) -> None:
-    """Fail fast if required external tools are missing."""
-    from cli.template_commands import require_committed_template
-
-    require_committed_template(ctx.template_source, ctx.template_version)
-    if ctx.site_policy is not None:
-        from cli.site_policy import check_template_policy
-
-        check_template_policy(
-            ctx.template_source, ctx.template_version, ctx.site_policy
-        )
+def _choose_authentication(ctx: BootstrapContext) -> None:
+    """Settle optional template login and check its CLI login up front."""
     if ctx.auth0_tenant and ctx.without_auth:
         raise click.ClickException("Use either --auth0-tenant or --without-auth.")
     if ctx.kind != "pitch" and not ctx.auth0_tenant and not ctx.without_auth:
@@ -106,6 +100,77 @@ def check_prerequisites(ctx: BootstrapContext) -> None:
         from cli.auth0_commands import check_auth0_login
 
         check_auth0_login(ctx.auth0_tenant)
+
+
+def _choose_error_tracking(ctx: BootstrapContext) -> None:
+    """Settle optional Sentry and check the sentry-cli login up front.
+
+    Unattended runs without a choice skip it: unlike login, error tracking
+    never changes what the template needs to work.
+    """
+    if sum(map(bool, (ctx.sentry_org, ctx.sentry_dsn, ctx.without_sentry))) > 1:
+        raise click.ClickException(
+            "Use only one of --sentry-org, --sentry-dsn or --without-sentry."
+        )
+    if ctx.kind == "pitch":
+        if ctx.sentry_org:
+            raise click.ClickException("--sentry-org requires --kind fullstack.")
+        return
+    if not (ctx.sentry_org or ctx.sentry_dsn or ctx.without_sentry) and (
+        not ctx.non_interactive
+    ):
+        if click.confirm("Set up Sentry error tracking?", default=False):
+            from cli.sentry import default_org
+
+            ctx.sentry_org = click.prompt(
+                "Sentry organization slug", default=default_org()
+            )
+        else:
+            ctx.without_sentry = True
+    if ctx.sentry_org:
+        from cli.sentry import check_sentry_login
+
+        check_sentry_login(ctx.sentry_org)
+
+
+def _check_github_login(ctx: BootstrapContext) -> None:
+    result = subprocess.run(
+        ["gh", "auth", "status"], capture_output=True, text=True, check=False
+    )
+    if result.returncode != 0:
+        raise click.ClickException("GitHub CLI is not signed in. Run `gh auth login`.")
+
+    # ghcr.io image pulls need `read:packages`. This used to be noticed deep
+    # inside the project step, several minutes and a Hetzner project later;
+    # settle it here, before anything has been created.
+    from cli.bootstrap import _ensure_ghcr_scopes, _gh_token_has_scope
+
+    if not (
+        _gh_token_has_scope("read:packages") or _gh_token_has_scope("write:packages")
+    ):
+        if ctx.non_interactive:
+            raise click.ClickException(
+                "The gh token is missing the 'read:packages' scope needed for "
+                "ghcr.io pulls. Run `gh auth refresh -h github.com -s "
+                "read:packages` once — it opens a browser, so it cannot be "
+                "done as part of an unattended run."
+            )
+        _ensure_ghcr_scopes()
+
+
+def check_prerequisites(ctx: BootstrapContext) -> None:
+    """Fail fast if required external tools are missing."""
+    from cli.template_commands import require_committed_template
+
+    require_committed_template(ctx.template_source, ctx.template_version)
+    if ctx.site_policy is not None:
+        from cli.site_policy import check_template_policy
+
+        check_template_policy(
+            ctx.template_source, ctx.template_version, ctx.site_policy
+        )
+    _choose_authentication(ctx)
+    _choose_error_tracking(ctx)
     if ctx.kind != "pitch":
         from cli.preflight import check_local_prerequisites
 
@@ -125,31 +190,7 @@ def check_prerequisites(ctx: BootstrapContext) -> None:
         raise click.ClickException("Missing tools:\n" + "\n".join(lines))
 
     if ctx.mode == "github":
-        result = subprocess.run(
-            ["gh", "auth", "status"], capture_output=True, text=True, check=False
-        )
-        if result.returncode != 0:
-            raise click.ClickException(
-                "GitHub CLI is not signed in. Run `gh auth login`."
-            )
-
-        # ghcr.io image pulls need `read:packages`. This used to be noticed deep
-        # inside the project step, several minutes and a Hetzner project later;
-        # settle it here, before anything has been created.
-        from cli.bootstrap import _ensure_ghcr_scopes, _gh_token_has_scope
-
-        if not (
-            _gh_token_has_scope("read:packages")
-            or _gh_token_has_scope("write:packages")
-        ):
-            if ctx.non_interactive:
-                raise click.ClickException(
-                    "The gh token is missing the 'read:packages' scope needed for "
-                    "ghcr.io pulls. Run `gh auth refresh -h github.com -s "
-                    "read:packages` once — it opens a browser, so it cannot be "
-                    "done as part of an unattended run."
-                )
-            _ensure_ghcr_scopes()
+        _check_github_login(ctx)
 
     # Resolve personal SSH access before creating provider resources. A resumed
     # project can use its saved configuration and does not need the key again.

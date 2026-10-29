@@ -54,6 +54,9 @@ class BootstrapOptions:
     template_version: str | None
     auth0_tenant: str | None
     without_auth: bool
+    sentry_org: str | None
+    sentry_team: str | None
+    without_sentry: bool
     domain_owned: bool | None
     domain_contact: str | None
     confirm_domain_order: bool
@@ -294,19 +297,15 @@ def _ask_optional_settings(options: BootstrapOptions) -> None:
     if (
         options.kind != "fullstack"
         or options.assume_yes
-        or not ui.confirm("Configure extra domains or error tracking?", default=False)
+        or options.additional_domains
+        or not ui.confirm("Configure extra domains?", default=False)
     ):
         return
-    if not options.additional_domains:
-        options.additional_domains = ui.text_input(
-            "Extra domains (comma-separated, Enter to skip)",
-            default="",
-            show_default=False,
-        )
-    if not options.sentry_dsn:
-        options.sentry_dsn = ui.text_input(
-            "Sentry DSN (Enter to skip)", default="", show_default=False
-        )
+    options.additional_domains = ui.text_input(
+        "Extra domains (comma-separated, Enter to skip)",
+        default="",
+        show_default=False,
+    )
 
 
 def _ask_github_owner(options: BootstrapOptions) -> None:
@@ -401,6 +400,9 @@ def _wizard_context(
         template_version=_answered(options.template_version),
         auth0_tenant=options.auth0_tenant,
         without_auth=options.without_auth,
+        sentry_org=options.sentry_org,
+        sentry_team=options.sentry_team,
+        without_sentry=options.without_sentry,
         kind=_answered(options.kind),
         provider=_answered(options.provider),
         deployment_ref=options.deployment_ref,
