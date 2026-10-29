@@ -235,6 +235,38 @@ between nodes. Do not silently convert existing production projects or change
 their namespace. Use `--deployment-ref <reviewed-ref>` only with a template that
 supports `deploy_ref` when reviewing an unpublished shared workflow branch.
 
+### Test a local development server over HTTPS
+
+Start the local server, then run `startup tunnel --url http://localhost:8000`.
+Requires `cloudflared` on PATH (`brew install cloudflared` on macOS); do not
+install it without approval. No Cloudflare account or domain is needed. The CLI
+prints a temporary HTTPS URL after cloudflared connects; use it as an iOS app's
+development API base URL and verify a real request from the device. Ctrl+C stops
+the tunnel; the hostname changes each run. `--startup-timeout 120` increases the
+initial connection deadline. Existing cloudflared config and `TUNNEL_*`
+environment settings are ignored; no DNS or deployment settings are changed.
+
+Anyone with the URL can reach the service, and traffic passes through Cloudflare.
+Use test data and application authentication; HTTPS is not access control. Do not
+expose admin/debug interfaces or production secrets. Only HTTP(S) loopback targets
+without URL credentials, query parameters or fragments are accepted. Quick Tunnels
+do not support SSE, have no uptime guarantee and allow 200 in-flight requests.
+Adjust development-only host/CSRF/CORS settings explicitly if needed, never disable
+security checks globally. Native iOS clients do not require browser CORS or an ATS
+exception for the public HTTPS endpoint. Stable hostnames and Access configuration
+are not provided; browser email authentication is unsuitable for native API clients.
+
+For a `WKWebView` app using `WKAppBoundDomains` and
+`limitsNavigationsToAppBoundDomains = true`, check that the tunnel hostname is
+covered by its configured domains before testing navigation. Otherwise WebKit
+rejects it with “App-bound domain failure” despite valid HTTPS. A new Quick Tunnel
+hostname may require updating the development `Info.plist` and rebuilding the app;
+use a stable hostname outside this command's scope if repeated changes are
+impractical. Keep development domains separate from production restrictions.
+App-Bound Domains do not apply to native API calls via `URLSession`; do not add
+this configuration for that case. See
+[WebKit's App-Bound Domains documentation](https://webkit.org/blog/10882/app-bound-domains/).
+
 ## 5. Secrets
 
 Secrets live as inline Ansible Vault fields in

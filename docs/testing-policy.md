@@ -51,3 +51,31 @@ python3 tests/test_agent_links_integration.py
 ```
 
 Application integration and E2E checks remain the project's own commands.
+
+## Development tunnel coverage
+
+`tests/test_dev_tunnel_integration.py` exercises the public CLI with a real local
+HTTP server and a cloudflared process stand-in. It covers endpoint output,
+SIGINT/SIGTERM cleanup (including forced shutdown), isolated configuration,
+missing dependencies, invalid/sensitive or nonlocal targets, unreachable origins,
+startup stalls/partial logs and provider exits before/after connection. These
+checks run in the regular test suite; they do not establish Cloudflare connectivity.
+
+Live qualification requires an installed cloudflared and outbound Cloudflare
+access: expose a local server containing only a harmless test response, run
+`startup tunnel --url http://localhost:<port>`, request the printed HTTPS URL from
+another client/device, then stop the command and check that its child exited.
+For an iOS integration, also verify the app's actual API request from the device.
+Record these checks as unverified when cloudflared, network access or a device is
+unavailable. No credentials are needed for a Quick Tunnel.
+
+For iOS, distinguish native `URLSession` API requests from navigation inside a
+`WKWebView`. If the app uses `WKAppBoundDomains` together with
+`limitsNavigationsToAppBoundDomains = true`, verify that an unlisted tunnel
+hostname is rejected and that navigation succeeds after adding the appropriate
+development domain and rebuilding. Start a new Quick Tunnel and confirm that its
+changed hostname is covered by the development configuration before repeating
+the request. Keep production domain restrictions unchanged. These domain checks
+do not apply to `URLSession`; a successful native request does not establish
+WKWebView compatibility. See
+[WebKit's App-Bound Domains documentation](https://webkit.org/blog/10882/app-bound-domains/).
