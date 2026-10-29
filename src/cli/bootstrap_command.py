@@ -20,6 +20,7 @@ from cli import wizard_output as ui
 from cli.template_commands import (
     DEFAULT_TEMPLATE,
     PITCH_TEMPLATE,
+    VUE_NESTJS_TEMPLATE,
     VUE_TEMPLATE,
     default_template_version,
     template_supports_shared_cluster,
@@ -158,21 +159,39 @@ def _ask_stack(options: BootstrapOptions, cluster_config: dict | None) -> None:
                 "pitch" if options.template_source == PITCH_TEMPLATE else "fullstack"
             )
         else:
-            choices = [
-                "Django/FastAPI — backend, Postgres and HTTPS",
-                "Vue + Django/FastAPI — frontend, backend, Postgres and HTTPS",
+            stacks = [
+                (
+                    "Django/FastAPI — backend, Postgres and HTTPS",
+                    "fullstack",
+                    DEFAULT_TEMPLATE,
+                ),
+                (
+                    "Vue + Django/FastAPI — frontend, backend, Postgres and HTTPS",
+                    "fullstack",
+                    VUE_TEMPLATE,
+                ),
             ]
             # A landing page has no servers, so it cannot use a cluster.
             if not (options.provider or options.shared_cluster or cluster_config):
-                choices.append("Astro — static landing page on Cloudflare Pages")
-            choice = ui.numbered_choice(
-                "Which stack would you like to start with?", choices
+                stacks.append(
+                    (
+                        "Astro — static landing page on Cloudflare Pages",
+                        "pitch",
+                        PITCH_TEMPLATE,
+                    )
+                )
+            stacks.append(
+                (
+                    "Vue + NestJS — TypeScript, one application image and Postgres",
+                    "fullstack",
+                    VUE_NESTJS_TEMPLATE,
+                )
             )
-            options.kind, options.template_source = [
-                ("fullstack", DEFAULT_TEMPLATE),
-                ("fullstack", VUE_TEMPLATE),
-                ("pitch", PITCH_TEMPLATE),
-            ][choice - 1]
+            choice = ui.numbered_choice(
+                "Which stack would you like to start with?",
+                [stack[0] for stack in stacks],
+            )
+            _, options.kind, options.template_source = stacks[choice - 1]
 
     if options.template_source is None:
         options.template_source = (
@@ -317,6 +336,8 @@ def _template_name(template_source: str) -> str:
         return "Django/FastAPI"
     if template_source == VUE_TEMPLATE:
         return "Vue + Django/FastAPI"
+    if template_source == VUE_NESTJS_TEMPLATE:
+        return "Vue + NestJS"
     return template_source.rstrip("/").removesuffix(".git").rsplit("/", 1)[-1]
 
 

@@ -798,7 +798,7 @@ and approval. Sprowi remains optional and requires separate engine credentials.
 To create only the workspace:
 
 ```bash
-startup factory init --project-dir my-factory --version v0.1.11 --setup
+startup factory init --project-dir my-factory --version v0.1.22 --setup
 cd my-factory
 startup bootstrap
 ```
@@ -826,7 +826,7 @@ Progress lives under the local Startup configuration directory
 without credentials or raw error logs. This records local Factory setup; startup
 bootstrap and live deployment remain separate operations.
 
-Factory v0.1.11 is pinned by the CLI. `--template` and `--version` select a reviewed
+Factory v0.1.22 is pinned by the CLI. `--template` and `--version` select a reviewed
 alternative; new/empty destinations and matching existing Factories are accepted.
 A retry never applies template updates. Initialize Git and commit generated files
 including `.copier-answers.yml` before `startup template update`.
@@ -846,3 +846,15 @@ and comments survive, and conflicting repository mappings stop setup. Only name
 and repository are recorded; verify Actions, DNS, HTTPS and cluster access before
 adding live deployment metadata. For an already cloned startup, use
 `startup factory register projects/startups/example-app`.
+
+### Vue + NestJS
+
+Choose **Vue + NestJS** in `startup bootstrap` for a TypeScript application with
+plain Vue, PostgreSQL and one NestJS image serving both the API and frontend.
+Unattended runs select
+`--template https://github.com/Deploy-your-Startup/vue-nestjs-template.git`. The
+CLI pins a tested immutable template revision; `--template-version` overrides it.
+Local-only setup uses Copier as described in the template README; bootstrap
+provisions and deploys. Shared roles, Vault and namespace configuration follow
+the other full-stack templates. Public launch still requires reviewed access
+control, operator/privacy details, backups and verification.

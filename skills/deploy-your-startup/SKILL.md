@@ -38,13 +38,15 @@ hand-written scaffolding, raw `ansible-vault` or ad-hoc `ansible-playbook` runs.
 ## 2. Create a new startup
 
 Interactive `startup bootstrap` asks for name, template (Django/FastAPI,
-Vue + Django/FastAPI, or Astro), parent folder and deployment target, then
+Vue + Django/FastAPI, Vue + NestJS, or Astro), parent folder and deployment target, then
 confirms the signed-in GitHub account before final approval. Declining the
 account runs native `gh auth login`; environment tokens must be changed in the
 environment instead. `--github-username` keeps an explicit owner/organization
 without this prompt, and `--yes` remains unattended.
 `--kind fullstack` skips the stack menu and keeps the Django/FastAPI default;
-use `--template` to select Vue in an unattended run. Known templates default to
+use `--template` to select Vue in an unattended run. Vue + NestJS uses
+`https://github.com/Deploy-your-Startup/vue-nestjs-template.git`: plain Vue and
+NestJS share one application image with PostgreSQL as the database. Known templates default to
 pinned releases; explicit `--template-version` overrides them.
 BYOS bootstrap installs the CI deploy key using existing SSH access before
 pushing. If SSH fails, follow the printed repair command and rerun bootstrap.
