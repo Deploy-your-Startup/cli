@@ -675,11 +675,15 @@ session without saving authentication state.
 
 ## Optional Sentry error tracking
 
-Full-stack bootstrap asks whether to set up Sentry. Install `sentry-cli`; in a
-terminal without a login, the CLI starts `sentry-cli login` for you (set
-`SENTRY_URL=https://de.sentry.io` for an EU organization). Unattended runs need
-that login beforehand. Its token needs `org:read`, `team:read`, `project:read`
-and `project:write`. Bootstrap then creates a Django project named after the
+Full-stack bootstrap asks whether to set up Sentry. It needs a personal token
+with `org:read`, `team:read`, `project:read` and `project:write`; organization
+tokens, which `sentry-cli login` creates, only carry `org:ci`. In a terminal
+without a usable token, the CLI opens Sentry's personal token page
+(`/settings/account/api/auth-tokens/`), reads the pasted token hidden, checks
+its scopes and saves it in `~/.sentryclirc` like `sentry-cli` does. Set
+`SENTRY_URL=https://de.sentry.io` for an EU organization. `sentry-cli` itself
+is not required. Unattended runs need the token beforehand, in
+`~/.sentryclirc` or `SENTRY_AUTH_TOKEN`. Bootstrap then creates a Django project named after the
 startup, or reuses it, and saves its DSN as `backend_sentry_dsn` in the
 project vault. Non-interactive bootstrap skips Sentry unless you pass
 `--sentry-org <org>`; `--sentry-dsn` still accepts an existing DSN.

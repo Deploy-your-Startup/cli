@@ -73,7 +73,7 @@ Ask **one** bundled question with only what is missing:
 
 Optional, ask only if the user brings it up: extra domains, the Vue template,
 Auth0 login (`--auth0-tenant`; otherwise pass `--without-auth`), Sentry error
-tracking (`--sentry-org` after `sentry-cli login`; otherwise `--without-sentry`).
+tracking (`--sentry-org` with a personal Sentry token; otherwise `--without-sentry`).
 
 If your account already has a shared deployment repository, preview
 `startup sync --source-version v0.1.7 --dry-run`, review it, then run

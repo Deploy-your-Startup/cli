@@ -54,22 +54,27 @@ def _read_until(master, expected, transcript, start, timeout=30):
     return transcript
 
 
-def cli_in_terminal(tmp_path, *args, answers):
-    """Run the CLI on a terminal and type each answer after its prompt appears."""
+def cli_in_terminal(tmp_path, *args, answers, group="secrets", env=None):
+    """Run the CLI on a terminal and type each answer after its prompt appears.
+
+    `env` adds variables; a None value removes one.
+    """
+    environment = {
+        **os.environ,
+        "PYTHONPATH": str(SOURCE),
+        "STARTUP_DISABLE_KEYCHAIN_VAULT": "1",
+        "STARTUP_VAULT_PASSWORD": PASSWORD,
+        "VAULT_TEST_ARGV": str(tmp_path / "argv.jsonl"),
+        **(env or {}),
+    }
     master, slave = pty.openpty()
     process = subprocess.Popen(
-        [sys.executable, "-c", CLAIM_TERMINAL + LAUNCH, "secrets", *map(str, args)],
+        [sys.executable, "-c", CLAIM_TERMINAL + LAUNCH, group, *map(str, args)],
         stdin=slave,
         stdout=subprocess.PIPE,
         stderr=slave,
         cwd=tmp_path,
-        env={
-            **os.environ,
-            "PYTHONPATH": str(SOURCE),
-            "STARTUP_DISABLE_KEYCHAIN_VAULT": "1",
-            "STARTUP_VAULT_PASSWORD": PASSWORD,
-            "VAULT_TEST_ARGV": str(tmp_path / "argv.jsonl"),
-        },
+        env={key: value for key, value in environment.items() if value is not None},
         start_new_session=True,
     )
     os.close(slave)

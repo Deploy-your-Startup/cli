@@ -1,13 +1,15 @@
-"""GIVEN a sentry-cli login, WHEN `startup sentry setup` runs for a project,
+"""GIVEN a personal Sentry token, WHEN `startup sentry setup` runs for a project,
 THEN it creates or reuses the Sentry project and vaults the DSN without ever
 printing the token or the DSN.
 
 Sentry is replaced at its boundary by two local HTTP servers: a control host
 that names a separate region host, as sentry.io does for EU organizations.
-The CLI, Ansible Vault and the Keychain stand-in's file store are real.
+The CLI, Ansible Vault and the Keychain stand-in's file store are real; the
+login scenarios run the CLI on a pseudo-terminal with a recording browser.
 """
 
 import json
+import stat
 import textwrap
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -16,10 +18,13 @@ from threading import Thread
 import pytest
 
 from tests.test_one_password_integration import startup
+from tests.test_secret_input_integration import argv_log, cli_in_terminal
 from tests.test_vault_handoff_integration import ENTRY, PASSWORD, keychain_stand_in
 from tests.vault_support import RealVault
 
 TOKEN = "sntryu_synthetic-token"
+ORG_TOKEN = "sntrys_synthetic-org-token"
+SCOPES = ["org:read", "team:read", "project:read", "project:admin"]
 DSN = "https://synthetic-public-key@o1.ingest.de.sentry.io/42"
 
 
@@ -29,6 +34,9 @@ class FakeSentry:
     calls: list[tuple] = field(default_factory=list)
     status: int = 200
     url: str = ""
+    scopes: dict[str, list[str]] = field(
+        default_factory=lambda: {TOKEN: SCOPES, ORG_TOKEN: ["org:ci"]}
+    )
 
 
 def serve(handler):
@@ -76,6 +84,13 @@ def sentry(request):
     class Control(Region):
         def do_GET(self):
             state.calls.append(("CONTROL", self.path, None))
+            token = self.headers["Authorization"].removeprefix("Bearer ")
+            if self.path == "/api/0/":
+                if token not in state.scopes:
+                    return self.reply({"detail": "Invalid token"}, 401)
+                return self.reply({"auth": {"scopes": state.scopes[token]}})
+            if self.path == "/api/0/organizations/":
+                return self.reply([{"slug": "acme"}])
             region_url = f"http://127.0.0.1:{region.server_port}"
             self.reply({"slug": "acme", "links": {"regionUrl": region_url}})
 
@@ -185,7 +200,7 @@ def test_setup_reuses_an_existing_project(tmp_path, sentry):
 
 
 @pytest.mark.parametrize("sentry", [()], indirect=True)
-def test_rejected_login_changes_nothing_and_names_the_login_command(tmp_path, sentry):
+def test_rejected_login_changes_nothing_and_names_the_token_page(tmp_path, sentry):
     # GIVEN a login Sentry rejects.
     project = project_with_empty_dsn(tmp_path)
     before = (project / "deployment" / "group_vars" / "all.yml").read_text()
@@ -196,28 +211,32 @@ def test_rejected_login_changes_nothing_and_names_the_login_command(tmp_path, se
     result = setup(env, project)
     check = startup(env, project, "sentry", "check")
 
-    # THEN both fail with the login command, the token stays private and
+    # THEN both fail naming the token page, the token stays private and
     # neither a project nor the vault was changed.
     for run in (result, check):
         assert run.returncode != 0
-        assert "sentry-cli login" in run.stderr
+        assert "/settings/account/api/auth-tokens/" in run.stderr
         assert TOKEN not in run.stdout + run.stderr
     assert not [call for call in sentry.calls if call[0] == "POST"]
     assert (project / "deployment" / "group_vars" / "all.yml").read_text() == before
 
 
-def test_missing_login_names_the_login_command(tmp_path):
+def test_missing_login_without_a_terminal_names_the_token_page_and_scopes(tmp_path):
     # GIVEN no ~/.sentryclirc and no SENTRY_AUTH_TOKEN.
     env, _ = keychain_stand_in(tmp_path)
     env["HOME"] = str(tmp_path)
     env.pop("SENTRY_AUTH_TOKEN", None)
 
-    # WHEN the login is checked.
+    # WHEN the login is checked without a terminal.
     result = startup(env, tmp_path, "sentry", "check", "--org", "acme")
 
-    # THEN the user learns how to log in.
+    # THEN it fails fast, naming the personal token page and its scopes,
+    # and writes no login.
     assert result.returncode != 0
-    assert "sentry-cli login" in result.stderr
+    assert "https://sentry.io/settings/account/api/auth-tokens/" in result.stderr
+    for scope in ("org:read", "team:read", "project:read", "project:write"):
+        assert scope in result.stderr
+    assert not (tmp_path / ".sentryclirc").exists()
 
 
 def bootstrap_context(tmp_path, **options):
@@ -251,9 +270,9 @@ def test_missing_sentry_login_stops_bootstrap_before_resources(monkeypatch, tmp_
         tmp_path, sentry_org="acme", without_auth=True, non_interactive=True
     )
 
-    # WHEN it starts, THEN it stops with the login command before creating
+    # WHEN it starts, THEN it stops naming the token page before creating
     # the project.
-    with pytest.raises(click.ClickException, match="sentry-cli login"):
+    with pytest.raises(click.ClickException, match="auth-tokens"):
         run_wizard(ctx)
     assert not ctx.project_dir.exists()
 
@@ -271,44 +290,106 @@ def test_conflicting_sentry_choices_are_refused(tmp_path):
     assert not ctx.project_dir.exists()
 
 
-def fake_sentry_cli(tmp_path, monkeypatch, returncode=0):
-    """Put a sentry-cli stand-in on PATH that saves a login like the real one."""
+def terminal_login(tmp_path, url, token, sentryclirc=None):
+    """Run `startup sentry check` on a terminal and paste `token` when asked."""
     home = tmp_path / "home"
     home.mkdir()
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    script = bin_dir / "sentry-cli"
-    script.write_text(
-        "#!/bin/sh\n"
-        f'echo "$@" > "{tmp_path}/args"\n'
-        f"[ {returncode} -eq 0 ] && printf '[auth]\\ntoken={TOKEN}\\n' > \"$HOME/.sentryclirc\"\n"
-        f"exit {returncode}\n"
+    if sentryclirc is not None:
+        (home / ".sentryclirc").write_text(sentryclirc)
+    browser = tmp_path / "browser"
+    browser.write_text(f'#!/bin/sh\necho "$1" >> "{tmp_path}/opened"\n')
+    browser.chmod(0o755)
+    code, stdout, transcript = cli_in_terminal(
+        tmp_path,
+        "check",
+        group="sentry",
+        env={
+            "HOME": str(home),
+            "BROWSER": str(browser),
+            "SENTRY_URL": url,
+            "SENTRY_AUTH_TOKEN": None,
+            "SENTRY_ORG": None,
+        },
+        answers=[(b"Paste the Sentry token:", token)],
     )
-    script.chmod(0o755)
-    monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setenv("PATH", f"{bin_dir}:/usr/bin:/bin")
-    for name in ("SENTRY_AUTH_TOKEN", "SENTRY_URL", "SENTRY_ORG"):
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-    monkeypatch.setattr("sys.stderr.isatty", lambda: True)
+    output = stdout + transcript
+    # The pasted token is never echoed, printed or passed as an argument.
+    assert token.encode() not in output
+    assert token not in argv_log(tmp_path)
+    return code, output.decode(errors="replace"), home / ".sentryclirc"
 
 
-def test_missing_login_starts_sentry_cli_login_in_a_terminal(tmp_path, monkeypatch):
-    from cli.sentry import SentryApi
-
+@pytest.mark.parametrize("sentry", [()], indirect=True)
+def test_terminal_login_opens_the_personal_token_page_and_saves_a_valid_token(
+    tmp_path, sentry
+):
     # GIVEN a terminal without a Sentry login.
-    fake_sentry_cli(tmp_path, monkeypatch)
+    # WHEN `startup sentry check` runs and a personal token is pasted.
+    code, output, sentryclirc = terminal_login(tmp_path, sentry.url, TOKEN)
 
-    # WHEN the login is needed, THEN `sentry-cli login` runs and its token is used.
-    assert SentryApi.from_login().token == TOKEN
-    assert (tmp_path / "args").read_text().strip() == "login"
+    # THEN the personal token page was opened and named with its scopes, the
+    # token was validated, saved privately with the only organization, and
+    # used right away.
+    assert code == 0, output
+    page = f"{sentry.url}/settings/account/api/auth-tokens/"
+    assert (tmp_path / "opened").read_text().split() == [page]
+    assert page in output
+    assert "org:read, team:read, project:read, project:write" in output
+    assert "Sentry access to acme verified." in output
+    assert ("CONTROL", "/api/0/", None) in sentry.calls
+    assert stat.S_IMODE(sentryclirc.stat().st_mode) == 0o600
+    assert sentryclirc.read_text().split() == [
+        "[auth]",
+        "token",
+        "=",
+        TOKEN,
+        "[defaults]",
+        "url",
+        "=",
+        sentry.url,
+        "org",
+        "=",
+        "acme",
+    ]
 
 
-def test_failed_sentry_cli_login_names_the_login_command(tmp_path, monkeypatch):
-    import click
+@pytest.mark.parametrize("sentry", [()], indirect=True)
+def test_terminal_login_refuses_an_organization_token_and_saves_nothing(
+    tmp_path, sentry
+):
+    # GIVEN a terminal without a Sentry login.
+    # WHEN an organization token, which only carries org:ci, is pasted.
+    code, output, sentryclirc = terminal_login(tmp_path, sentry.url, ORG_TOKEN)
 
-    from cli.sentry import SentryApi
+    # THEN the missing scopes are named and no login is saved.
+    assert code != 0
+    assert "lacks org:read, team:read, project:read, project:write" in output
+    assert "Nothing was saved." in output
+    assert not sentryclirc.exists()
 
-    fake_sentry_cli(tmp_path, monkeypatch, returncode=1)
-    with pytest.raises(click.ClickException, match="sentry-cli login"):
-        SentryApi.from_login()
+
+@pytest.mark.parametrize("sentry", [()], indirect=True)
+def test_terminal_login_replaces_an_unusable_token_and_keeps_other_settings(
+    tmp_path, sentry
+):
+    # GIVEN a ~/.sentryclirc from `sentry-cli login` holding an organization
+    # token next to other settings.
+    existing = (
+        "[defaults]\norg = acme\nproject = Other\n\n"
+        f"[auth]\ntoken = {ORG_TOKEN}\n\n[http]\nproxy_url = http://proxy.test\n"
+    )
+
+    # WHEN `startup sentry check` runs and a personal token is pasted.
+    code, output, sentryclirc = terminal_login(
+        tmp_path, sentry.url, TOKEN, sentryclirc=existing
+    )
+
+    # THEN only the token changes and the other settings remain.
+    assert code == 0, output
+    assert "The saved Sentry login is unusable" in output
+    saved = sentryclirc.read_text()
+    assert f"token = {TOKEN}" in saved
+    assert ORG_TOKEN not in saved
+    for line in ("org = acme", "project = Other", "proxy_url = http://proxy.test"):
+        assert line in saved
+    assert stat.S_IMODE(sentryclirc.stat().st_mode) == 0o600

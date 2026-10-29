@@ -134,7 +134,7 @@ for command in (
 )
 @click.option(
     "--sentry-org",
-    help="Create a Sentry project in this organization (needs sentry-cli login).",
+    help="Create a Sentry project in this organization (needs a personal Sentry token).",
 )
 @click.option("--sentry-team", help="Sentry team for the new project.")
 @click.option(

@@ -1,4 +1,4 @@
-"""`startup sentry`: optional error tracking with the sentry-cli login."""
+"""`startup sentry`: optional error tracking with a personal Sentry token."""
 
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ from cli.sentry import (
     check_sentry_login,
     configure_sentry,
     default_org,
-    ensure_sentry_login,
 )
+from cli.sentry_login import ensure_sentry_login
 
 
 def _org(org: str | None) -> str:
@@ -31,7 +31,7 @@ def _org(org: str | None) -> str:
 
 @click.group(name="sentry")
 def sentry():
-    """Configure optional error tracking with the sentry-cli login."""
+    """Configure optional error tracking with a personal Sentry token."""
 
 
 @sentry.command("check")

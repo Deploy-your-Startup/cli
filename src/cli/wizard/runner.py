@@ -103,7 +103,7 @@ def _choose_authentication(ctx: BootstrapContext) -> None:
 
 
 def _choose_error_tracking(ctx: BootstrapContext) -> None:
-    """Settle optional Sentry and check the sentry-cli login up front.
+    """Settle optional Sentry and check its login up front.
 
     Unattended runs without a choice skip it: unlike login, error tracking
     never changes what the template needs to work.
@@ -121,7 +121,10 @@ def _choose_error_tracking(ctx: BootstrapContext) -> None:
     ):
         if click.confirm("Set up Sentry error tracking?", default=False):
             from cli.sentry import default_org
+            from cli.sentry_login import ensure_sentry_login
 
+            # The login comes first: it may leave the default organization.
+            ensure_sentry_login()
             ctx.sentry_org = click.prompt(
                 "Sentry organization slug", default=default_org()
             )
