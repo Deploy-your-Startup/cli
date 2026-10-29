@@ -29,6 +29,10 @@ class BootstrapContext:
     site_policy: dict | None = None
     auth0_tenant: str | None = None
     without_auth: bool = False
+    # Optional error tracking: a Sentry project is created in this org.
+    sentry_org: str | None = None
+    sentry_team: str | None = None
+    without_sentry: bool = False
 
     deployment_ref: str = "main"
     shared_cluster: bool = False

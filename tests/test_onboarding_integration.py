@@ -65,13 +65,14 @@ def test_optional_settings_and_invalid_name_are_guided(tmp_path):
     # GIVEN a typo in the project name and a user who wants advanced settings.
     # WHEN they correct it, enter optional domains, then decline creation.
     result = launch(
-        tmp_path, "Bad Name\nmy-startup\nexample.com\ny\nwww.example.com\n\nn\n"
+        tmp_path, "Bad Name\nmy-startup\nexample.com\ny\nwww.example.com\nn\n"
     )
     # THEN retry guidance and optional prompts are understandable in English.
     assert result.returncode == 0, result.stderr
     assert "Use lowercase letters, numbers and hyphens" in result.stdout
     assert "Extra domains (comma-separated, Enter to skip)" in result.stdout
-    assert "Sentry DSN (Enter to skip)" in result.stdout
+    # Error tracking is its own Sentry question, asked by the wizard.
+    assert "Sentry DSN" not in result.stdout
     assert "Cancelled. No resources were created." in result.stdout
     assert not (tmp_path / "projects").exists()
 

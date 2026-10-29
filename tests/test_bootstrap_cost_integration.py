@@ -261,7 +261,8 @@ def test_wizard_routes_cost_before_auth_and_finalization(tmp_path, provider):
     [
         (
             [],
-            "n\ny\n\nn\n",
+            # extra domains, create, Sentry, SSH key default, cost approval
+            "n\ny\nn\n\nn\n",
             "Cancelled before provisioning; nothing was created in Hetzner.",
         ),
         (["--yes", "--max-monthly-cost", "1"], "", "exceeds --max-monthly-cost"),
