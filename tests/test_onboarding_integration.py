@@ -241,7 +241,7 @@ def test_interactive_stack_and_target_choices_precede_credentials(tmp_path):
         (
             "4",
             "1\nexample.com\n\nn\n",
-            "Vue + NestJS 2163a66ca39df4bbfd12473e6c87ec3d1c6348da",
+            "Vue + NestJS v0.1.0",
             "Bring your own server",
         ),
     ]

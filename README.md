@@ -798,7 +798,7 @@ and approval. Sprowi remains optional and requires separate engine credentials.
 To create only the workspace:
 
 ```bash
-startup factory init --project-dir my-factory --version v0.1.11 --setup
+startup factory init --project-dir my-factory --version v0.1.22 --setup
 cd my-factory
 startup bootstrap
 ```
@@ -826,7 +826,7 @@ Progress lives under the local Startup configuration directory
 without credentials or raw error logs. This records local Factory setup; startup
 bootstrap and live deployment remain separate operations.
 
-Factory v0.1.11 is pinned by the CLI. `--template` and `--version` select a reviewed
+Factory v0.1.22 is pinned by the CLI. `--template` and `--version` select a reviewed
 alternative; new/empty destinations and matching existing Factories are accepted.
 A retry never applies template updates. Initialize Git and commit generated files
 including `.copier-answers.yml` before `startup template update`.
