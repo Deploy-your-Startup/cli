@@ -1,11 +1,13 @@
 """Exercise public Factory setup and bootstrap cancellation with real local tools.
 
 Run with the installed candidate CLI: uv run --extra dev python scripts/check_factory_onboarding_e2e.py.
-Only GitHub identity is substituted; no cloud resources or repositories are created.
+Only GitHub is substituted: identity, and a local bare repository for the Factory
+backup. No cloud resources or GitHub repositories are created.
 """
 
 import os
 import select
+import shlex
 import shutil
 import subprocess
 import sys
@@ -30,10 +32,18 @@ def main():
         (home / ".codex").mkdir(parents=True)
         binaries.mkdir()
         gh = binaries / "gh"
+        remote = root / "github-remote.git"
         gh.write_text(
             '#!/bin/sh\ncase "$*" in\n'
             "  *--version*) echo 'gh identity boundary' ;;\n"
+            "  *api*user*@tsv*) printf '42\\texample-owner\\n' ;;\n"
             "  *api*user*) echo example-owner ;;\n"
+            "  repo\\ view*) exit 1 ;;\n"
+            # The Factory backup lands in a local bare repository instead of GitHub.
+            "  repo\\ create\\ example-owner/my-factory\\ --private\\ --source*)\n"
+            f"    git init -q --bare -b main {shlex.quote(str(remote))} &&\n"
+            f'    git -C "$6" remote add origin {shlex.quote(str(remote))} &&\n'
+            '    git -C "$6" push -q -u origin HEAD ;;\n'
             '  skill\\ install*|skills\\ install*) exec "$STARTUP_E2E_REAL_GH" "$@" ;;\n'
             "  *) echo 'Unexpected GitHub mutation' >&2; exit 99 ;;\nesac\n"
         )
@@ -72,6 +82,7 @@ def main():
         assert process.stdout is not None and process.stdin is not None
         output = bytearray()
         steps = [
+            (b"private GitHub repository example-owner/my-factory?", b"y\n"),
             (b"Project name (for example, my-startup)", b"example-app\n"),
             (b"Which stack would you like to start with?", b"3\n"),
             (b"Domain (for example, example.com)", b"app.example.com\n"),
@@ -117,6 +128,22 @@ def main():
         assert (home / ".agents/skills/deploy-your-startup/SKILL.md").is_file()
         assert not (factory / "projects/startups/example-app").exists()
         assert "Sprowi (agent loop, beta) is not set up" in text
+
+        # The Factory is its own repository, backed up with its first commit.
+        def history(path):
+            return subprocess.run(
+                ["git", "log", "--format=%ae %s"],
+                cwd=path,
+                env=environment,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout
+
+        assert history(factory) == (
+            "42+example-owner@users.noreply.github.com chore: create Factory\n"
+        )
+        assert history(remote) == history(factory)
         # A fresh CLI process discovers the saved folder and resumes real setup.
         for options in (["status"], ["init", "--resume"]):
             result = subprocess.run(
@@ -130,7 +157,7 @@ def main():
             assert result.returncode == 0, result.stdout + result.stderr
             assert str(factory) in result.stdout
         print(
-            "Factory onboarding E2E passed: public source, real setup, startup plan and cancellation."
+            "Factory onboarding E2E passed: public source, real setup, private backup, startup plan and cancellation."
         )
 
 

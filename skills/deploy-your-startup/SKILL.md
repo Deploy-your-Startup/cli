@@ -413,8 +413,13 @@ partial bootstrap. Do not invent `deployed`, `url` or `kubectl_context` values;
 verify their live state first. To register an existing startup cloned into this
 folder, use `startup factory register projects/startups/<name>`. Sprowi is optional:
 `mise exec -- ./scripts/init.sh --with-sprowi` requires Docker Sandboxes and an
-engine credential. Initialize Git and commit the Factory's `.copier-answers.yml`
-before using `startup template update`.
+engine credential.
+
+The Factory is its own Git repository; setup makes the first commit. Onboarding
+offers a private GitHub backup; `startup factory init --github --project-dir
+<folder>` offers it later, and asks before committing a Factory created without
+Git. Registration commits `projects.yaml` and pushes when a remote exists. Never
+make a Factory repository public: it holds the owner's portfolio.
 
 ### Factory folder selection
 

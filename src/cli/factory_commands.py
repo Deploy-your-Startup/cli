@@ -13,6 +13,7 @@ import click
 import yaml
 
 from cli import wizard_output as ui
+from cli.factory_git import commit_factory, commit_registration, publish_to_github
 from cli.factory_prerequisites import ensure_factory_tools
 from cli.factory_progress import checkpoint, resume_plan, setup_workspace, show_status
 from cli.template_commands import ANSWERS_FILE, render_project
@@ -180,6 +181,7 @@ def register_project(project: Path) -> None:
     finally:
         pending.unlink(missing_ok=True)
     ui.success(f"Registered {project.name} in {path}.")
+    commit_registration(root, project.name)
 
 
 def resolve_source(source: str) -> str:
@@ -258,31 +260,44 @@ def prepare_factory_files(state: WorkspaceState) -> None:
     registry_document(destination)
 
 
+def version_factory(state: WorkspaceState, existing: bool, github: bool) -> None:
+    checkpoint(state, "git", lambda: commit_factory(state.destination, existing))
+    state.data["github_requested"] = github or state.data.get("github_requested", False)
+    if state.data["github_requested"]:
+        checkpoint(state, "github", lambda: publish_to_github(state.destination))
+
+
 def initialize_factory(
     destination: Path,
     source: str,
     version: str,
     setup: bool,
     show_next_steps: bool = True,
+    github: bool = False,
 ) -> Path:
     source = resolve_source(source)
     WorkspaceState.validate_source(source)
     destination = destination.expanduser().absolute()
     state = creation_state(destination, source, version, setup)
+    # A folder the CLI did not render may hold anything, so ask before committing it.
+    existing = state.data.get("last_completed") == "existing Factory"
     if setup:
         checkpoint(state, "prerequisites", ensure_factory_tools)
     checkpoint(state, "files", lambda: prepare_factory_files(state))
     if setup:
         setup_workspace(state)
+    version_factory(state, existing, github)
     state.data.update(
         workflow_step="complete" if setup else "setup pending", workflow_failure=None
     )
     state.save()
     if show_next_steps:
         ui.info(f"Next: cd {shlex.quote(str(destination))} && startup bootstrap")
-        ui.info(
-            "Review the files, initialize Git and commit .copier-answers.yml before template updates."
-        )
+        if not state.data["github_requested"]:
+            ui.info(
+                "Back up privately on GitHub: startup factory init --github "
+                f"--project-dir {shlex.quote(str(destination))}"
+            )
         ui.info("Sprowi is optional: mise exec -- ./scripts/init.sh --with-sprowi")
     return destination
 
@@ -306,6 +321,11 @@ def factory():
     help="Check tools, install workspace runtimes and clone registered tooling.",
 )
 @click.option(
+    "--github",
+    is_flag=True,
+    help="Offer a private GitHub repository for the Factory (asks first).",
+)
+@click.option(
     "--resume",
     is_flag=True,
     help="Continue the saved Factory plan (latest by default).",
@@ -315,6 +335,7 @@ def init(
     source: str | None,
     version: str | None,
     setup: bool,
+    github: bool,
     resume: bool,
 ):
     """Create or resume a Factory without provisioning cloud resources."""
@@ -327,6 +348,7 @@ def init(
             source or FACTORY_TEMPLATE,
             version or FACTORY_VERSION,
             setup or bool(state and state.data.get("setup_requested")),
+            github=github,
         )
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         raise click.ClickException(str(exc)) from exc
@@ -379,7 +401,7 @@ def onboard(
             ui.error(f"{problem} Choose another folder.")
     try:
         destination = initialize_factory(
-            project_dir, source, version, True, show_next_steps=False
+            project_dir, source, version, True, show_next_steps=False, github=True
         )
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         raise click.ClickException(str(exc)) from exc
