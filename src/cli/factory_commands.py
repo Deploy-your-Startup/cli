@@ -20,7 +20,7 @@ from cli.template_commands import ANSWERS_FILE, render_project
 from cli.workspace_state import WorkspaceState
 
 FACTORY_TEMPLATE = "https://github.com/Deploy-your-Startup/startup-factory-template.git"
-FACTORY_VERSION = "v0.1.23"
+FACTORY_VERSION = "v0.1.24"
 MARKER = ".startup-factory.yml"
 
 
