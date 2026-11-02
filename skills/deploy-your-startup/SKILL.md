@@ -209,9 +209,9 @@ Bootstrap additional applications with `--cluster <file> --kind fullstack`,
 unique project names and domains. Point their DNS at the same ingress; attachment
 creates no servers. Each project has its own namespace, database, media and Vault.
 
-CLI v0.1.11 pins the compatible Django template v0.1.6, so shared mode works
-without an extra template option. Vue requires its template source and
---template-version v0.1.6. Older templates without the capability are rejected
+The CLI pins a tested Django template with shared-cluster support, so no extra
+template option is needed. For Vue, select its template source; omit
+--template-version to use its tested built-in release. Older templates without the capability are rejected
 before account or server setup.
 
 Use the following sequence; do not attach applications until the owner is verified:
