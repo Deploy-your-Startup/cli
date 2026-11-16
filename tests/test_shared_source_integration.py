@@ -181,6 +181,9 @@ def test_an_owner_copy_project_migrates_once_to_the_current_release(shared):
     assert "someone/else/.github/workflows/x.yml@v1" in workflow.read_text()
     assert not (deployment / "shared-roles.source").exists()
     assert f"gh repo archive {LEGACY}" in result.stdout
+    # AND the role checkout does not leak Git's detached-HEAD advice or fetch progress.
+    assert "detached HEAD" not in result.stdout + result.stderr
+    assert "FETCH_HEAD" not in result.stdout + result.stderr
     # AND a second run has nothing to do, while update now works against the new source.
     assert "nothing to migrate" in shared.cli(project, "migrate", "deploy").stdout
     assert (

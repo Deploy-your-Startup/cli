@@ -180,8 +180,11 @@ def _playbook_options(
 def _git(
     repo_dir: Path, *args: str, cwd: Path, capture_output: bool = False
 ) -> subprocess.CompletedProcess[str]:
+    # Role checkouts are always detached; Git's advice about that is noise.
     return _run_command(
-        ["git", "-C", str(repo_dir), *args], cwd=cwd, capture_output=capture_output
+        ["git", "-c", "advice.detachedHead=false", "-C", str(repo_dir), *args],
+        cwd=cwd,
+        capture_output=capture_output,
     )
 
 
@@ -422,12 +425,20 @@ def _update_existing_checkout(
 
     _warn_about_local_changes(target_dir, working_dir, version)
     _configure_sparse_checkout(target_dir, working_dir)
-    _git(target_dir, "fetch", "--tags", "origin", version, cwd=working_dir)
-    _git(target_dir, "checkout", version, cwd=working_dir)
+    _git(target_dir, "fetch", "--quiet", "--tags", "origin", version, cwd=working_dir)
+    _git(target_dir, "checkout", "--quiet", version, cwd=working_dir)
     _configure_sparse_checkout(target_dir, working_dir)
     if re.fullmatch(r"[A-Za-z0-9._/-]+", version):
         with contextlib.suppress(subprocess.CalledProcessError):
-            _git(target_dir, "pull", "--ff-only", "origin", version, cwd=working_dir)
+            _git(
+                target_dir,
+                "pull",
+                "--quiet",
+                "--ff-only",
+                "origin",
+                version,
+                cwd=working_dir,
+            )
     return target_dir
 
 
@@ -445,11 +456,20 @@ def _fresh_checkout(
     if target_dir.exists():
         shutil.rmtree(target_dir)
     click.echo(f"Cloning shared Ansible roles from {candidate} ...")
-    _run_command(["git", "init", str(target_dir)], cwd=working_dir)
+    _run_command(["git", "init", "--quiet", str(target_dir)], cwd=working_dir)
     _git(target_dir, "remote", "add", "origin", candidate, cwd=working_dir)
     _configure_sparse_checkout(target_dir, working_dir)
-    _git(target_dir, "fetch", "--depth", "1", "origin", version, cwd=working_dir)
-    _git(target_dir, "checkout", "FETCH_HEAD", cwd=working_dir)
+    _git(
+        target_dir,
+        "fetch",
+        "--quiet",
+        "--depth",
+        "1",
+        "origin",
+        version,
+        cwd=working_dir,
+    )
+    _git(target_dir, "checkout", "--quiet", "FETCH_HEAD", cwd=working_dir)
     return target_dir
 
 
