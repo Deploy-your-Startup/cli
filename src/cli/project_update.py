@@ -85,9 +85,11 @@ def _report_check(working_dir: Path, release: str) -> None:
     click.echo(f"Adopt it with: startup update --version {release}")
 
 
-def _report_update(before: tuple[str, str], working_dir: Path, release: str) -> None:
+def _report_update(
+    before: tuple[str, str], working_dir: Path, release: str, moved: int
+) -> None:
     after = _pin(working_dir)
-    if after == before:
+    if after == before and not moved:
         click.echo(f"Up to date: this project already runs release {release}.")
         return
     roles = "unchanged" if after[1] == before[1] else "changed"
@@ -121,5 +123,5 @@ def run_update(working_directory: str, *, version: str | None, check: bool) -> N
         _report_check(working_dir, release)
         return
     before = _pin(working_dir)
-    run_pin(working_directory=working_directory, version=release, owner=owner)
-    _report_update(before, working_dir, release)
+    moved = run_pin(working_directory=working_directory, version=release, owner=owner)
+    _report_update(before, working_dir, release, moved)
