@@ -246,8 +246,19 @@ def test_update_moves_one_project_between_releases_without_moving_main(remotes):
         second
     )
     assert "role contents changed" in result.stdout
-    result = update("--to", first)
+    result = update("--version", first)
     # THEN the project is back on the earlier, unchanged release.
     assert result.returncode == 0, result.stdout + result.stderr
     assert (deployment / "shared-roles.ref").read_text().strip() == adopted
     assert f"@{adopted} # {first}" in workflow.read_text()
+    # WHEN a template version that is not yet a release is requested by name.
+    remotes.release("versioned roles", version="v2.0.0")
+    remotes.release("unreleased roles")
+    result = update("--version", "v2.0.0")
+    # THEN exactly that version is published as a release and adopted; main still has not moved.
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (deployment / "shared-roles.ref").read_text().strip() == remotes.commit(
+        "v2.0.0"
+    )
+    assert remotes.show("v2.0.0", "roles/sample.yml") == "versioned roles"
+    assert remotes.commit("main") == main

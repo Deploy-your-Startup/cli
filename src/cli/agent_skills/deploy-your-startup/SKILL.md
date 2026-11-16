@@ -174,7 +174,7 @@ password comes from the configured backend (Keychain or 1Password).
 | Preview Ubuntu LTS upgrade | `startup ansible os-upgrade … --target-version 26.04 --dry-run` |
 | Upgrade k3s / cert-manager | `startup ansible k3s-upgrade …` / `startup ansible cert-manager-upgrade …` |
 | Update shared deployment workflows and roles | `startup sync --dry-run`, then `startup sync` |
-| Move one project to newer shared workflows and roles | `startup update --check`, then `startup update` (`--to <release>` to choose or roll back) |
+| Move one project to newer shared workflows and roles | `startup update --check`, then `startup update` (`--version <release>` to choose or roll back) |
 | Update application template files | `startup template update --dry-run`, then `startup template update` |
 | Record a template baseline for an older project | `startup template adopt --version <tag>` |
 

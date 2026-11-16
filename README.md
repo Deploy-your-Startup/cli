@@ -630,8 +630,9 @@ release without moving `main`, then points the project's role pin
 (`deployment/shared-roles.ref`, `shared-roles.sha256`) and its shared workflow
 references in `.github/workflows` at that release. No other project changes and
 nothing is deployed: review the diff, commit and push to roll it out.
-`startup update --to <release>` moves to a specific release, including back to
-an earlier one.
+`startup update --version <release>` moves to a specific release, including
+back to an earlier one, or publishes and adopts a template version such as
+`v1.2.0`.
 
 Local Ansible commands refresh `deployment/.shared-roles` from Git. CI exports
 the bundled roles and uses `--no-refresh` to consume that exported copy. Keep

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import re
 import subprocess
 from pathlib import Path
 
@@ -81,7 +82,7 @@ def _report_check(working_dir: Path, release: str) -> None:
         return
     click.echo(f"Update available: release {release}.")
     click.echo(f"This project runs {current[:12] or 'an unpinned revision'}.")
-    click.echo("Adopt it with: startup update")
+    click.echo(f"Adopt it with: startup update --version {release}")
 
 
 def _report_update(before: tuple[str, str], working_dir: Path, release: str) -> None:
@@ -94,20 +95,28 @@ def _report_update(before: tuple[str, str], working_dir: Path, release: str) -> 
         f"\nThis project now targets release {release} "
         f"({before[0][:12] or 'unpinned'} → {after[0][:12]}); role contents {roles}.\n"
         "Nothing is deployed yet. Review the diff, commit and push to roll it out.\n"
-        "To go back, run: startup update --to <previous release or commit>"
+        "To go back, run: startup update --version <previous release or commit>"
     )
 
 
-def run_update(
-    working_directory: str, *, to: str | None, check: bool, source_version: str
-) -> None:
+def _requested_release(
+    working_dir: Path, owner: str, version: str | None, *, check: bool
+) -> str:
+    """A published release or commit as named; otherwise publish that template version."""
+    is_commit = bool(version and re.fullmatch(r"[0-9a-f]{40}", version))
+    if version and (is_commit or _release_commit(working_dir, version)):
+        return version
+    return _latest_release(owner, version or "main", dry_run=check)
+
+
+def run_update(working_directory: str, *, version: str | None, check: bool) -> None:
     working_dir = _resolve_working_dir(working_directory)
     owner = _infer_roles_owner(working_dir)
     if not owner:
         raise click.ClickException(
             "Could not determine the GitHub owner from this project's origin remote."
         )
-    release = to or _latest_release(owner, source_version, dry_run=check)
+    release = _requested_release(working_dir, owner, version, check=check)
     if check:
         _report_check(working_dir, release)
         return
