@@ -15,7 +15,7 @@ import click
     "--to",
     "version",
     default=None,
-    help="Release, template version or commit to move to [default: latest template]",
+    help="Release, template version or commit to pin, or 'latest' to follow main unpinned",
 )
 @click.option(
     "--check", is_flag=True, help="Show the available release without changing files"
@@ -28,7 +28,14 @@ def update(working_directory, version, check):
     project's role pin and workflow references at it. --version selects a
     release that exists there (also an earlier one, to roll back) or a template
     version such as v1.2.0 to publish and adopt. Other projects are not
-    affected. Application template files are updated separately with
+    affected.
+
+    `--version latest` removes the pins instead: the project then follows the
+    main branch of your shared deployment repository and changes with every
+    `startup sync`, without a diff to review. A plain `startup update` leaves
+    such a project alone.
+
+    Application template files are updated separately with
     `startup template update`.
     """
     from cli.project_update import run_update

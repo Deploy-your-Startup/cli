@@ -194,3 +194,25 @@ def test_roles_only_pin_leaves_workflow_references_alone(pinned_project):
     assert result.returncode == 0, result.stdout + result.stderr
     assert (workflows / "deploy.yml").read_text() == original
     assert "workflow reference" not in result.stdout
+
+
+def test_setup_does_not_pin_a_project_that_follows_latest(pinned_project):
+    # GIVEN a project whose owner chose to follow the shared repository's main.
+    project, source, remote, env = pinned_project
+    (project / "shared-roles.ref").unlink()
+    (project / "shared-roles.sha256").unlink()
+    (project / "shared-roles.latest").write_text("follows main\n")
+    (source / "roles/sample/tasks/main.yml").write_text(
+        "- ansible.builtin.debug:\n    msg: latest\n"
+    )
+    git(source, env, "add", ".")
+    git(source, env, "commit", "-m", "latest roles")
+    # WHEN the real CLI sets up Ansible with defaults.
+    result = run_cli(project, remote, env)
+    # THEN it uses the current main and records no pin.
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (
+        "latest" in (project / ".shared-roles/roles/sample/tasks/main.yml").read_text()
+    )
+    assert not (project / "shared-roles.ref").exists()
+    assert not (project / "shared-roles.sha256").exists()

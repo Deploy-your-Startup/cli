@@ -33,6 +33,8 @@ __all__ = ["keychain_service_name"]
 
 DEFAULT_SHARED_DIR = ".shared-roles"
 DEFAULT_VERSION = "main"
+# Present when the owner chose to follow the shared repository's main: never auto-pin.
+FOLLOW_MARKER = "shared-roles.latest"
 ROOT_SHARED_FILES = [
     "ansible.cfg",
     "requirements.yml",
@@ -389,7 +391,7 @@ def _requested_roles_version(working_dir: Path, version: str) -> str:
                 "Requested roles differ from shared-roles.ref. Update the reviewed pin first."
             )
         return pinned
-    if version != DEFAULT_VERSION:
+    if version != DEFAULT_VERSION or (working_dir / FOLLOW_MARKER).exists():
         return version
     answers = working_dir.parent / ".copier-answers.yml"
     if not answers.exists():
@@ -695,6 +697,8 @@ def setup_ansible(
                 "Shared role contents do not match shared-roles.sha256. "
                 "Refusing to run modified or differently exported roles; update the reviewed pin and checksum together."
             )
+    elif (working_dir / FOLLOW_MARKER).exists():
+        click.echo("Following the shared repository's main; no role pin recorded.")
     elif (shared_roles_dir / ".git").exists():
         revision = _run_command(
             ["git", "-C", str(shared_roles_dir), "rev-parse", "HEAD"],

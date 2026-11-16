@@ -634,6 +634,12 @@ nothing is deployed: review the diff, commit and push to roll it out.
 back to an earlier one, or publishes and adopts a template version such as
 `v1.2.0`.
 
+`startup update --version latest` unpins the project instead: its workflows
+call the shared repository's `main`, the pin files are removed and
+`deployment/shared-roles.latest` records the choice. The project then changes
+with every `startup sync`, without a diff to review, so keep deployed startups
+pinned. `startup update --version <release>` pins it again.
+
 Local Ansible commands refresh `deployment/.shared-roles` from Git. CI exports
 the bundled roles and uses `--no-refresh` to consume that exported copy. Keep
 local refresh enabled and update shared roles through sync rather than editing

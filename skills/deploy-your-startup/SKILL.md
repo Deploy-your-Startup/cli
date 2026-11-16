@@ -185,7 +185,9 @@ application files of one project. Every sync publishes an immutable release tag;
 referencing `@main` follow. A pinned project changes only when `startup update`
 moves its role pin and shared workflow references to a release. That edits
 files and deploys nothing: the owner reviews, commits and pushes. Never update
-a project without being asked. After a template update, review the diff,
+a project without being asked. `startup update --version latest` unpins a
+project so that it follows `main` and every sync; suggest it only for
+throwaway projects and never apply it to a deployed startup unasked. After a template update, review the diff,
 resolve conflicts, run the project's checks and commit together with
 `.copier-answers.yml`. Treat its agent harness drift warning as a finding:
 report it and align the listed files with the template, or record why the
