@@ -181,3 +181,22 @@ def test_an_older_template_still_needs_the_owner_copy(environment):
     assert state == {"direct": False, "ref": "main", "release": None, "ready": False}
     assert "repo view example-owner/deploy-your-startup" in calls.read_text()
     assert not project.exists()
+
+
+@pytest.mark.parametrize(
+    ("template", "version"),
+    [
+        ("DEFAULT_TEMPLATE", "DEFAULT_TEMPLATE_VERSION"),
+        ("VUE_TEMPLATE", "VUE_TEMPLATE_VERSION"),
+        ("VUE_NESTJS_TEMPLATE", "VUE_NESTJS_TEMPLATE_VERSION"),
+        ("PITCH_TEMPLATE", "PITCH_TEMPLATE_VERSION"),
+    ],
+)
+def test_every_pinned_template_bootstraps_without_an_owner_copy(template, version):
+    # GIVEN a template release this CLI offers by default, as published on GitHub.
+    from cli import template_commands
+
+    # WHEN its Copier questions are read, THEN it asks for deploy_repository.
+    assert template_commands.template_uses_deploy(
+        getattr(template_commands, template), getattr(template_commands, version)
+    )
