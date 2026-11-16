@@ -15,7 +15,8 @@ def pin_workflow_references(
         + re.escape(repository)
         + r"/\.github/workflows/[\w.-]+\.ya?ml)@[^\s#]+(?:[ \t]+#[^\n]*)?"
     )
-    comment = "" if label == revision else f" # {label}"
+    # Name the release next to its commit; a branch name would go stale.
+    comment = "" if label in {revision, "main"} else f" # {label}"
     rewritten = 0
     workflows = project_root / ".github" / "workflows"
     for path in sorted(workflows.glob("*.y*ml")) if workflows.is_dir() else []:
