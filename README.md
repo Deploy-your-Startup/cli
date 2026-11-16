@@ -310,8 +310,9 @@ front; browser account setup may still require a person to sign in.
 | `startup bootstrap` | Create a project with guided account and deployment setup |
 | `startup ansible` | Provision, deploy, back up, restore and upgrade infrastructure |
 | `startup secrets` | Manage encrypted project configuration |
-| `startup sync` | Update shared workflows and roles in your GitHub account |
 | `startup update` | Move one project to a release of the shared workflows and roles |
+| `startup migrate deploy` | Move a project from an owner copy to `Deploy-your-Startup/deploy` once |
+| `startup sync` | Legacy: keep a per-owner `deploy-your-startup` copy current |
 | `startup template` | Adopt and update application templates with Copier |
 | `startup auth0` | Configure and validate optional application login |
 | `startup sentry` | Configure optional error tracking with Sentry |
@@ -599,24 +600,12 @@ the password backend or the GitHub Actions secret automatically. Inspect the rel
 `startup secrets <command> --help` before proceeding. Prefer a hidden prompt or stdin
 over a value in the arguments, such as `--field-set <name> <value>`.
 
-## Update the shared deployment foundation
+## Shared deployment releases
 
-```bash
-startup sync --dry-run
-startup sync
-```
-
-Sync copies `Deploy-your-Startup/deploy-template` into your private
-`<github-user>/deploy-your-startup` repository and enables private workflow access
-for your other private repositories. Projects consume shared workflows and
-Ansible roles from that copy. Use the owner/source/target options in
-`startup sync --help` when customizing this setup.
-
-Every sync publishes an immutable release tag in that copy, named after the
-synced template version (`v1.2.0`) or source commit (`source-<sha>`). The shared
-workflows and actions of a release refer to that same tag, so a later sync does
-not change what a project on an earlier release runs. `startup sync` also moves
-the copy's `main`, which projects that reference `@main` follow.
+Projects call the public [`Deploy-your-Startup/deploy`](https://github.com/Deploy-your-Startup/deploy)
+directly and pin one of its releases: immutable `vX.Y.Z` tags whose shared
+workflows and actions refer to that same tag, so a later change there does not
+change what a project on an earlier release runs.
 
 ### Update one project
 
@@ -625,34 +614,62 @@ startup update --check
 startup update
 ```
 
-Run it in the project. It publishes the current shared deploy template as a
-release without moving `main`, then points the project's role pin
+Run it in the project. It points the project's role pin
 (`deployment/shared-roles.ref`, `shared-roles.sha256`) and its shared workflow
-references in `.github/workflows` at that release. No other project changes and
-nothing is deployed: review the diff, commit and push to roll it out.
-`startup update --version <release>` moves to a specific release, including
-back to an earlier one, or publishes and adopts a template version such as
-`v1.2.0`.
+references in `.github/workflows` at the latest release. No other project
+changes and nothing is deployed: review the diff, commit and push to roll it
+out. `startup update --version <release>` moves to a specific release,
+including back to an earlier one, or to a full commit.
 
 `startup update --version latest` unpins the project instead: its workflows
 call the shared repository's `main`, the pin files are removed and
 `deployment/shared-roles.latest` records the choice. The project then changes
-with every `startup sync`, without a diff to review, so keep deployed startups
+with every merge there, without a diff to review, so keep deployed startups
 pinned. `startup update --version <release>` pins it again.
 
 Local Ansible commands refresh `deployment/.shared-roles` from Git. CI exports
 the bundled roles and uses `--no-refresh` to consume that exported copy. Keep
-local refresh enabled and update shared roles through sync rather than editing
-`.shared-roles` directly.
+local refresh enabled and never edit `.shared-roles` directly.
 
 The first Git-backed setup records `shared-roles.ref` and `shared-roles.sha256`;
 review and commit both files. Subsequent runs reuse that exact commit, and CI
 exports must match its checksum. `startup update` moves both to a newer
-release; `startup sync` alone does not advance an existing project's pin.
-`startup ansible pin --version <release>` is the underlying step, and its
-`--roles-only` leaves the workflow references unchanged. Releases pinned before
-sync published tags still call some shared actions at `main`; update once to
-close that gap.
+release. `startup ansible pin --version <release>` is the underlying step, and
+its `--roles-only` leaves the workflow references unchanged.
+
+### Use a fork
+
+To run your own changes, fork `Deploy-your-Startup/deploy`, publish releases in
+the fork with its `mise run release vX.Y.Z`, and move the project once:
+
+```bash
+startup migrate deploy --source <owner>/<fork> --dry-run
+startup migrate deploy --source <owner>/<fork>
+```
+
+The fork is recorded in `deployment/shared-roles.source`; `startup update` then
+follows its releases. `startup migrate deploy` without `--source` moves the
+project back.
+
+### Move a project from an owner copy
+
+Projects created before `Deploy-your-Startup/deploy` call a per-owner
+`<github-owner>/deploy-your-startup` copy that `startup sync` maintains. Until
+the application templates call `Deploy-your-Startup/deploy`, `startup bootstrap`
+still creates projects that way. Move each project once:
+
+```bash
+startup migrate deploy --dry-run
+startup migrate deploy
+```
+
+It points the shared workflow references at `Deploy-your-Startup/deploy`, pins
+its current release and refreshes the role pin; it does not reproduce the old
+pin. Review, commit and push. Until then `startup update --version <release>`
+still works against the owner copy, and `startup sync` keeps that copy current.
+Once no project calls the copy, archive it instead of deleting it, so old pins
+stay available for a rollback. Organizations that restrict GitHub Actions must
+allow `Deploy-your-Startup/deploy`.
 
 ## Update an application template
 
@@ -689,7 +706,7 @@ startup template adopt --version <baseline-tag-or-commit>
 
 Review and commit the answers. Adoption records existing customizations; it does
 not apply historical template changes. Shared deployment updates remain a
-separate `startup sync` operation.
+separate `startup update` operation.
 
 ## Optional Auth0 login
 

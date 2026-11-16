@@ -13,7 +13,7 @@ def test_clone_shared_roles_falls_back_after_git_failure(monkeypatch, tmp_path):
     monkeypatch.setattr(
         ansible_commands,
         "_candidate_repo_urls",
-        lambda _working_dir, _repo_url=None: [
+        lambda _working_dir, _repo_url=None, _repository=None: [
             "https://github.com/missing/deploy-your-startup.git",
             str(source),
         ],

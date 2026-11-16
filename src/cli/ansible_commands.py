@@ -185,22 +185,6 @@ def _git(
     )
 
 
-def _extract_github_owner(remote_url: str) -> str | None:
-    ssh_match = re.match(
-        r"git@github\.com:(?P<owner>[^/]+)/[^/]+(?:\.git)?$", remote_url
-    )
-    if ssh_match:
-        return ssh_match.group("owner")
-
-    https_match = re.match(
-        r"https://github\.com/(?P<owner>[^/]+)/[^/]+(?:\.git)?$", remote_url
-    )
-    if https_match:
-        return https_match.group("owner")
-
-    return None
-
-
 def _normalize_repo_url(repo_url: str) -> str:
     normalized = repo_url.strip()
     if normalized.startswith("git@github.com:"):
@@ -214,30 +198,6 @@ def _normalize_repo_url(repo_url: str) -> str:
     )
     normalized = normalized.removesuffix(".git")
     return normalized.rstrip("/")
-
-
-def _infer_roles_owner(working_dir: Path) -> str | None:
-    explicit_owner = os.getenv("STARTUP_ANSIBLE_REPO_OWNER")
-    if explicit_owner:
-        return explicit_owner
-
-    github_repository_owner = os.getenv("GITHUB_REPOSITORY_OWNER")
-    if github_repository_owner:
-        return github_repository_owner
-
-    try:
-        remote_url = _run_command(
-            ["git", "config", "--get", "remote.origin.url"],
-            cwd=working_dir,
-            capture_output=True,
-        ).stdout.strip()
-    except click.ClickException:
-        return None
-
-    if not remote_url:
-        return None
-
-    return _extract_github_owner(remote_url)
 
 
 def _github_clone_urls(
@@ -257,25 +217,24 @@ def _github_clone_urls(
     return with_token + ([https, ssh] if prefer_https else [ssh, https])
 
 
-def _candidate_repo_urls(working_dir: Path, repo_url: str | None = None) -> list[str]:
+def _candidate_repo_urls(
+    working_dir: Path, repo_url: str | None = None, repository: str | None = None
+) -> list[str]:
     """Sources for the shared roles, most specific first, without duplicates.
 
-    An explicit URL wins, then STARTUP_ANSIBLE_REPO_URL, then the owner's copy
-    of the roles, and finally the public deploy-template.
+    An explicit URL wins, then STARTUP_ANSIBLE_REPO_URL, then the project's
+    shared repository (``shared_source.shared_repository``).
     """
+    from cli.shared_source import shared_repository
+
     prefer_https = bool(os.getenv("GITHUB_ACTIONS") or os.getenv("CI"))
-    github_token = os.getenv("GITHUB_TOKEN")
     candidates = [
         url for url in (repo_url, os.getenv("STARTUP_ANSIBLE_REPO_URL")) if url
     ]
-
-    inferred_owner = _infer_roles_owner(working_dir)
-    if inferred_owner:
-        candidates += _github_clone_urls(
-            f"{inferred_owner}/{DEFAULT_SHARED_REPO_NAME}", github_token, prefer_https
-        )
     candidates += _github_clone_urls(
-        "Deploy-your-Startup/deploy-template", github_token, prefer_https
+        repository or shared_repository(working_dir),
+        os.getenv("GITHUB_TOKEN"),
+        prefer_https,
     )
     return list(dict.fromkeys(candidates))
 
@@ -507,6 +466,7 @@ def clone_or_update_shared_roles(
     version: str = DEFAULT_VERSION,
     repo_url: str | None = None,
     refresh: bool = True,
+    repository: str | None = None,
 ) -> Path:
     """Materialize the shared roles in ``shared_dir`` and return that directory.
 
@@ -516,7 +476,7 @@ def clone_or_update_shared_roles(
     working_dir = _resolve_working_dir(working_directory)
     version = _requested_roles_version(working_dir, version)
     target_dir = working_dir / shared_dir
-    candidates = _candidate_repo_urls(working_dir, repo_url)
+    candidates = _candidate_repo_urls(working_dir, repo_url, repository)
     is_git_checkout = (target_dir / ".git").exists()
     last_error: Exception | None = None
 
@@ -616,13 +576,16 @@ def run_pin(
     version: str = DEFAULT_VERSION,
     repo_url: str | None = None,
     workflows: bool = True,
-    owner: str | None = None,
+    repository: str | None = None,
 ) -> int:
-    """Record a resolved owner-repository commit and its runtime contents.
+    """Record a resolved shared-repository commit and its runtime contents.
 
     Returns the number of shared workflow and action references that moved.
     """
+    from cli.shared_source import shared_repository
+
     working_dir = _resolve_working_dir(working_directory)
+    repository = repository or shared_repository(working_dir)
     with tempfile.TemporaryDirectory(
         prefix=".startup-pin-", dir=working_dir
     ) as temporary:
@@ -630,6 +593,7 @@ def run_pin(
             working_directory=temporary,
             version=version,
             repo_url=repo_url,
+            repository=repository,
         )
         if not (root / ".git").exists():
             raise click.ClickException(
@@ -646,21 +610,16 @@ def run_pin(
     click.echo(f"Pinned shared roles to {revision}. Review and commit both pin files.")
     if not workflows:
         return 0
-    return _pin_project_workflows(working_dir, revision, version, owner)
+    return _pin_project_workflows(working_dir, revision, version, repository)
 
 
 def _pin_project_workflows(
-    working_dir: Path, revision: str, version: str, owner: str | None
+    working_dir: Path, revision: str, version: str, repository: str
 ) -> int:
     """Move the project's shared workflow references to the pinned revision."""
     from cli.workflow_pins import pin_workflow_references
 
-    owner = owner or _infer_roles_owner(working_dir)
-    if not owner:
-        return 0
-    count = pin_workflow_references(
-        working_dir.parent, f"{owner}/{DEFAULT_SHARED_REPO_NAME}", revision, version
-    )
+    count = pin_workflow_references(working_dir.parent, repository, revision, version)
     if count:
         click.echo(
             f"Moved {count} shared workflow and action reference(s) in "

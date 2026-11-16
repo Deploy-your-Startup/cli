@@ -14,6 +14,7 @@ from cli.commands.ansible import ansible
 from cli.commands.deploy import deploy
 from cli.commands.hetzner import hetzner
 from cli.commands.lint_contract import lint_contract
+from cli.commands.migrate import migrate
 from cli.commands.secrets import _password_scope, secrets
 from cli.commands.tunnel import tunnel
 from cli.commands.update import update
@@ -50,6 +51,7 @@ for command in (
     factory,
     hetzner,
     lint_contract,
+    migrate,
     secrets,
     sentry,
     skills,
@@ -250,9 +252,20 @@ def sync(
     dry_run,
     tag_only,
 ):
-    """Sync the shared deploy template into your GitHub account."""
+    """Sync deploy-template into a per-owner copy (legacy).
+
+    Projects now pin releases of Deploy-your-Startup/deploy directly; move a
+    project once with `startup migrate deploy`. Sync stays for projects
+    that still call an owner copy.
+    """
     if ctx.invoked_subcommand is None:
         from cli.sync_commands import sync_deploy_repo
+
+        click.echo(
+            "Note: owner copies are being replaced by Deploy-your-Startup/deploy. "
+            "Move a project once with: startup migrate deploy",
+            err=True,
+        )
 
         sync_deploy_repo(
             owner=owner,

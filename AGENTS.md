@@ -53,15 +53,18 @@ mise run test-vault
   runtime dependencies.
 - Bootstrap is resumable: preserve existing repositories, customizations and
   encrypted configuration.
-- `startup sync` copies shared roles and workflows (default `main`, or
-  `--source-version`) and publishes each sync as an immutable release tag whose
-  workflows and actions refer to that tag (`sync_release.py`); never move a
-  published tag. It does not advance pins: `startup update` publishes a
-  release without moving `main` and moves one project's role pin, checksum and
-  shared workflow refs to it (`project_update.py`, on top of `ansible pin`).
-  `--version latest` unpins instead (`project_follow.py`); the marker
-  `deployment/shared-roles.latest` stops setup from pinning again.
-  Keep it distinct from `startup template update`.
+- Projects pin releases of `Deploy-your-Startup/deploy`, or of the fork in
+  `deployment/shared-roles.source`; `shared_source.py` resolves which one, and
+  workflows that still call `<owner>/deploy-your-startup` keep their owner copy.
+  `startup update` moves one project's role pin, checksum and shared workflow
+  refs to a published `vX.Y.Z` tag (`project_update.py`, on top of
+  `ansible pin`); it never publishes a release. `--version latest` unpins
+  instead (`project_follow.py`); the marker `deployment/shared-roles.latest`
+  stops setup from pinning again. `startup migrate deploy`
+  (`project_migrate.py`) moves an owner-copy project once to the current
+  release. `startup sync` (`sync_release.py`) only maintains legacy owner
+  copies; never move a published tag. Keep all of this distinct from
+  `startup template update`.
 - The `deploy-your-startup` skill ships twice with identical content:
   `skills/deploy-your-startup/SKILL.md` and `src/cli/agent_skills/`. Update
   both; `tests/test_agent_skill_integration.py` fails on drift.

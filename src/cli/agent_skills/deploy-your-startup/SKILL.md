@@ -80,6 +80,8 @@ If your account already has a shared deployment repository, preview
 `startup sync --source-version v0.1.7` before generating another startup.
 The current templates require that release's optional E2E workflow input.
 Sync preserves existing application pins; advance those only after review.
+Bootstrap still creates such projects on the owner copy; `startup migrate deploy`
+moves them to `Deploy-your-Startup/deploy` afterwards.
 
 Before domain registration, run `startup hetzner domain-check <domain>` (read-only).
 Exit codes: 0 free, 1 registered, 2 unknown/error. The published standard
@@ -173,21 +175,23 @@ password comes from the configured backend (Keychain or 1Password).
 | Update server packages | `startup ansible update-vms … [--reboot]` |
 | Preview Ubuntu LTS upgrade | `startup ansible os-upgrade … --target-version 26.04 --dry-run` |
 | Upgrade k3s / cert-manager | `startup ansible k3s-upgrade …` / `startup ansible cert-manager-upgrade …` |
-| Update shared deployment workflows and roles | `startup sync --dry-run`, then `startup sync` |
 | Move one project to newer shared workflows and roles | `startup update --check`, then `startup update` (`--version <release>` to choose or roll back) |
+| Move a project off a per-owner `deploy-your-startup` copy, once | `startup migrate deploy --dry-run`, then `startup migrate deploy` |
 | Update application template files | `startup template update --dry-run`, then `startup template update` |
 | Record a template baseline for an older project | `startup template adopt --version <tag>` |
 
-Keep the two update paths apart: `startup sync` updates the shared deployment
-repository in the user's GitHub account; `startup template update` changes the
-application files of one project. Every sync publishes an immutable release tag;
-`startup sync` also moves the shared repository's `main`, which only projects
-referencing `@main` follow. A pinned project changes only when `startup update`
-moves its role pin and shared workflow references to a release. That edits
-files and deploys nothing: the owner reviews, commits and pushes. Never update
-a project without being asked. `startup update --version latest` unpins a
-project so that it follows `main` and every sync; suggest it only for
-throwaway projects and never apply it to a deployed startup unasked. After a template update, review the diff,
+Keep the two update paths apart: `startup update` moves one project's role pin
+and shared workflow references to a release of `Deploy-your-Startup/deploy` (or
+the fork in `deployment/shared-roles.source`); `startup template update` changes
+the application files of one project. Releases are immutable tags published in
+that repository; a pinned project changes only when `startup update` moves it.
+That edits files and deploys nothing: the owner reviews, commits and pushes.
+Never update or migrate a project without being asked. A project whose
+workflows still call `<owner>/deploy-your-startup` moves once with
+`startup migrate deploy`; `startup sync` only keeps such an owner copy current.
+`startup update --version latest` unpins a project so that it follows `main`;
+suggest it only for throwaway projects and never apply it to a deployed startup
+unasked. After a template update, review the diff,
 resolve conflicts, run the project's checks and commit together with
 `.copier-answers.yml`. Treat its agent harness drift warning as a finding:
 report it and align the listed files with the template, or record why the

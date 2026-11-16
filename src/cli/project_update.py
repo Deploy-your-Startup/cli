@@ -1,35 +1,36 @@
 """``startup update``: move one project to a release of the shared deployment.
 
-A release is the immutable state that a sync publishes in the owner copy. The
-project adopts it by recording the release commit for its roles and its shared
-workflow references; nothing is deployed until the owner pushes that change.
+A release is an immutable tag of the project's shared repository
+(``shared_source.shared_repository``), published there with
+``mise run release vX.Y.Z``. The project adopts it by recording the release
+commit for its roles and its shared workflow references; nothing is deployed
+until the owner pushes that change.
 """
 
 from __future__ import annotations
 
-import contextlib
-import io
 import re
 import subprocess
 from pathlib import Path
 
 import click
 
-from cli.ansible_commands import (
-    _candidate_repo_urls,
-    _infer_roles_owner,
-    _resolve_working_dir,
-    run_pin,
-)
+from cli.ansible_commands import _candidate_repo_urls, _resolve_working_dir, run_pin
 from cli.project_follow import (
     follow_latest,
     follows_latest,
     report_following,
     stop_following,
 )
-from cli.sync_commands import sync_deploy_repo
+from cli.shared_source import (
+    DEFAULT_SHARED_REPOSITORY,
+    latest_release,
+    legacy_copy,
+    shared_repository,
+)
 
 LATEST = "latest"
+COMMIT = re.compile(r"[0-9a-f]{40}")
 
 
 def _pin(working_dir: Path) -> tuple[str, str]:
@@ -42,53 +43,62 @@ def _pin(working_dir: Path) -> tuple[str, str]:
     return read("shared-roles.ref"), read("shared-roles.sha256")
 
 
-def _release_commit(working_dir: Path, release: str) -> str:
-    """Resolve a release in the owner copy; empty when it is not published."""
-    for url in _candidate_repo_urls(working_dir):
+def _remote_tags(working_dir: Path, repository: str) -> dict[str, str]:
+    """Tag name → commit of the shared repository, from the first reachable URL."""
+    for url in _candidate_repo_urls(working_dir, repository=repository):
         result = subprocess.run(
-            [
-                "git",
-                "ls-remote",
-                url,
-                f"refs/tags/{release}^{{}}",
-                f"refs/tags/{release}",
-            ],
+            ["git", "ls-remote", "--tags", url],
             text=True,
             capture_output=True,
             check=False,
         )
-        if result.returncode == 0:
-            lines = result.stdout.split()
-            return lines[0] if lines else ""
-    return ""
+        if result.returncode:
+            continue
+        tags: dict[str, str] = {}
+        for line in result.stdout.splitlines():
+            commit, _, ref = line.partition("\t")
+            name = ref.removeprefix("refs/tags/")
+            # An annotated tag lists its commit as `<name>^{}`; prefer that line.
+            if name.endswith("^{}"):
+                tags[name[:-3]] = commit
+            else:
+                tags.setdefault(name, commit)
+        return tags
+    raise click.ClickException(f"Could not read the releases of {repository}.")
 
 
-def _latest_release(owner: str, source_version: str, *, dry_run: bool) -> str:
-    """Publish the template version as a release without moving the owner's main."""
-    published: list[str] = []
-    click.echo(f"Checking {owner}/deploy-your-startup for the latest release ...")
-    # Sync reports against the owner's main, which this command never moves.
-    with contextlib.redirect_stdout(io.StringIO()):
-        sync_deploy_repo(
-            owner=owner,
-            source_version=source_version,
-            tag_only=True,
-            dry_run=dry_run,
-            on_release=published.append,
-        )
-    if not published:
+def _requested_release(working_dir: Path, repository: str, version: str | None) -> str:
+    """The named release or commit, or the latest release of the shared repository."""
+    if version and COMMIT.fullmatch(version):
+        return version
+    tags = _remote_tags(working_dir, repository)
+    if version:
+        if version not in tags:
+            raise click.ClickException(
+                f"{repository} has no release {version}. "
+                "Releases are published there with `mise run release vX.Y.Z`."
+            )
+        return version
+    legacy = legacy_copy(working_dir)
+    if legacy and repository == legacy:
         raise click.ClickException(
-            "Your shared deployment repository does not exist yet. Run startup sync first."
+            f"This project still calls the owner copy {legacy}.\n"
+            f"Move it to {DEFAULT_SHARED_REPOSITORY} once with: "
+            "startup migrate deploy"
         )
-    return published[0]
+    release = latest_release(list(tags))
+    if not release:
+        raise click.ClickException(f"{repository} has no release yet.")
+    return release
 
 
-def _report_check(working_dir: Path, release: str) -> None:
+def _report_check(working_dir: Path, repository: str, release: str) -> None:
     current, _checksum = _pin(working_dir)
-    if current and current == _release_commit(working_dir, release):
+    tags = {} if COMMIT.fullmatch(release) else _remote_tags(working_dir, repository)
+    if current and current in {release, tags.get(release)}:
         click.echo(f"Up to date: this project runs release {release}.")
         return
-    click.echo(f"Update available: release {release}.")
+    click.echo(f"Update available: release {release} of {repository}.")
     click.echo(f"This project runs {current[:12] or 'an unpinned revision'}.")
     click.echo(f"Adopt it with: startup update --version {release}")
 
@@ -109,34 +119,22 @@ def _report_update(
     )
 
 
-def _requested_release(
-    working_dir: Path, owner: str, version: str | None, *, check: bool
-) -> str:
-    """A published release or commit as named; otherwise publish that template version."""
-    is_commit = bool(version and re.fullmatch(r"[0-9a-f]{40}", version))
-    if version and (is_commit or _release_commit(working_dir, version)):
-        return version
-    return _latest_release(owner, version or "main", dry_run=check)
-
-
 def run_update(working_directory: str, *, version: str | None, check: bool) -> None:
     working_dir = _resolve_working_dir(working_directory)
-    owner = _infer_roles_owner(working_dir)
-    if not owner:
-        raise click.ClickException(
-            "Could not determine the GitHub owner from this project's origin remote."
-        )
+    repository = shared_repository(working_dir)
     if version == LATEST:
-        follow_latest(working_dir, owner, check=check)
+        follow_latest(working_dir, repository, check=check)
         return
     if follows_latest(working_dir) and not version:
-        report_following()
+        report_following(repository)
         return
-    release = _requested_release(working_dir, owner, version, check=check)
+    release = _requested_release(working_dir, repository, version)
     if check:
-        _report_check(working_dir, release)
+        _report_check(working_dir, repository, release)
         return
     before = _pin(working_dir)
     stop_following(working_dir)
-    moved = run_pin(working_directory=working_directory, version=release, owner=owner)
+    moved = run_pin(
+        working_directory=working_directory, version=release, repository=repository
+    )
     _report_update(before, working_dir, release, moved)
