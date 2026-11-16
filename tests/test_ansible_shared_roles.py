@@ -6,7 +6,7 @@ from cli import ansible_commands
 
 
 def test_clone_shared_roles_falls_back_after_git_failure(monkeypatch, tmp_path):
-    source = tmp_path / "deploy-template"
+    source = tmp_path / "deploy"
     (source / "roles" / "example").mkdir(parents=True)
     (source / "roles" / "example" / "main.yml").write_text("---\n")
 

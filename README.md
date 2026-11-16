@@ -86,17 +86,22 @@ a new project. For BYOS, its private counterpart must be available through your
 normal SSH configuration or agent. Create a key with `ssh-keygen -t ed25519` if
 needed; existing keys are never overwritten.
 
-Server templates include Postgres and HTTPS on k3s in your own accounts. An
-existing shared deployment repository is preserved. BYOS uses a domain you
+Server templates include Postgres and HTTPS on k3s in your own accounts.
+Templates that ask for `deploy_repository` call `Deploy-your-Startup/deploy`
+directly; bootstrap pins the generated project to its latest release, or to
+`--deployment-ref`. BYOS uses a domain you
 already own and does not ask for a Hetzner account. Register a domain separately
 with your preferred registrar if needed. Advanced options remain available
 through `startup bootstrap --help`.
 
-If your account already has a shared deployment repository, preview
+Template versions without that answer call a per-owner `deploy-your-startup`
+copy, which bootstrap creates with `startup sync` and otherwise preserves. If
+your account already has that copy, preview
 `startup sync --source-version v0.1.7 --dry-run`, review it, then run
-`startup sync --source-version v0.1.7` before generating another startup.
-The current templates require that release's optional E2E workflow input.
-Sync preserves existing application pins; advance those only after review.
+`startup sync --source-version v0.1.7` before generating such a startup.
+Those templates require that release's optional E2E workflow input. Sync
+preserves existing application pins; advance those only after review, and move
+the project to `Deploy-your-Startup/deploy` with `startup migrate deploy`.
 
 Before provisioning, full-stack Hetzner bootstrap shows the planned resources and
 a monthly estimate including VAT from your project’s Hetzner pricing. Confirm
@@ -654,9 +659,9 @@ project back.
 ### Move a project from an owner copy
 
 Projects created before `Deploy-your-Startup/deploy` call a per-owner
-`<github-owner>/deploy-your-startup` copy that `startup sync` maintains. Until
-the application templates call `Deploy-your-Startup/deploy`, `startup bootstrap`
-still creates projects that way. Move each project once:
+`<github-owner>/deploy-your-startup` copy that `startup sync` maintains, as do
+projects bootstrapped from template versions without `deploy_repository`. Move
+each project once:
 
 ```bash
 startup migrate deploy --dry-run

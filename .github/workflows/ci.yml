@@ -43,9 +43,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: Deploy-your-Startup/deploy-template
-          ref: v0.1.6
-          path: .test-deploy-template
+          repository: Deploy-your-Startup/deploy
+          ref: v1.0.0
+          path: .test-deploy
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
@@ -60,7 +60,7 @@ jobs:
       - name: Run tests
         run: ./make.sh test --shard ${{ matrix.shard }}/3
         env:
-          STARTUP_TEST_DEPLOY_TEMPLATE: ${{ github.workspace }}/.test-deploy-template
+          STARTUP_TEST_DEPLOY: ${{ github.workspace }}/.test-deploy
 
   factory-onboarding:
     runs-on: macos-latest

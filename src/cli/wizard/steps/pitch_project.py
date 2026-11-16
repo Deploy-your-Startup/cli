@@ -8,6 +8,7 @@ from cli.template_commands import ANSWERS_FILE, render_project
 
 from ..base import WizardStep
 from ..context import BootstrapContext
+from .shared_deployment import deploy_repository
 
 
 class PitchProjectStep(WizardStep):
@@ -33,6 +34,16 @@ class PitchProjectStep(WizardStep):
                 "§§deploy_your_startup.project_name§§": ctx.project_name,
                 "§§deploy_your_startup.base_domain§§": ctx.base_domain,
                 "§§deploy_your_startup.github_username§§": ctx.github_username,
+                **(
+                    {
+                        "§§deploy_your_startup.deploy_repository§§": (
+                            deploy_repository(ctx)
+                        ),
+                        "§§deploy_your_startup.deploy_ref§§": ctx.deployment_ref,
+                    }
+                    if ctx.direct_deploy
+                    else {}
+                ),
             },
             source=ctx.template_source,
             version=ctx.template_version,

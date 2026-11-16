@@ -159,7 +159,7 @@ setup, rejected SSH credentials and TLS identity, and private file permissions.
 The firewall integration runs the real CLI, immutable role checkout and Ansible
 against a local Hetzner HTTP stand-in, checking preview, API closure, preserved
 web/SSH/internal rules and the attached-project owner guard. It requires a sibling
-`deploy-template` checkout; Docker or kubectl absence is reported as a skip.
+`deploy` checkout (`STARTUP_TEST_DEPLOY`); Docker or kubectl absence is reported as a skip.
 Live cloud firewall attachment, changing networks and sleep/wake remain separate
 operational verification; interrupted streaming sessions can require a retry.
 

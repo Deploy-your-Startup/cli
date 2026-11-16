@@ -62,8 +62,10 @@ mise run test-vault
   instead (`project_follow.py`); the marker `deployment/shared-roles.latest`
   stops setup from pinning again. `startup migrate deploy`
   (`project_migrate.py`) moves an owner-copy project once to the current
-  release. `startup sync` (`sync_release.py`) only maintains legacy owner
-  copies; never move a published tag. Keep all of this distinct from
+  release. Bootstrap pins templates that ask for `deploy_repository` to the
+  latest release (`wizard/steps/shared_deployment.py`); only older templates
+  get an owner copy. `startup sync` (`sync_release.py`) only maintains those
+  legacy owner copies; never move a published tag. Keep all of this distinct from
   `startup template update`.
 - The `deploy-your-startup` skill ships twice with identical content:
   `skills/deploy-your-startup/SKILL.md` and `src/cli/agent_skills/`. Update

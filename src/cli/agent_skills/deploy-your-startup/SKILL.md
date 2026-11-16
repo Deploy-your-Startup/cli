@@ -75,13 +75,14 @@ Optional, ask only if the user brings it up: extra domains, the Vue template,
 Auth0 login (`--auth0-tenant`; otherwise pass `--without-auth`), Sentry error
 tracking (`--sentry-org` with a personal Sentry token; otherwise `--without-sentry`).
 
-If your account already has a shared deployment repository, preview
-`startup sync --source-version v0.1.7 --dry-run`, review it, then run
-`startup sync --source-version v0.1.7` before generating another startup.
-The current templates require that release's optional E2E workflow input.
-Sync preserves existing application pins; advance those only after review.
-Bootstrap still creates such projects on the owner copy; `startup migrate deploy`
-moves them to `Deploy-your-Startup/deploy` afterwards.
+Templates that ask for `deploy_repository` call `Deploy-your-Startup/deploy`
+directly and are pinned to its latest release. Template versions without it
+use a per-owner `deploy-your-startup` copy: if the account already has one,
+preview `startup sync --source-version v0.1.7 --dry-run`, review it, then run
+`startup sync --source-version v0.1.7` before generating such a startup. Those
+templates require that release's optional E2E workflow input. Sync preserves
+existing application pins; `startup migrate deploy` moves such a project to
+`Deploy-your-Startup/deploy` afterwards.
 
 Before domain registration, run `startup hetzner domain-check <domain>` (read-only).
 Exit codes: 0 free, 1 registered, 2 unknown/error. The published standard

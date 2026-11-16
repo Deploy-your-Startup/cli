@@ -165,7 +165,8 @@ for command in (
     "--deployment-ref",
     default="main",
     show_default=True,
-    help="Reviewed shared-workflow ref used by the generated project.",
+    help="Reviewed shared-workflow ref used by the generated project; "
+    "templates that call Deploy-your-Startup/deploy default to its latest release.",
 )
 @click.option(
     "--ssh-public-key",
