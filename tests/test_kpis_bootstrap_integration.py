@@ -242,6 +242,14 @@ def test_bootstrap_generates_secrets_uuid_pin_and_preserves_them_on_resume(
     ).strip()
     assert (deployment / "shared-roles.ref").read_text().strip() == revision
     assert len((deployment / "shared-roles.sha256").read_text().strip()) == 64
+    # THEN the generated workflows call the shared workflows at that same commit.
+    shared_calls = [
+        line
+        for path in (project / ".github/workflows").glob("*.yml")
+        for line in path.read_text().splitlines()
+        if "/deploy-your-startup/.github/workflows/" in line
+    ]
+    assert shared_calls and all(f"@{revision}" in line for line in shared_calls)
     before = {
         path: path.read_bytes() for path in deployment.rglob("*") if path.is_file()
     }

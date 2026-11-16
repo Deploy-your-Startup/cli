@@ -54,8 +54,11 @@ mise run test-vault
 - Bootstrap is resumable: preserve existing repositories, customizations and
   encrypted configuration.
 - `startup sync` copies shared roles and workflows (default `main`, or
-  `--source-version`); it does not advance role pins recorded with
-  `startup ansible pin`. Keep workflow refs, role pins and checksums consistent.
+  `--source-version`) and publishes each sync as an immutable release tag whose
+  workflows and actions refer to that tag (`sync_release.py`); never move a
+  published tag. It does not advance pins: `startup update` publishes a
+  release without moving `main` and moves one project's role pin, checksum and
+  shared workflow refs to it (`project_update.py`, on top of `ansible pin`).
   Keep it distinct from `startup template update`.
 - The `deploy-your-startup` skill ships twice with identical content:
   `skills/deploy-your-startup/SKILL.md` and `src/cli/agent_skills/`. Update

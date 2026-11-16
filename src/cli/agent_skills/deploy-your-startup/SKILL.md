@@ -174,12 +174,18 @@ password comes from the configured backend (Keychain or 1Password).
 | Preview Ubuntu LTS upgrade | `startup ansible os-upgrade … --target-version 26.04 --dry-run` |
 | Upgrade k3s / cert-manager | `startup ansible k3s-upgrade …` / `startup ansible cert-manager-upgrade …` |
 | Update shared deployment workflows and roles | `startup sync --dry-run`, then `startup sync` |
+| Move one project to newer shared workflows and roles | `startup update --check`, then `startup update` (`--version <release>` to choose or roll back) |
 | Update application template files | `startup template update --dry-run`, then `startup template update` |
 | Record a template baseline for an older project | `startup template adopt --version <tag>` |
 
 Keep the two update paths apart: `startup sync` updates the shared deployment
 repository in the user's GitHub account; `startup template update` changes the
-application files of one project. After a template update, review the diff,
+application files of one project. Every sync publishes an immutable release tag;
+`startup sync` also moves the shared repository's `main`, which only projects
+referencing `@main` follow. A pinned project changes only when `startup update`
+moves its role pin and shared workflow references to a release. That edits
+files and deploys nothing: the owner reviews, commits and pushes. Never update
+a project without being asked. After a template update, review the diff,
 resolve conflicts, run the project's checks and commit together with
 `.copier-answers.yml`. Treat its agent harness drift warning as a finding:
 report it and align the listed files with the template, or record why the

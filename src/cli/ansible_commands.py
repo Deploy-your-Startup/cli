@@ -613,6 +613,8 @@ def run_pin(
     working_directory: str = ".",
     version: str = DEFAULT_VERSION,
     repo_url: str | None = None,
+    workflows: bool = True,
+    owner: str | None = None,
 ) -> None:
     """Record a resolved owner-repository commit and its runtime contents."""
     working_dir = _resolve_working_dir(working_directory)
@@ -637,6 +639,27 @@ def run_pin(
     (working_dir / "shared-roles.sha256").write_text(fingerprint + "\n")
     (working_dir / "shared-roles.ref").write_text(revision + "\n")
     click.echo(f"Pinned shared roles to {revision}. Review and commit both pin files.")
+    if workflows:
+        _pin_project_workflows(working_dir, revision, version, owner)
+
+
+def _pin_project_workflows(
+    working_dir: Path, revision: str, version: str, owner: str | None
+) -> None:
+    """Move the project's shared workflow references to the pinned revision."""
+    from cli.workflow_pins import pin_workflow_references
+
+    owner = owner or _infer_roles_owner(working_dir)
+    if not owner:
+        return
+    count = pin_workflow_references(
+        working_dir.parent, f"{owner}/{DEFAULT_SHARED_REPO_NAME}", revision, version
+    )
+    if count:
+        click.echo(
+            f"Pinned {count} shared workflow reference(s) in .github/workflows "
+            "to the same revision. Review and commit them with the pin files."
+        )
 
 
 def setup_ansible(
