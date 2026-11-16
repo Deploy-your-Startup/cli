@@ -126,6 +126,6 @@ def _report(tag: str, *, published: bool, moved: bool) -> None:
         f"main now holds release {tag}." if published else f"Published release {tag}."
     )
     click.echo(
-        "Existing projects keep their pins. Adopt the release per project with:\n"
-        f"  startup ansible pin --working-directory deployment --version {tag}"
+        "Pinned projects are unchanged. Move a project to this release from its "
+        f"directory with:\n  startup update --version {tag}"
     )
