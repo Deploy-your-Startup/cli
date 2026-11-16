@@ -166,9 +166,6 @@ def check_prerequisites(ctx: BootstrapContext) -> None:
     from cli.template_commands import require_committed_template
 
     require_committed_template(ctx.template_source, ctx.template_version)
-    from .steps.shared_deployment import choose_shared_deployment
-
-    choose_shared_deployment(ctx)
     if ctx.site_policy is not None:
         from cli.site_policy import check_template_policy
 
@@ -209,6 +206,12 @@ def check_prerequisites(ctx: BootstrapContext) -> None:
         ctx.user_public_key = prompt_user_public_key(
             non_interactive=ctx.non_interactive, public_key_path=ctx.ssh_public_key_path
         )
+
+    # Last, after the local and login checks, so their errors come first: the
+    # shared deployment release is still settled before anything is created.
+    from .steps.shared_deployment import choose_shared_deployment
+
+    choose_shared_deployment(ctx)
 
 
 def run_wizard(ctx: BootstrapContext) -> None:
