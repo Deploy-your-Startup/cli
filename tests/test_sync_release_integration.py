@@ -259,3 +259,54 @@ def test_update_moves_one_project_between_releases_without_moving_main(remotes):
     )
     assert remotes.show("v2.0.0", "roles/sample.yml") == "versioned roles"
     assert remotes.commit("main") == main
+
+
+def test_update_latest_unpins_a_project_until_it_is_pinned_again(remotes):
+    # GIVEN a project pinned to a release.
+    project = remotes.root / "app"
+    deployment = project / "deployment"
+    workflow = project / ".github/workflows/deploy.yml"
+    deployment.mkdir(parents=True)
+    workflow.parent.mkdir(parents=True)
+    shared = "sample/deploy-your-startup/.github/workflows/deploy.yml"
+    workflow.write_text(f"jobs:\n  deploy:\n    uses: {shared}@main\n")
+    env = {**remotes.env, "STARTUP_ANSIBLE_REPO_OWNER": "sample",
+           "STARTUP_ANSIBLE_REPO_URL": remotes.target.as_uri()}  # fmt: skip
+
+    def update(*args):
+        return subprocess.run(
+            [sys.executable, "-m", "cli.startup", "update", *args],
+            cwd=project, env=env, text=True, capture_output=True, check=False, timeout=120,
+        )  # fmt: skip
+
+    first = "source-" + remotes.release("reviewed roles")
+    assert update().returncode == 0
+    pinned = workflow.read_text()
+    assert (deployment / "shared-roles.ref").exists()
+    # WHEN the owner previews and then chooses to follow latest.
+    preview = update("--version", "latest", "--check")
+    assert "Would remove this project's pins" in preview.stdout
+    assert workflow.read_text() == pinned
+    result = update("--version", "latest")
+    # THEN the pins are gone, the workflows call main, and the choice is recorded with a warning.
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert workflow.read_text() == f"jobs:\n  deploy:\n    uses: {shared}@main\n"
+    assert not (deployment / "shared-roles.ref").exists()
+    assert not (deployment / "shared-roles.sha256").exists()
+    assert (deployment / "shared-roles.latest").exists()
+    assert "every startup sync changes what this project builds" in result.stdout
+    # AND neither a check nor a plain update, as the portfolio script runs it, pins it again.
+    remotes.release("future roles")
+    for arguments in (["--check"], []):
+        result = update(*arguments)
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "This project follows latest" in result.stdout
+        assert not (deployment / "shared-roles.ref").exists()
+    # WHEN the owner names a release, THEN the project is pinned again and stops following.
+    result = update("--version", first)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (deployment / "shared-roles.ref").read_text().strip() == remotes.commit(
+        first
+    )
+    assert workflow.read_text() == pinned
+    assert not (deployment / "shared-roles.latest").exists()

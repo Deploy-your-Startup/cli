@@ -21,7 +21,15 @@ from cli.ansible_commands import (
     _resolve_working_dir,
     run_pin,
 )
+from cli.project_follow import (
+    follow_latest,
+    follows_latest,
+    report_following,
+    stop_following,
+)
 from cli.sync_commands import sync_deploy_repo
+
+LATEST = "latest"
 
 
 def _pin(working_dir: Path) -> tuple[str, str]:
@@ -118,10 +126,17 @@ def run_update(working_directory: str, *, version: str | None, check: bool) -> N
         raise click.ClickException(
             "Could not determine the GitHub owner from this project's origin remote."
         )
+    if version == LATEST:
+        follow_latest(working_dir, owner, check=check)
+        return
+    if follows_latest(working_dir) and not version:
+        report_following()
+        return
     release = _requested_release(working_dir, owner, version, check=check)
     if check:
         _report_check(working_dir, release)
         return
     before = _pin(working_dir)
+    stop_following(working_dir)
     moved = run_pin(working_directory=working_directory, version=release, owner=owner)
     _report_update(before, working_dir, release, moved)

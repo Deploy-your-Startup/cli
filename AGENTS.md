@@ -59,6 +59,8 @@ mise run test-vault
   published tag. It does not advance pins: `startup update` publishes a
   release without moving `main` and moves one project's role pin, checksum and
   shared workflow refs to it (`project_update.py`, on top of `ansible pin`).
+  `--version latest` unpins instead (`project_follow.py`); the marker
+  `deployment/shared-roles.latest` stops setup from pinning again.
   Keep it distinct from `startup template update`.
 - The `deploy-your-startup` skill ships twice with identical content:
   `skills/deploy-your-startup/SKILL.md` and `src/cli/agent_skills/`. Update
