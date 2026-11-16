@@ -9,7 +9,10 @@ from pathlib import Path
 def pin_workflow_references(
     project_root: Path, repository: str, revision: str, label: str
 ) -> int:
-    """Point every reference to the owner repository's workflows and actions at ``revision``."""
+    """Point every reference to the owner repository's workflows and actions at ``revision``.
+
+    Returns the number of references that changed.
+    """
     pattern = re.compile(
         r"(uses:\s*"
         + re.escape(repository)
@@ -17,12 +20,19 @@ def pin_workflow_references(
     )
     # Name the release next to its commit; a branch name would go stale.
     comment = "" if label in {revision, "main"} else f" # {label}"
-    rewritten = 0
+    target = f"@{revision}{comment}"
+    changed = 0
+
+    def repin(match: re.Match[str]) -> str:
+        nonlocal changed
+        pinned = match.group(1) + target
+        changed += pinned != match.group(0)
+        return pinned
+
     workflows = project_root / ".github" / "workflows"
     for path in sorted(workflows.glob("*.y*ml")) if workflows.is_dir() else []:
         content = path.read_text(encoding="utf-8")
-        updated, count = pattern.subn(rf"\1@{revision}{comment}", content)
+        updated = pattern.sub(repin, content)
         if updated != content:
             path.write_text(updated, encoding="utf-8")
-        rewritten += count
-    return rewritten
+    return changed

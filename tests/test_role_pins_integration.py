@@ -173,7 +173,7 @@ def test_pin_moves_shared_workflow_references_with_the_roles(pinned_project):
         "    steps:\n      - uses: actions/checkout@v7\n"
         f"      - uses: sample/deploy-your-startup/.github/actions/export-shared-roles@{expected} # v1.2.0\n"
     )
-    assert "Pinned 3 shared workflow reference(s)" in result.stdout
+    assert "Moved 3 shared workflow and action reference(s)" in result.stdout
 
 
 def test_roles_only_pin_leaves_workflow_references_alone(pinned_project):
