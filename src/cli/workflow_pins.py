@@ -36,3 +36,23 @@ def pin_workflow_references(
         if updated != content:
             path.write_text(updated, encoding="utf-8")
     return changed
+
+
+def move_workflow_references(
+    project_root: Path, repositories: set[str], target: str
+) -> int:
+    """Point references to any of ``repositories`` at ``target``, keeping their revision.
+
+    Returns the number of references that changed.
+    """
+    names = "|".join(re.escape(name) for name in sorted(repositories))
+    pattern = re.compile(r"(uses:\s*)(?:" + names + r")(/\.github/)")
+    changed = 0
+    workflows = project_root / ".github" / "workflows"
+    for path in sorted(workflows.glob("*.y*ml")) if workflows.is_dir() else []:
+        content = path.read_text(encoding="utf-8")
+        updated, count = pattern.subn(rf"\g<1>{target}\g<2>", content)
+        if count:
+            path.write_text(updated, encoding="utf-8")
+            changed += count
+    return changed

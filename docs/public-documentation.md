@@ -13,7 +13,7 @@ and document advanced or maintainer procedures separately.
 Use `startup` for deployment, Ansible and Vault operations. Secret examples use
 Keychain and stdin with an initial `--dry-run`; never put credentials in command
 arguments, logs or committed files. Require authorization for destructive
-operations. Keep `startup sync` (shared workflows/roles) distinct from
+operations. Keep `startup update` (shared workflows/roles) distinct from
 `startup template update` (application files). Verify Actions and HTTPS before
 reporting a deployment as successful.
 
