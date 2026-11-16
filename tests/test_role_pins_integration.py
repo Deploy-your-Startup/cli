@@ -172,3 +172,23 @@ def test_pin_moves_shared_workflow_references_with_the_roles(pinned_project):
         "    steps:\n      - uses: actions/checkout@v7\n"
     )
     assert "Pinned 2 shared workflow reference(s)" in result.stdout
+
+
+def test_roles_only_pin_leaves_workflow_references_alone(pinned_project):
+    # GIVEN a project that keeps its workflow references on a separate revision.
+    project, _source, remote, env = pinned_project
+    workflows = project.parent / ".github/workflows"
+    workflows.mkdir(parents=True)
+    original = "jobs:\n  a:\n    uses: sample/deploy-your-startup/.github/workflows/deploy.yml@main\n"
+    (workflows / "deploy.yml").write_text(original)
+    # WHEN only the roles are pinned.
+    result = subprocess.run(
+        [sys.executable, "-m", "cli.startup", "ansible", "pin", "--working-directory",
+         str(project), "--repo-url", remote, "--roles-only"],
+        cwd=project, env={**env, "STARTUP_ANSIBLE_REPO_OWNER": "sample"},
+        text=True, capture_output=True, check=False, timeout=60,
+    )  # fmt: skip
+    # THEN the pin files are written and the workflows stay as they were.
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (workflows / "deploy.yml").read_text() == original
+    assert "workflow reference" not in result.stdout

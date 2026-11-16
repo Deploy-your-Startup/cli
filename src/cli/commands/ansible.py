@@ -23,11 +23,24 @@ def ansible():
     help="Shared repository ref to resolve and pin",
 )
 @click.option("--repo-url", default=None, help="Override the owner shared repository")
-def ansible_pin(working_directory, version, repo_url):
-    """Pin shared roles to an immutable commit and checksum without deployment."""
+@click.option(
+    "--roles-only",
+    is_flag=True,
+    help="Leave the shared workflow references in .github/workflows unchanged",
+)
+def ansible_pin(working_directory, version, repo_url, roles_only):
+    """Pin shared roles and workflow references to one immutable commit.
+
+    Nothing is deployed. Review and commit the changed files.
+    """
     from cli.ansible_commands import run_pin
 
-    run_pin(working_directory=working_directory, version=version, repo_url=repo_url)
+    run_pin(
+        working_directory=working_directory,
+        version=version,
+        repo_url=repo_url,
+        workflows=not roles_only,
+    )
 
 
 @ansible.command("validate")

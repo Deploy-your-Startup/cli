@@ -61,14 +61,42 @@ def _commit(target_root: Path, message: str) -> None:
         _git(target_root, "commit", "-m", message)
 
 
+def _fast_forward(target_root: Path, tag: str, branch: str) -> bool | None:
+    """Move the branch onto a published release it precedes; None if it cannot."""
+    release = _git(target_root, "rev-parse", f"refs/tags/{tag}^{{commit}}")
+    head = _git(target_root, "rev-parse", "HEAD")
+    ancestor = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", head, release],
+        cwd=target_root,
+        check=False,
+    )
+    if ancestor.returncode != 0:
+        return None
+    _git(target_root, "reset", "--hard", release)
+    if head != release:
+        _git(target_root, "push", "origin", branch)
+    return head != release
+
+
+def _republish(target_root: Path, tag: str, message: str, branch: str) -> bool:
+    """Bring the branch to an already published release without touching the tag."""
+    moved = _fast_forward(target_root, tag, branch)
+    if moved is None:
+        moved = bool(_git(target_root, "status", "--short"))
+        _commit(target_root, message)
+        if moved:
+            _git(target_root, "push", "origin", branch)
+    _report(tag, published=True, moved=moved)
+    return moved
+
+
 def publish_release(
     target_root: Path, *, tag: str, message: str, branch: str, move_branch: bool
 ) -> bool:
     """Commit the rendered release, tag it and push; never move an existing tag."""
     _git(target_root, "add", "-A")
-    tree = _git(target_root, "write-tree")
     published = _published_tree(target_root, tag)
-    if published and published != tree:
+    if published and published != _git(target_root, "write-tree"):
         raise click.ClickException(
             f"Release {tag} already exists with different contents. "
             "Releases are immutable; sync a different source version."
@@ -76,18 +104,18 @@ def publish_release(
     if published and not move_branch:
         _report(tag, published=True, moved=False)
         return False
+    if published:
+        return _republish(target_root, tag, message, branch)
     if not move_branch:
         _git(target_root, "checkout", "--detach")
-    branch_changed = bool(_git(target_root, "status", "--short"))
     _commit(target_root, message)
-    if not published:
-        _git(target_root, "tag", tag)
-        _git(target_root, "push", "origin", f"refs/tags/{tag}")
-    if move_branch and branch_changed:
+    _git(target_root, "tag", tag)
+    _git(target_root, "push", "origin", f"refs/tags/{tag}")
+    if move_branch:
         # Keep the user's gh-selected protocol; see ``_clone_target_repo``.
         _git(target_root, "push", "origin", branch)
-    _report(tag, published=bool(published), moved=move_branch and branch_changed)
-    return not published or (move_branch and branch_changed)
+    _report(tag, published=False, moved=move_branch)
+    return True
 
 
 def _report(tag: str, *, published: bool, moved: bool) -> None:

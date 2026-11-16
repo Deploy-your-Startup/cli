@@ -250,6 +250,7 @@ class ProjectStep(WizardStep):
                 version=ctx.deployment_ref,
                 repo_url=os.environ.get("STARTUP_ANSIBLE_REPO_URL")
                 or f"https://github.com/{ctx.github_username}/deploy-your-startup.git",
+                owner=ctx.github_username,
             )
 
         # 3d. Vault secrets

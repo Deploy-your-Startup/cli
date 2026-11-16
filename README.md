@@ -628,8 +628,8 @@ exports must match its checksum. To update roles, first sync the shared
 deployment repository, then run
 `startup ansible pin --working-directory deployment --version <release-tag>`.
 It also moves the project's references to the shared workflows in
-`.github/workflows` to the same commit. Review and commit the pin files and
-workflows together. `startup sync` alone does not advance an existing project's
+`.github/workflows` to the same commit; `--roles-only` leaves them unchanged.
+Review and commit the pin files and workflows together. `startup sync` alone does not advance an existing project's
 pin. Releases pinned before sync published tags still call some shared actions
 at `main`; adopt a tagged release once to close that gap.
 

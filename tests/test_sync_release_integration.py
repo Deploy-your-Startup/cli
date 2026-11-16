@@ -168,7 +168,7 @@ def test_tag_only_publishes_a_release_without_moving_main(remotes):
         in remotes.sync("--source-version", "v1.2.0", "--tag-only").stdout
     )
     assert remotes.sync("--source-version", "v1.2.0").returncode == 0
-    assert remotes.commit("v1.2.0") == release
+    assert remotes.commit("v1.2.0") == release == remotes.commit("main")
     assert remotes.show("main", "roles/sample.yml") == "candidate roles"
 
 
