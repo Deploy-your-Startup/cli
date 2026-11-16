@@ -145,10 +145,7 @@ def test_a_later_sync_does_not_change_an_earlier_release(remotes):
     assert remotes.commit(second) == remotes.commit("main") != pinned
     assert f"/.github/actions/deploy@{second}" in remotes.show("main", WORKFLOW)
     assert "actions/checkout@main" in remotes.show("main", ACTION)
-    assert (
-        f"startup ansible pin --working-directory deployment --version {second}"
-        in result.stdout
-    )
+    assert f"startup update --version {second}" in result.stdout
 
 
 def test_tag_only_publishes_a_release_without_moving_main(remotes):
