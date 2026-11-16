@@ -274,8 +274,9 @@ Run the installer again to install the currently published CLI release:
 curl -fsSL https://deploy-your-startup.com/install.sh | bash
 ```
 
-This updates the CLI only. Use `startup sync` for shared deployment workflows and
-roles, and `startup template update` for application template changes.
+This updates the CLI only. Use `startup update` to move a project to newer
+shared deployment workflows and roles, and `startup template update` for
+application template changes.
 
 To remove the managed CLI installation:
 
@@ -310,6 +311,7 @@ front; browser account setup may still require a person to sign in.
 | `startup ansible` | Provision, deploy, back up, restore and upgrade infrastructure |
 | `startup secrets` | Manage encrypted project configuration |
 | `startup sync` | Update shared workflows and roles in your GitHub account |
+| `startup update` | Move one project to a release of the shared workflows and roles |
 | `startup template` | Adopt and update application templates with Copier |
 | `startup auth0` | Configure and validate optional application login |
 | `startup sentry` | Configure optional error tracking with Sentry |
@@ -613,9 +615,23 @@ Ansible roles from that copy. Use the owner/source/target options in
 Every sync publishes an immutable release tag in that copy, named after the
 synced template version (`v1.2.0`) or source commit (`source-<sha>`). The shared
 workflows and actions of a release refer to that same tag, so a later sync does
-not change what a project pinned to an earlier release runs. `--tag-only`
-publishes the release without moving `main`, which projects that reference
-`@main` follow; use it to try a release in one project first.
+not change what a project on an earlier release runs. `startup sync` also moves
+the copy's `main`, which projects that reference `@main` follow.
+
+### Update one project
+
+```bash
+startup update --check
+startup update
+```
+
+Run it in the project. It publishes the current shared deploy template as a
+release without moving `main`, then points the project's role pin
+(`deployment/shared-roles.ref`, `shared-roles.sha256`) and its shared workflow
+references in `.github/workflows` at that release. No other project changes and
+nothing is deployed: review the diff, commit and push to roll it out.
+`startup update --to <release>` moves to a specific release, including back to
+an earlier one.
 
 Local Ansible commands refresh `deployment/.shared-roles` from Git. CI exports
 the bundled roles and uses `--no-refresh` to consume that exported copy. Keep
@@ -624,14 +640,12 @@ local refresh enabled and update shared roles through sync rather than editing
 
 The first Git-backed setup records `shared-roles.ref` and `shared-roles.sha256`;
 review and commit both files. Subsequent runs reuse that exact commit, and CI
-exports must match its checksum. To update roles, first sync the shared
-deployment repository, then run
-`startup ansible pin --working-directory deployment --version <release-tag>`.
-It also moves the project's references to the shared workflows in
-`.github/workflows` to the same commit; `--roles-only` leaves them unchanged.
-Review and commit the pin files and workflows together. `startup sync` alone does not advance an existing project's
-pin. Releases pinned before sync published tags still call some shared actions
-at `main`; adopt a tagged release once to close that gap.
+exports must match its checksum. `startup update` moves both to a newer
+release; `startup sync` alone does not advance an existing project's pin.
+`startup ansible pin --version <release>` is the underlying step, and its
+`--roles-only` leaves the workflow references unchanged. Releases pinned before
+sync published tags still call some shared actions at `main`; update once to
+close that gap.
 
 ## Update an application template
 

@@ -197,3 +197,57 @@ def test_dry_run_names_the_release_without_publishing(remotes):
     assert f"Would publish release {tag}." in result.stdout
     assert remotes.commit("main") == before
     assert git("tag", cwd=remotes.target, env=remotes.env) == ""
+
+
+def test_update_moves_one_project_between_releases_without_moving_main(remotes):
+    # GIVEN a project of the owner that calls the shared workflows at main.
+    project = remotes.root / "app"
+    deployment = project / "deployment"
+    workflow = project / ".github/workflows/deploy.yml"
+    deployment.mkdir(parents=True)
+    workflow.parent.mkdir(parents=True)
+    shared = "sample/deploy-your-startup/.github/workflows/deploy.yml"
+    workflow.write_text(f"jobs:\n  deploy:\n    uses: {shared}@main\n")
+    env = {**remotes.env, "STARTUP_ANSIBLE_REPO_OWNER": "sample",
+           "STARTUP_ANSIBLE_REPO_URL": remotes.target.as_uri()}  # fmt: skip
+
+    def update(*args):
+        return subprocess.run(
+            [sys.executable, "-m", "cli.startup", "update", *args],
+            cwd=project, env=env, text=True, capture_output=True, check=False, timeout=120,
+        )  # fmt: skip
+
+    main = remotes.commit("main")
+    first = "source-" + remotes.release("reviewed roles")
+    # WHEN the owner checks for an update, THEN it is named and nothing changes anywhere.
+    result = update("--check")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"Update available: release {first}." in result.stdout
+    assert not (deployment / "shared-roles.ref").exists()
+    assert git("tag", cwd=remotes.target, env=env) == ""
+    # WHEN the project is updated.
+    result = update()
+    assert result.returncode == 0, result.stdout + result.stderr
+    # THEN the release exists, the project targets it, and main and other projects are untouched.
+    adopted = remotes.commit(first)
+    assert (deployment / "shared-roles.ref").read_text().strip() == adopted
+    assert (
+        workflow.read_text()
+        == f"jobs:\n  deploy:\n    uses: {shared}@{adopted} # {first}\n"
+    )
+    assert remotes.commit("main") == main
+    assert f"now targets release {first}" in result.stdout
+    assert f"Up to date: this project runs release {first}." in update("--check").stdout
+    # WHEN a newer release is adopted and then rolled back.
+    second = "source-" + remotes.release("future roles")
+    result = update()
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (deployment / "shared-roles.ref").read_text().strip() == remotes.commit(
+        second
+    )
+    assert "role contents changed" in result.stdout
+    result = update("--to", first)
+    # THEN the project is back on the earlier, unchanged release.
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (deployment / "shared-roles.ref").read_text().strip() == adopted
+    assert f"@{adopted} # {first}" in workflow.read_text()

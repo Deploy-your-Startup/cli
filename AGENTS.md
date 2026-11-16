@@ -56,8 +56,9 @@ mise run test-vault
 - `startup sync` copies shared roles and workflows (default `main`, or
   `--source-version`) and publishes each sync as an immutable release tag whose
   workflows and actions refer to that tag (`sync_release.py`); never move a
-  published tag. It does not advance pins: `startup ansible pin` moves a
-  project's role pin, checksum and shared workflow refs together.
+  published tag. It does not advance pins: `startup update` publishes a
+  release without moving `main` and moves one project's role pin, checksum and
+  shared workflow refs to it (`project_update.py`, on top of `ansible pin`).
   Keep it distinct from `startup template update`.
 - The `deploy-your-startup` skill ships twice with identical content:
   `skills/deploy-your-startup/SKILL.md` and `src/cli/agent_skills/`. Update

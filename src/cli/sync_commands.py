@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 
 import click
@@ -247,6 +248,7 @@ def _sync_repo(
     replacements: dict[str, str] | None = None,
     actions_access_level: str | None = None,
     tag_only: bool = False,
+    on_release: Callable[[str], None] | None = None,
 ) -> bool:
     with tempfile.TemporaryDirectory(prefix="startup-sync-") as temp_dir:
         temp_root = Path(temp_dir)
@@ -292,6 +294,8 @@ def _sync_repo(
         _replace_placeholders(target_root, replacements or {})
         tag = release_tag(source_root)
         pin_self_references(target_root, target_repo, tag)
+        if on_release:
+            on_release(tag)
 
         if dry_run:
             click.echo(f"Would publish release {tag}.")
@@ -324,6 +328,7 @@ def sync_deploy_repo(
     private: bool = True,
     dry_run: bool = False,
     tag_only: bool = False,
+    on_release: Callable[[str], None] | None = None,
 ) -> bool:
     resolved_owner = _github_owner(owner)
     owner_type = _github_owner_type(resolved_owner)
@@ -335,6 +340,7 @@ def sync_deploy_repo(
         commit_message="sync shared deploy repo",
         dry_run=dry_run,
         tag_only=tag_only,
+        on_release=on_release,
         source_version=source_version,
         replacements={
             "§§deploy_your_startup.github_username§§": resolved_owner,
