@@ -154,6 +154,7 @@ def test_pin_moves_shared_workflow_references_with_the_roles(pinned_project):
         f"  b:\n    uses: {shared}/build-and-deploy-service.yml@{'0' * 40} # v1.0.0\n"
         "  c:\n    uses: other/deploy-your-startup/.github/workflows/deploy.yml@main\n"
         "    steps:\n      - uses: actions/checkout@v7\n"
+        "      - uses: sample/deploy-your-startup/.github/actions/export-shared-roles@main\n"
     )
     # WHEN the owner adopts a release for this project.
     result = subprocess.run(
@@ -170,8 +171,9 @@ def test_pin_moves_shared_workflow_references_with_the_roles(pinned_project):
         f"  b:\n    uses: {shared}/build-and-deploy-service.yml@{expected} # v1.2.0\n"
         "  c:\n    uses: other/deploy-your-startup/.github/workflows/deploy.yml@main\n"
         "    steps:\n      - uses: actions/checkout@v7\n"
+        f"      - uses: sample/deploy-your-startup/.github/actions/export-shared-roles@{expected} # v1.2.0\n"
     )
-    assert "Pinned 2 shared workflow reference(s)" in result.stdout
+    assert "Pinned 3 shared workflow reference(s)" in result.stdout
 
 
 def test_roles_only_pin_leaves_workflow_references_alone(pinned_project):

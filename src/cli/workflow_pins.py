@@ -1,4 +1,4 @@
-"""Keep a project's shared workflow references on the same revision as its role pin."""
+"""Keep a project's shared workflow and action references on its role pin's revision."""
 
 from __future__ import annotations
 
@@ -9,11 +9,11 @@ from pathlib import Path
 def pin_workflow_references(
     project_root: Path, repository: str, revision: str, label: str
 ) -> int:
-    """Point every reference to the owner repository's workflows at ``revision``."""
+    """Point every reference to the owner repository's workflows and actions at ``revision``."""
     pattern = re.compile(
         r"(uses:\s*"
         + re.escape(repository)
-        + r"/\.github/workflows/[\w.-]+\.ya?ml)@[^\s#]+(?:[ \t]+#[^\n]*)?"
+        + r"/\.github/(?:workflows/[\w.-]+\.ya?ml|actions/[\w.-]+))@[^\s#]+(?:[ \t]+#[^\n]*)?"
     )
     # Name the release next to its commit; a branch name would go stale.
     comment = "" if label in {revision, "main"} else f" # {label}"
