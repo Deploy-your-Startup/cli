@@ -610,6 +610,13 @@ for your other private repositories. Projects consume shared workflows and
 Ansible roles from that copy. Use the owner/source/target options in
 `startup sync --help` when customizing this setup.
 
+Every sync publishes an immutable release tag in that copy, named after the
+synced template version (`v1.2.0`) or source commit (`source-<sha>`). The shared
+workflows and actions of a release refer to that same tag, so a later sync does
+not change what a project pinned to an earlier release runs. `--tag-only`
+publishes the release without moving `main`, which projects that reference
+`@main` follow; use it to try a release in one project first.
+
 Local Ansible commands refresh `deployment/.shared-roles` from Git. CI exports
 the bundled roles and uses `--no-refresh` to consume that exported copy. Keep
 local refresh enabled and update shared roles through sync rather than editing
@@ -619,9 +626,12 @@ The first Git-backed setup records `shared-roles.ref` and `shared-roles.sha256`;
 review and commit both files. Subsequent runs reuse that exact commit, and CI
 exports must match its checksum. To update roles, first sync the shared
 deployment repository, then run
-`startup ansible pin --working-directory deployment --version <reviewed-ref>`.
-Review and commit both new pin files. `startup sync` alone does not advance an
-existing project's pin.
+`startup ansible pin --working-directory deployment --version <release-tag>`.
+It also moves the project's references to the shared workflows in
+`.github/workflows` to the same commit. Review and commit the pin files and
+workflows together. `startup sync` alone does not advance an existing project's
+pin. Releases pinned before sync published tags still call some shared actions
+at `main`; adopt a tagged release once to close that gap.
 
 ## Update an application template
 

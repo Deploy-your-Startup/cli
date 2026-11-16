@@ -139,3 +139,36 @@ def test_explicit_pin_updates_are_reviewable_without_deploying(pinned_project):
     result = run_cli(project, remote, env)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "next" in (project / ".shared-roles/roles/sample/tasks/main.yml").read_text()
+
+
+def test_pin_moves_shared_workflow_references_with_the_roles(pinned_project):
+    # GIVEN a project whose workflows call the owner copy at main and at an older commit.
+    project, source, remote, env = pinned_project
+    git(source, env, "tag", "v1.2.0")
+    expected = git(source, env, "rev-parse", "HEAD")
+    workflows = project.parent / ".github/workflows"
+    workflows.mkdir(parents=True)
+    shared = "sample/deploy-your-startup/.github/workflows"
+    (workflows / "deploy.yml").write_text(
+        f"jobs:\n  a:\n    uses: {shared}/deploy.yml@main\n"
+        f"  b:\n    uses: {shared}/build-and-deploy-service.yml@{'0' * 40} # v1.0.0\n"
+        "  c:\n    uses: other/deploy-your-startup/.github/workflows/deploy.yml@main\n"
+        "    steps:\n      - uses: actions/checkout@v7\n"
+    )
+    # WHEN the owner adopts a release for this project.
+    result = subprocess.run(
+        [sys.executable, "-m", "cli.startup", "ansible", "pin", "--working-directory",
+         str(project), "--repo-url", remote, "--version", "v1.2.0"],
+        cwd=project, env={**env, "STARTUP_ANSIBLE_REPO_OWNER": "sample"},
+        text=True, capture_output=True, check=False, timeout=60,
+    )  # fmt: skip
+    # THEN roles and shared workflows point at the same immutable commit, and nothing else moves.
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (project / "shared-roles.ref").read_text().strip() == expected
+    assert (workflows / "deploy.yml").read_text() == (
+        f"jobs:\n  a:\n    uses: {shared}/deploy.yml@{expected} # v1.2.0\n"
+        f"  b:\n    uses: {shared}/build-and-deploy-service.yml@{expected} # v1.2.0\n"
+        "  c:\n    uses: other/deploy-your-startup/.github/workflows/deploy.yml@main\n"
+        "    steps:\n      - uses: actions/checkout@v7\n"
+    )
+    assert "Pinned 2 shared workflow reference(s)" in result.stdout

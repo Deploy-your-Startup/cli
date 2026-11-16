@@ -10,6 +10,8 @@ from pathlib import Path
 
 import click
 
+from cli.sync_release import pin_self_references, publish_release, release_tag
+
 DEFAULT_BRANCH = "main"
 DEFAULT_TEMPLATE_OWNER = "Deploy-your-Startup"
 DEFAULT_DEPLOY_TEMPLATE_REPO = "deploy-template"
@@ -231,22 +233,6 @@ def _replace_placeholders(target_root: Path, replacements: dict[str, str]) -> No
             path.write_text(updated, encoding="utf-8")
 
 
-def _commit_and_push(target_root: Path, message: str) -> bool:
-    status = _run_command(
-        ["git", "status", "--short"], cwd=target_root, capture_output=True
-    ).stdout.strip()
-    if not status:
-        click.echo("Already up to date.")
-        return False
-
-    _run_command(["git", "add", "-A"], cwd=target_root)
-    _run_command(["git", "commit", "-m", message], cwd=target_root)
-    # Keep the user's gh-selected protocol. HTTPS works with gh auth setup-git
-    # and must not silently turn into a requirement for GitHub SSH keys.
-    _run_command(["git", "push", "origin", DEFAULT_BRANCH], cwd=target_root)
-    return True
-
-
 def _sync_repo(
     *,
     source_repo: str,
@@ -260,6 +246,7 @@ def _sync_repo(
     dry_run: bool = False,
     replacements: dict[str, str] | None = None,
     actions_access_level: str | None = None,
+    tag_only: bool = False,
 ) -> bool:
     with tempfile.TemporaryDirectory(prefix="startup-sync-") as temp_dir:
         temp_root = Path(temp_dir)
@@ -303,8 +290,11 @@ def _sync_repo(
             _copy_repo_contents(source_root, target_root)
 
         _replace_placeholders(target_root, replacements or {})
+        tag = release_tag(source_root)
+        pin_self_references(target_root, target_repo, tag)
 
         if dry_run:
+            click.echo(f"Would publish release {tag}.")
             status = _run_command(
                 ["git", "status", "--short"], cwd=target_root, capture_output=True
             ).stdout.strip()
@@ -315,10 +305,13 @@ def _sync_repo(
             click.echo("Already up to date.")
             return False
 
-        changed = _commit_and_push(target_root, commit_message)
-        if changed:
-            click.echo(f"Synced {target_repo} successfully.")
-        return changed
+        return publish_release(
+            target_root,
+            tag=tag,
+            message=commit_message,
+            branch=branch,
+            move_branch=not tag_only,
+        )
 
 
 def sync_deploy_repo(
@@ -330,6 +323,7 @@ def sync_deploy_repo(
     source_version: str = DEFAULT_BRANCH,
     private: bool = True,
     dry_run: bool = False,
+    tag_only: bool = False,
 ) -> bool:
     resolved_owner = _github_owner(owner)
     owner_type = _github_owner_type(resolved_owner)
@@ -340,6 +334,7 @@ def sync_deploy_repo(
         description="Shared deploy workflows, actions, and Ansible roles",
         commit_message="sync shared deploy repo",
         dry_run=dry_run,
+        tag_only=tag_only,
         source_version=source_version,
         replacements={
             "§§deploy_your_startup.github_username§§": resolved_owner,

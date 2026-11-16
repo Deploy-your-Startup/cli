@@ -231,9 +231,22 @@ def bootstrap(**options):
 )
 @click.option("--private/--public", default=True, show_default=True)
 @click.option("--dry-run", is_flag=True, help="Preview sync without commit/push")
+@click.option(
+    "--tag-only",
+    is_flag=True,
+    help="Publish the release tag without moving the owner repository's main",
+)
 @click.pass_context
 def sync(
-    ctx, owner, repo_name, source_owner, source_repo, source_version, private, dry_run
+    ctx,
+    owner,
+    repo_name,
+    source_owner,
+    source_repo,
+    source_version,
+    private,
+    dry_run,
+    tag_only,
 ):
     """Sync the shared deploy template into your GitHub account."""
     if ctx.invoked_subcommand is None:
@@ -247,6 +260,7 @@ def sync(
             source_version=source_version,
             private=private,
             dry_run=dry_run,
+            tag_only=tag_only,
         )
 
 
