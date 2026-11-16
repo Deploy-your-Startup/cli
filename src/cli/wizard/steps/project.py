@@ -32,6 +32,7 @@ from ..vault_guard import (
     vault_password_label,
     verify_rotation,
 )
+from .shared_deployment import deploy_repository
 
 BYOS_DEPLOY_PUBLIC_KEY_FILE = "byos_deploy_key.pub"
 BYOS_DEPLOY_PUBLIC_KEY_IGNORE = f"deployment/{BYOS_DEPLOY_PUBLIC_KEY_FILE}"
@@ -205,6 +206,7 @@ class ProjectStep(WizardStep):
             ci_public_key=ci_public_key,
             user_public_key=user_public_key,
             deployment_ref=ctx.deployment_ref,
+            deploy_repository=deploy_repository(ctx) if ctx.direct_deploy else None,
         )
         # Resuming a partly completed bootstrap must never overwrite application
         # edits or advance its recorded baseline. Updates have their own command.
@@ -244,13 +246,14 @@ class ProjectStep(WizardStep):
         if has_kpis:
             from cli.ansible_commands import run_pin
 
-            # Resolve the owner copy after sync, before the first push can deploy.
+            # Pin the shared roles before the first push can deploy.
+            repository = deploy_repository(ctx)
             run_pin(
                 working_directory=str(ctx.deployment_dir),
                 version=ctx.deployment_ref,
                 repo_url=os.environ.get("STARTUP_ANSIBLE_REPO_URL")
-                or f"https://github.com/{ctx.github_username}/deploy-your-startup.git",
-                repository=f"{ctx.github_username}/deploy-your-startup",
+                or f"https://github.com/{repository}.git",
+                repository=repository,
             )
 
         # 3d. Vault secrets

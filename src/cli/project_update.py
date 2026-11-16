@@ -67,6 +67,15 @@ def _remote_tags(working_dir: Path, repository: str) -> dict[str, str]:
     raise click.ClickException(f"Could not read the releases of {repository}.")
 
 
+def latest_published_release(repository: str) -> tuple[str, str]:
+    """The newest ``vX.Y.Z`` release of ``repository`` and its commit."""
+    tags = _remote_tags(Path.cwd(), repository)
+    release = latest_release(list(tags))
+    if not release:
+        raise click.ClickException(f"{repository} has no release yet.")
+    return release, tags[release]
+
+
 def _requested_release(working_dir: Path, repository: str, version: str | None) -> str:
     """The named release or commit, or the latest release of the shared repository."""
     if version and COMMIT.fullmatch(version):

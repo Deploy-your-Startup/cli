@@ -36,6 +36,7 @@ def template_replacements(
     ci_public_key: str,
     user_public_key: str,
     deployment_ref: str = "main",
+    deploy_repository: str | None = None,
 ) -> dict[str, str]:
     """Build the values used to configure a newly cloned project template."""
     if additional_domains:
@@ -61,6 +62,13 @@ def template_replacements(
         "§§deploy_your_startup.ci_key§§": ci_public_key,
         "§§deploy_your_startup.user_key§§": user_public_key,
         "§§deploy_your_startup.kpis_website_id§§": str(uuid4()),
+        # Only templates that ask for it know this answer; older ones call the
+        # owner copy named by github_username and deploy_repo_name.
+        **(
+            {"§§deploy_your_startup.deploy_repository§§": deploy_repository}
+            if deploy_repository
+            else {}
+        ),
     }
 
 

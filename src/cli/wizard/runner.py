@@ -41,8 +41,8 @@ BYOS_STEPS: list[type[WizardStep]] = [
     ProjectStep,
     FinalizeStep,
 ]
-# The generated deploy.yml calls deploy-pages.yml from the owner's shared
-# deployment repository, so a pitch needs it as much as a full-stack project.
+# The generated deploy.yml calls deploy-pages.yml from the shared deployment
+# repository, so a pitch needs it settled as much as a full-stack project.
 PITCH_STEPS: list[type[WizardStep]] = [
     SharedDeploymentStep,
     CloudflareStep,
@@ -166,6 +166,9 @@ def check_prerequisites(ctx: BootstrapContext) -> None:
     from cli.template_commands import require_committed_template
 
     require_committed_template(ctx.template_source, ctx.template_version)
+    from .steps.shared_deployment import choose_shared_deployment
+
+    choose_shared_deployment(ctx)
     if ctx.site_policy is not None:
         from cli.site_policy import check_template_policy
 

@@ -35,6 +35,11 @@ class BootstrapContext:
     without_sentry: bool = False
 
     deployment_ref: str = "main"
+    # True when the template calls Deploy-your-Startup/deploy directly instead of
+    # a per-owner deploy-your-startup copy; deployment_release then names the
+    # release whose commit deployment_ref holds.
+    direct_deploy: bool = False
+    deployment_release: str | None = None
     shared_cluster: bool = False
     cluster_config: dict | None = None
 

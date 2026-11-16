@@ -32,6 +32,7 @@ PUBLIC_FIELDS = {
     "github_username",
     "additional_domains",
     "deploy_repo_name",
+    "deploy_repository",
     "deploy_ref",
     "docker_registry_host",
     "postgres_version",
@@ -110,6 +111,19 @@ def template_kpis(source: str, version: str) -> bool:
             return False
         values = yaml.safe_load(manifest.read_text())
         return isinstance(values, dict) and values.get("kpis") is True
+
+
+def template_uses_deploy(source: str, version: str) -> bool:
+    """Whether the template calls a shared repository it is told about.
+
+    Such templates ask for ``deploy_repository`` and so need no per-owner
+    ``deploy-your-startup`` copy; older ones render ``<owner>/deploy-your-startup``.
+    """
+    require_committed_template(source, version)
+    with Worker(
+        src_path=source, vcs_ref=version, skip_tasks=True, quiet=True
+    ) as worker:
+        return "deploy_repository" in worker.template.questions_data
 
 
 def git(project: Path, *args: str) -> str:

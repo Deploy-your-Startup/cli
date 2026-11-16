@@ -31,12 +31,12 @@ TEMPLATE = (
     if (LOCAL_TEMPLATE / ".git").exists()
     else "https://github.com/Deploy-your-Startup/django-backend-template.git"
 )
-LOCAL_ROLES = ROOT.parent / "deploy-template"
+LOCAL_ROLES = ROOT.parent / "deploy"
 # A file:// URI is cloned at ROLES_VERSION; a plain path would copy the worktree.
 ROLES = (
     LOCAL_ROLES.as_uri()
     if (LOCAL_ROLES / ".git").exists()
-    else "https://github.com/Deploy-your-Startup/deploy-template.git"
+    else "https://github.com/Deploy-your-Startup/deploy.git"
 )
 # The published deployment roles release that ships shared-cluster support.
 ROLES_VERSION = "v0.1.4"

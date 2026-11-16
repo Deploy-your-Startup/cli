@@ -371,13 +371,11 @@ def test_ansible_kubeconfig_defaults_to_ssh_and_preserves_other_contexts(
 ):
     env, config, _ = client
     root, port = ssh_server
-    roles = Path(
-        os.environ.get("STARTUP_TEST_DEPLOY_TEMPLATE", ROOT.parent / "deploy-template")
-    )
+    roles = Path(os.environ.get("STARTUP_TEST_DEPLOY", ROOT.parent / "deploy"))
     source = (
         roles.as_uri()
         if roles.is_dir()
-        else "https://github.com/Deploy-your-Startup/deploy-template.git"
+        else "https://github.com/Deploy-your-Startup/deploy.git"
     )
     # GIVEN a real project inventory, real encrypted token and the real shared
     # checkout. Static inventory replaces cloud discovery, not CLI behavior.

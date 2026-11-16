@@ -13,9 +13,7 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-ROLES = Path(
-    os.environ.get("STARTUP_TEST_DEPLOY_TEMPLATE", ROOT.parent / "deploy-template")
-)
+ROLES = Path(os.environ.get("STARTUP_TEST_DEPLOY", ROOT.parent / "deploy"))
 
 
 @pytest.fixture
@@ -129,7 +127,7 @@ def cloud():
 def test_firewall_preview_then_close_public_api_only(tmp_path, cloud, network_range):
     if not ROLES.is_dir():
         pytest.fail(
-            "requires deploy-template checkout (set STARTUP_TEST_DEPLOY_TEMPLATE)"
+            "requires a Deploy-your-Startup/deploy checkout (set STARTUP_TEST_DEPLOY)"
         )
     endpoint, writes, firewall = cloud
     # GIVEN an existing cloud firewall and the actual shared role, with local
