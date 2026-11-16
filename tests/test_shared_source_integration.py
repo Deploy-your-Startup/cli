@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+import yaml
 
 SOURCE = Path(__file__).resolve().parents[1] / "src"
 DEPLOY = "Deploy-your-Startup/deploy"
@@ -45,6 +46,12 @@ class Shared:
             "jobs:\n  deploy:\n"
             f"    uses: {repository}/.github/workflows/deploy.yml@main\n"
             "  other:\n    uses: someone/else/.github/workflows/x.yml@v1\n"
+            "  build:\n    needs: deploy\n"
+            f"    uses: {repository}/.github/workflows/build-and-deploy-service.yml@main\n"
+            "    with:\n      service: backend\n"
+            "  granted:\n"
+            f"    uses: {repository}/.github/workflows/build-and-deploy-service.yml@main\n"
+            "    permissions:\n      contents: read\n"
         )
         return project, workflow
 
@@ -181,11 +188,23 @@ def test_an_owner_copy_project_migrates_once_to_the_current_release(shared):
     assert "someone/else/.github/workflows/x.yml@v1" in workflow.read_text()
     assert not (deployment / "shared-roles.source").exists()
     assert f"gh repo archive {LEGACY}" in result.stdout
+    # AND the shared build, now another owner's, gets the permissions its nested jobs
+    # request once, while a job that declares its own permissions is left alone.
+    jobs = yaml.safe_load(workflow.read_text())["jobs"]
+    assert jobs["build"]["permissions"] == {
+        "contents": "read", "actions": "read", "pull-requests": "write",
+        "packages": "write", "id-token": "write",
+    }  # fmt: skip
+    assert jobs["build"]["with"] == {"service": "backend"}
+    assert jobs["granted"]["permissions"] == {"contents": "read"}
+    assert "other" in jobs and "permissions" not in jobs["other"]
     # AND the role checkout does not leak Git's detached-HEAD advice or fetch progress.
     assert "detached HEAD" not in result.stdout + result.stderr
     assert "FETCH_HEAD" not in result.stdout + result.stderr
     # AND a second run has nothing to do, while update now works against the new source.
-    assert "nothing to migrate" in shared.cli(project, "migrate", "deploy").stdout
+    again = shared.cli(project, "migrate", "deploy")
+    assert "nothing to migrate" in again.stdout and "now grant" not in again.stdout
+    assert workflow.read_text().count("id-token: write") == 1
     assert (
         "Up to date: this project runs release v1.1.0."
         in shared.cli(project, "update", "--check").stdout
@@ -221,4 +240,24 @@ def test_a_project_can_move_to_a_fork_and_back(shared):
     assert (
         f"uses: {DEPLOY}/.github/workflows/deploy.yml@{release} # v2.0.0"
         in workflow.read_text()
+    )
+
+
+def test_a_project_migrated_without_the_grant_gets_it_on_a_rerun(shared):
+    # GIVEN a project already on the default source whose shared build lacks permissions.
+    project, workflow = shared.project(DEPLOY)
+    shared.release("roles", "v1.0.0")
+    # WHEN the migration is previewed, THEN nothing changes; WHEN it runs, THEN only the grant is added.
+    before = workflow.read_text()
+    assert shared.cli(project, "migrate", "deploy", "--dry-run").returncode == 0
+    assert workflow.read_text() == before
+    result = shared.cli(project, "migrate", "deploy")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (
+        "nothing to migrate. 1 job(s) calling the shared build now grant"
+        in result.stdout
+    )
+    assert (
+        yaml.safe_load(workflow.read_text())["jobs"]["build"]["permissions"]["id-token"]
+        == "write"
     )
