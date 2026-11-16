@@ -200,3 +200,34 @@ def test_every_pinned_template_bootstraps_without_an_owner_copy(template, versio
     assert template_commands.template_uses_deploy(
         getattr(template_commands, template), getattr(template_commands, version)
     )
+
+
+@pytest.mark.parametrize(
+    ("template", "version"),
+    [
+        ("DEFAULT_TEMPLATE", "DEFAULT_TEMPLATE_VERSION"),
+        ("VUE_TEMPLATE", "VUE_TEMPLATE_VERSION"),
+        ("VUE_NESTJS_TEMPLATE", "VUE_NESTJS_TEMPLATE_VERSION"),
+    ],
+)
+def test_every_pinned_server_template_grants_the_shared_build_its_permissions(
+    template, version
+):
+    # GIVEN a server template release this CLI offers by default.
+    from copier.main import Worker
+
+    from cli import template_commands
+
+    with Worker(
+        src_path=getattr(template_commands, template),
+        vcs_ref=getattr(template_commands, version),
+        skip_tasks=True,
+        quiet=True,
+    ) as worker:
+        workflows = worker.template.local_abspath / "template/.github/workflows"
+        # WHEN its shared build caller is read.
+        caller = next(workflows.glob("build-and-deploy-backend.yml*")).read_text()
+    # THEN it grants what the other owner's nested jobs request; without it the run never starts.
+    assert "/.github/workflows/build-and-deploy-service.yml@" in caller
+    assert "      id-token: write\n" in caller
+    assert "      packages: write\n" in caller
