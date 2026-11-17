@@ -69,8 +69,15 @@ validation would otherwise report it as unregistered. Do not delete it.
 ```bash
 ./scripts/init.sh
 mise run registry:check
+FACTORY_TEST_PYTHON="$HOME/.local/share/startup/tools/deploy-your-startup-cli/bin/python" \
+STARTUP_TEST_EXECUTABLE="$HOME/.local/share/startup/commands/startup" \
 mise run test
 ```
+
+Factory v0.1.26's tests need the installed CLI runtime explicitly; the environment
+variables above keep them on the installer's isolated Python instead of an
+unrelated system Python. If using a custom CLI installation, select its matching
+Python and executable instead.
 
 Setup can clone public tools, install runtimes and agent skills, and request
 local access. Review new Copier answers and all changes, commit and push through
