@@ -21,7 +21,7 @@ from cli.shared_source import (
     legacy_copy,
     shared_repository,
 )
-from cli.workflow_pins import move_workflow_references
+from cli.workflow_pins import grant_build_permissions, move_workflow_references
 
 PIN_FILES = ("shared-roles.ref", "shared-roles.sha256")
 
@@ -51,7 +51,17 @@ def run_migrate(working_directory: str, *, source: str | None, dry_run: bool) ->
     previous = {name for name in (legacy, shared_repository(working_dir)) if name}
     previous.discard(target)
     if not previous:
-        click.echo(f"Already uses {target}; nothing to migrate.")
+        # Projects moved by an earlier CLI may still lack the grant.
+        granted = 0 if dry_run else grant_build_permissions(working_dir.parent, target)
+        click.echo(
+            f"Already uses {target}; nothing to migrate."
+            + (
+                f" {granted} job(s) calling the shared build now grant the "
+                "permissions its nested jobs request; review and commit them."
+                if granted
+                else ""
+            )
+        )
         return
     release, commit = _target_release(working_dir, target)
     old = ", ".join(sorted(previous))
@@ -63,6 +73,7 @@ def run_migrate(working_directory: str, *, source: str | None, dry_run: bool) ->
         return
 
     moved = move_workflow_references(working_dir.parent, previous, target)
+    granted = grant_build_permissions(working_dir.parent, target)
     _record_source(working_dir, target)
     for name in (*PIN_FILES, FOLLOW_MARKER):
         (working_dir / name).unlink(missing_ok=True)
@@ -70,7 +81,13 @@ def run_migrate(working_directory: str, *, source: str | None, dry_run: bool) ->
     click.echo(
         f"\nThis project now uses {target} release {release}: {moved} workflow "
         f"reference(s) moved from {old}.\n"
-        "Nothing is deployed yet. Review the diff, commit and push to roll it out."
+        + (
+            f"{granted} job(s) calling the shared build now grant the permissions "
+            "its nested jobs request.\n"
+            if granted
+            else ""
+        )
+        + "Nothing is deployed yet. Review the diff, commit and push to roll it out."
     )
     if legacy:
         click.echo(

@@ -439,7 +439,7 @@ in its own namespace. Verify Actions, DNS and HTTPS before attaching another
 startup. Cluster failures and upgrades affect every application using it.
 
 For Vue, select `--template https://github.com/Deploy-your-Startup/vue-django-template.git
---template-version v0.1.10`. Older templates without shared-cluster support are
+--template-version v0.1.11`. Older templates without shared-cluster support are
 rejected before account or server setup.
 
 From the owner's project, export its public connection settings:
@@ -670,7 +670,10 @@ startup migrate deploy
 
 It points the shared workflow references at `Deploy-your-Startup/deploy`, pins
 its current release and refreshes the role pin; it does not reproduce the old
-pin. Review, commit and push. Until then `startup update --version <release>`
+pin. Jobs that call `build-and-deploy-service.yml` also get the permissions its
+nested jobs request (`id-token: write` among them): GitHub does not extend them
+to another owner's reusable workflow, so such a build would not start. Running
+it again on an already moved project adds only that grant. Review, commit and push. Until then `startup update --version <release>`
 still works against the owner copy, and `startup sync` keeps that copy current.
 Once no project calls the copy, archive it instead of deleting it, so old pins
 stay available for a rollback. Organizations that restrict GitHub Actions must

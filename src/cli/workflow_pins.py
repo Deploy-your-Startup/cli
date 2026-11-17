@@ -56,3 +56,62 @@ def move_workflow_references(
             path.write_text(updated, encoding="utf-8")
             changed += count
     return changed
+
+
+BUILD_PERMISSIONS = (
+    "permissions:",
+    "  contents: read",
+    "  actions: read",
+    "  pull-requests: write",
+    "  packages: write",
+    "  id-token: write",
+)
+_BUILD_CALL = re.compile(
+    r"^(?P<indent>[ \t]+)uses:\s*(?P<repository>[\w.-]+/[\w.-]+)"
+    r"/\.github/workflows/build-and-deploy-service(?:-parallel)?\.ya?ml@"
+)
+
+
+def grant_build_permissions(project_root: Path, repository: str) -> int:
+    """Grant each job that calls ``repository``'s shared build what its nested jobs request.
+
+    GitHub does not extend ``id-token: write`` and the other nested permissions
+    to a reusable workflow of another owner, so such a run fails to start. Jobs
+    that already declare ``permissions`` are left alone. Returns the number of
+    jobs that changed.
+    """
+    granted = 0
+    workflows = project_root / ".github" / "workflows"
+    for path in sorted(workflows.glob("*.y*ml")) if workflows.is_dir() else []:
+        lines = path.read_text(encoding="utf-8").split("\n")
+        output: list[str] = []
+        for index, line in enumerate(lines):
+            output.append(line)
+            match = _BUILD_CALL.match(line)
+            if not match or match.group("repository") != repository:
+                continue
+            indent = match.group("indent")
+            if not any(
+                other.startswith(indent + "permissions:")
+                for other in _job_lines(lines, index, indent)
+            ):
+                output += [indent + entry for entry in BUILD_PERMISSIONS]
+                granted += 1
+        if len(output) != len(lines):
+            path.write_text("\n".join(output), encoding="utf-8")
+    return granted
+
+
+def _job_lines(lines: list[str], index: int, indent: str) -> list[str]:
+    """The lines of the job whose ``uses:`` is at ``index``, at that indentation."""
+
+    def inside(line: str) -> bool:
+        return not line.strip() or line.startswith(indent)
+
+    start = index
+    while start > 0 and inside(lines[start - 1]):
+        start -= 1
+    end = index + 1
+    while end < len(lines) and inside(lines[end]):
+        end += 1
+    return lines[start:end]

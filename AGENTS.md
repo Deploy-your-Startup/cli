@@ -62,7 +62,9 @@ mise run test-vault
   instead (`project_follow.py`); the marker `deployment/shared-roles.latest`
   stops setup from pinning again. `startup migrate deploy`
   (`project_migrate.py`) moves an owner-copy project once to the current
-  release. Bootstrap pins templates that ask for `deploy_repository` to the
+  release and grants the shared build its nested permissions
+  (`workflow_pins.grant_build_permissions`), which GitHub does not extend
+  across owners. Bootstrap pins templates that ask for `deploy_repository` to the
   latest release (`wizard/steps/shared_deployment.py`); only older templates
   get an owner copy. `startup sync` (`sync_release.py`) only maintains those
   legacy owner copies; never move a published tag. Keep all of this distinct from
