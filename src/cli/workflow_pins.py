@@ -8,7 +8,12 @@ from pathlib import Path
 
 def workflow_revisions(project_root: Path, repository: str) -> set[str]:
     """All shared workflow/action revisions actually used by a project."""
+    from cli.project_version import project_version
     from cli.shared_source import workflow_files
+
+    version = project_version(project_root, validate_calls=False)
+    if version and version.repository == repository:
+        return {version.revision}
 
     pattern = re.compile(
         r"uses:\s*" + re.escape(repository) + r"/\.github/[\w./-]+@([^\s#]+)"
@@ -27,6 +32,11 @@ def pin_workflow_references(
 
     Returns the number of references that changed.
     """
+    from cli.project_version import project_version
+
+    version = project_version(project_root, validate_calls=False)
+    if version and version.repository == repository:
+        return _pin_entry(project_root, repository, revision, label)
     pattern = re.compile(
         r"(uses:\s*"
         + re.escape(repository)
@@ -50,6 +60,33 @@ def pin_workflow_references(
         if updated != content:
             path.write_text(updated, encoding="utf-8")
     return changed
+
+
+def _pin_entry(project: Path, repository: str, revision: str, label: str) -> int:
+    """Edit the native entry field, preserving quotes and historical comments."""
+    from cli.project_version import WORKFLOW
+
+    path = project / WORKFLOW
+    pattern = re.compile(
+        r"^(?P<prefix>[ \t]+uses:\s*)(?P<quote>['\"]?)"
+        r"(?P<workflow>"
+        + re.escape(repository)
+        + r"/\.github/workflows/project(?:-pages)?\.yml)@[^'\"\s#]+"
+        r"(?P=quote)(?:[ \t]+#[^\n]*)?",
+        re.MULTILINE,
+    )
+    comment = "" if label in {revision, "main"} else " # " + label
+
+    def replace(match: re.Match[str]) -> str:
+        quote = match["quote"]
+        return f"{match['prefix']}{quote}{match['workflow']}@{revision}{quote}{comment}"
+
+    content = path.read_text()
+    updated = pattern.sub(replace, content)
+    if updated == content:
+        return 0
+    path.write_text(updated)
+    return 1
 
 
 def move_workflow_references(

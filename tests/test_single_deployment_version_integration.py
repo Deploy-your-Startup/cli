@@ -179,3 +179,42 @@ def test_pages_uses_the_same_single_version_without_creating_ansible_files(share
     assert not (project / "deployment").exists()
     assert not list((project / ".github").glob("shared-roles.*"))
     assert shared.cli(project, "update", "--check").returncode == 0
+
+
+def test_comments_are_not_deployment_configuration(shared):
+    # GIVEN a migrated project with historical references mentioned in comments.
+    project, workflow = shared.project(DEPLOY)
+    publish_router(shared)
+    assert shared.cli(project, "update").returncode == 0
+    entry = project / ".github/workflows/startup.yml"
+    entry.write_text(
+        entry.read_text() + f"\n# uses: {DEPLOY}/.github/workflows/project.yml@old\n"
+    )
+    workflow.write_text(
+        workflow.read_text() + f"\n# uses: {DEPLOY}/.github/workflows/deploy.yml@old\n"
+    )
+    # WHEN local roles are prepared, THEN only the actual native uses field selects the version.
+    result = shared.cli(
+        project,
+        "ansible",
+        "setup_ansible",
+        "--working-directory",
+        str(project / "deployment"),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    # WHEN the only real reference is commented out, THEN the CLI cannot fall back to main.
+    status = shared.cli(project, "update", "--check")
+    assert status.returncode == 0, status.stdout + status.stderr
+    assert "Up to date" in status.stdout
+    entry.write_text(
+        "\n".join("# " + line for line in entry.read_text().splitlines()) + "\n"
+    )
+    result = shared.cli(
+        project,
+        "ansible",
+        "setup_ansible",
+        "--working-directory",
+        str(project / "deployment"),
+    )
+    assert result.returncode != 0
+    assert "must contain one" in result.stderr

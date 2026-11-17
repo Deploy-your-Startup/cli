@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import click
+import yaml
 
 WORKFLOW = ".github/workflows/startup.yml"
 ROUTERS = ("project.yml", "project-pages.yml")
@@ -27,6 +28,22 @@ class DeploymentVersion:
     workflow: str
 
 
+def _uses(node: object) -> list[str]:
+    if isinstance(node, list):
+        return [ref for child in node for ref in _uses(child)]
+    if not isinstance(node, dict):
+        return []
+    references = [str(node["uses"])] if "uses" in node else []
+    return references + [ref for child in node.values() for ref in _uses(child)]
+
+
+def _references(path: Path) -> list[str]:
+    try:
+        return _uses(yaml.safe_load(path.read_text()))
+    except yaml.YAMLError as exc:
+        raise click.ClickException(f"{path} is not a valid workflow.") from exc
+
+
 def project_version(
     project: Path, *, validate_calls: bool = True
 ) -> DeploymentVersion | None:
@@ -38,7 +55,10 @@ def project_version(
     path = project / WORKFLOW
     if not path.exists():
         return None
-    matches = list(REFERENCE.finditer(path.read_text()))
+    references = _references(path)
+    matches = [
+        match for ref in references if (match := REFERENCE.fullmatch("uses: " + ref))
+    ]
     if len(matches) != 1:
         raise click.ClickException(
             f"{path} must contain one shared project workflow reference."
@@ -50,11 +70,15 @@ def project_version(
         or ".." in version.revision
     ):
         raise click.ClickException(f"Invalid deployment revision in {path}.")
-    pattern = re.compile(r"uses:\s*" + re.escape(version.repository) + r"/\.github/")
     if not validate_calls:
         return version
+    prefix = version.repository + "/.github/"
+    if sum(ref.startswith(prefix) for ref in references) != 1:
+        raise click.ClickException(
+            f"{path} must contain only one shared deployment reference."
+        )
     for other in sorted(path.parent.glob("*.y*ml")):
-        if other != path and pattern.search(other.read_text()):
+        if other != path and any(ref.startswith(prefix) for ref in _references(other)):
             raise click.ClickException(
                 f"{other} still records a shared version. Run startup update to migrate it."
             )
