@@ -20,11 +20,12 @@ import pytest
 
 from cli.bootstrap import TEMPLATE_VAULT_PASSWORD, template_replacements
 from cli.cluster_commands import configure_project_cluster
-from cli.template_commands import DEFAULT_TEMPLATE_VERSION, render_project
+from cli.template_commands import render_project
 from cli.wizard.context import BootstrapContext
 
 ROOT = Path(__file__).resolve().parents[1]
-# Published releases only, so a developer's draft checkout cannot leak in.
+# This suite exercises the v1.0.0 deployment contract and its compatible template.
+# Current bootstrap defaults are covered by test_direct_deploy_bootstrap_integration.
 LOCAL_TEMPLATE = ROOT.parent / "django-backend-template"
 TEMPLATE = (
     str(LOCAL_TEMPLATE)
@@ -233,7 +234,7 @@ def attached(tmp_path, master):
             user_public_key="ssh-ed25519 AAAATEST operator",
         ),
         source=TEMPLATE,
-        version=DEFAULT_TEMPLATE_VERSION,
+        version="v0.1.13",
     )
     configure_project_cluster(ctx)
     # The project's deploy key is the only credential; the owner authorizes it.

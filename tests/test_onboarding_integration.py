@@ -125,7 +125,10 @@ def test_launch_plan_shows_the_pinned_default_template(tmp_path):
     result = launch(tmp_path, "my-startup\nexample.com\n\n\n")
     # THEN the plan names the tested template release this CLI pins.
     assert result.returncode == 0, result.stderr
-    assert "Template  Django/FastAPI v0.1.13" in result.stdout
+    assert (
+        "Template  Django/FastAPI 28b4c9eef510065633e7c051628053b581e3364c"
+        in result.stdout
+    )
 
 
 def test_explicit_or_custom_templates_keep_their_version(tmp_path):
@@ -188,7 +191,10 @@ def test_shared_owner_launch_uses_the_compatible_published_default(tmp_path):
     )
     # THEN no unpublished template ref or cloud resources are needed for the plan.
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "Template  Django/FastAPI v0.1.13" in result.stdout
+    assert (
+        "Template  Django/FastAPI 28b4c9eef510065633e7c051628053b581e3364c"
+        in result.stdout
+    )
     assert "Cancelled. No resources were created." in result.stdout
     assert not (tmp_path / "projects").exists()
     readme = (ROOT / "README.md").read_text()
@@ -233,18 +239,23 @@ def run_interactive_bootstrap(
 def test_interactive_stack_and_target_choices_precede_credentials(tmp_path):
     # GIVEN a new user starting from bootstrap without fixed kind/provider flags.
     scenarios = [
-        ("1", "2\n1\nexample.com\n\nn\n", "Django/FastAPI v0.1.13", "Hetzner"),
+        (
+            "1",
+            "2\n1\nexample.com\n\nn\n",
+            "Django/FastAPI 28b4c9eef510065633e7c051628053b581e3364c",
+            "Hetzner",
+        ),
         (
             "2",
             "1\nexample.com\n\nn\n",
-            "Vue + Django/FastAPI v0.1.12",
+            "Vue + Django/FastAPI 116563c74edfe7328c3dc6036d0c9d3bac9ca3d3",
             "Bring your own server",
         ),
         ("3", "example.com\nn\n", "Pitch v0.1.5", "Cloudflare Pages"),
         (
             "4",
             "1\nexample.com\n\nn\n",
-            "Vue + NestJS v0.1.3",
+            "Vue + NestJS 27a906a2afc2cc04fb92dcd3eeb07b1dd4ec9c6a",
             "Bring your own server",
         ),
     ]

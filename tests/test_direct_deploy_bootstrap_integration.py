@@ -227,7 +227,26 @@ def test_every_pinned_server_template_grants_the_shared_build_its_permissions(
         workflows = worker.template.local_abspath / "template/.github/workflows"
         # WHEN its shared build caller is read.
         caller = next(workflows.glob("build-and-deploy-backend.yml*")).read_text()
-    # THEN it grants what the other owner's nested jobs request; without it the run never starts.
-    assert "/.github/workflows/build-and-deploy-service.yml@" in caller
+        runtime = next(workflows.glob("startup.yml*")).read_text()
+        # The default template must also supply safe diagnostics from its own
+        # locked runtime, independently of the user's global installation.
+        subprocess.run(
+            [
+                "uv",
+                "run",
+                "--locked",
+                "--project",
+                str(worker.template.local_abspath / "template/deployment"),
+                "startup",
+                "cluster",
+                "inspect",
+                "--help",
+            ],
+            check=True,
+            capture_output=True,
+        )
+    # THEN the versioned shared entrypoint and its nested permissions are intact.
+    assert "uses: ./.github/workflows/startup.yml" in caller
+    assert "/.github/workflows/project.yml@" in runtime
     assert "      id-token: write\n" in caller
     assert "      packages: write\n" in caller

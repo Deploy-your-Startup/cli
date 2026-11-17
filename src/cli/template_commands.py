@@ -15,14 +15,14 @@ from copier.main import Worker
 
 DEFAULT_TEMPLATE = "https://github.com/Deploy-your-Startup/django-backend-template.git"
 VUE_TEMPLATE = "https://github.com/Deploy-your-Startup/vue-django-template.git"
-VUE_TEMPLATE_VERSION = "v0.1.12"
+VUE_TEMPLATE_VERSION = "116563c74edfe7328c3dc6036d0c9d3bac9ca3d3"
 VUE_NESTJS_TEMPLATE = "https://github.com/Deploy-your-Startup/vue-nestjs-template.git"
-VUE_NESTJS_TEMPLATE_VERSION = "v0.1.3"
+VUE_NESTJS_TEMPLATE_VERSION = "27a906a2afc2cc04fb92dcd3eeb07b1dd4ec9c6a"
 PITCH_TEMPLATE = "https://github.com/Deploy-your-Startup/pitch-template.git"
-# The tested release of DEFAULT_TEMPLATE that this CLI release bootstraps. This
+# The tested immutable DEFAULT_TEMPLATE revision this CLI bootstraps. This
 # is the only place the default template version is pinned; installers and
 # docs call `startup bootstrap` without --template-version.
-DEFAULT_TEMPLATE_VERSION = "v0.1.13"
+DEFAULT_TEMPLATE_VERSION = "28b4c9eef510065633e7c051628053b581e3364c"
 PITCH_TEMPLATE_VERSION = "v0.1.5"
 
 ANSWERS_FILE = ".copier-answers.yml"
