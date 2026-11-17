@@ -332,6 +332,9 @@ def update_project(
         )
     answers = yaml.safe_load((project / ANSWERS_FILE).read_text())
     require_committed_template(answers["_src_path"], version)
+    from cli.template_deployment_contract import require_template_deployment
+
+    require_template_deployment(project, answers["_src_path"], version)
     from cli.template_deploy_pin import keep_pinned_references, pinned_deployment_data
 
     # The shared deployment moves with `startup update`, not with its answers.

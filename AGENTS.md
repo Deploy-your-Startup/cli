@@ -61,7 +61,9 @@ mise run test-vault
   older callers (`project_version_update.py`, on top of
   `ansible pin`); it never publishes a release. `--version latest` unpins
   instead (`project_follow.py`); the single reference records `main`. Older releases retain their legacy
-  pin/checksum and follow-marker contract for rollback. `startup migrate deploy`
+  pin/checksum and follow-marker contract for rollback. `project_runtime.py`
+  probes the separately locked CLI before deleting legacy pins;
+  `template_deployment_contract.py` enforces application-template prerequisites. `startup migrate deploy`
   (`project_migrate.py`) moves an owner-copy project once to the current
   release and grants the shared build its nested permissions
   (`workflow_pins.grant_build_permissions`), which GitHub does not extend

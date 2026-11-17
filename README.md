@@ -627,7 +627,9 @@ Run it in the project. The only active deployment version is the external
 infrastructure workflows call that local entry, and local CLI operations read
 the same reference. `startup update` selects a released commit and migrates
 supported older callers, removing `deployment/shared-roles.ref` and
-`deployment/shared-roles.sha256`. Review the diff, commit and push to adopt it;
+`deployment/shared-roles.sha256`. Before removing them it verifies the actual
+CLI locked by the deployment: updating a global CLI alone does not update that
+project runtime. Upgrade its CLI dependency and `uv.lock` first when requested. Review the diff, commit and push to adopt it;
 the command itself deploys nothing and changes no other project.
 
 `startup update --version <release>` selects a specific release or full commit,
@@ -708,6 +710,11 @@ committing the updated files and Copier answers. Existing
 deploy or decrypt Vault. Commit local template changes before using `HEAD` so
 Copier records a reachable baseline for later updates. The default target is the
 template's HEAD; pass a tag or commit for repeatable updates.
+
+Templates declaring `deployment_version: single` require migration with
+`startup update` before an application update. The CLI refuses an incompatible
+order before writing application files, and preserves the selected deployment
+version rather than silently upgrading it.
 
 The update renders `deploy_repository` and `deploy_ref` from the project's
 current shared deployment (`.github/workflows/startup.yml`, with legacy pin

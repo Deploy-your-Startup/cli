@@ -222,3 +222,52 @@ def test_comments_are_not_deployment_configuration(shared):
     )
     assert result.returncode != 0
     assert "must contain one" in result.stderr
+
+
+@pytest.mark.parametrize("compatible", [False, True])
+def test_migration_checks_the_actual_project_locked_cli(shared, compatible):
+    # GIVEN a global candidate CLI but a separately locked deployment runtime.
+    project, workflow = shared.project(DEPLOY)
+    expected = publish_router(shared)
+    deployment = project / "deployment"
+    import subprocess
+    from pathlib import Path
+
+    cli_source = Path(__file__).resolve().parents[1]
+    source = (
+        cli_source.as_uri()
+        if compatible
+        else "https://github.com/Deploy-your-Startup/cli.git"
+    )
+    revision = (
+        scenarios.git("rev-parse", "HEAD", cwd=cli_source, env=shared.env)
+        if compatible
+        else "20c3efa9031d1510812093273b74cd7e756704e0"
+    )
+    (deployment / "pyproject.toml").write_text(
+        '[project]\nname="deployment"\nversion="0.1.0"\nrequires-python=">=3.12"\n'
+        'dependencies=["deploy-your-startup-cli"]\n[tool.uv]\npackage=false\n'
+        "override-dependencies=[\"playwright; sys_platform == 'never'\"]\n"
+        f'[tool.uv.sources]\ndeploy-your-startup-cli={{git="{source}",rev="{revision}"}}\n'
+    )
+    locked = subprocess.run(
+        ["uv", "lock", "--project", str(deployment)],
+        env=shared.env,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=180,
+    )
+    assert locked.returncode == 0, locked.stdout + locked.stderr
+    original = workflow.read_text()
+    # WHEN adopting the one-version release with the real CLI.
+    result = shared.cli(project, "update")
+    # THEN only a project whose actual locked runtime supports the format is migrated.
+    assert (result.returncode == 0) is compatible, result.stdout + result.stderr
+    if compatible:
+        assert expected in (project / ".github/workflows/startup.yml").read_text()
+        assert not (deployment / "shared-roles.ref").exists()
+    else:
+        assert "project's locked Startup CLI" in result.stderr
+        assert workflow.read_text() == original
+        assert not (project / ".github/workflows/startup.yml").exists()

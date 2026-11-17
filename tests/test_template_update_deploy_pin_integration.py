@@ -173,3 +173,44 @@ def test_template_update_preserves_the_one_active_reference(tmp_path, ansible):
     assert (project / "README.md").read_text() == "v2\n"
     assert not list(project.glob("**/shared-roles.ref"))
     assert not list(project.glob("**/shared-roles.sha256"))
+
+
+@pytest.mark.parametrize("preview", [False, True])
+def test_new_template_requires_deployment_migration_before_changing_files(
+    tmp_path, preview
+):
+    # GIVEN an older deployment and a template release that needs the native project entry.
+    project, workflow = migrated_project(tmp_path, DIRECT_WORKFLOW)
+    template = tmp_path.resolve() / "template"
+    (template / "startup-template.yml").write_text(
+        "schema: 1\ndeployment_version: single\n"
+    )
+    (template / ".github/workflows/deploy.yml.jinja").write_text(
+        "jobs:\n  deploy:\n    uses: ./.github/workflows/startup.yml\n"
+    )
+    (template / ".github/workflows/startup.yml.jinja").write_text(
+        "jobs:\n  runtime:\n    uses: {{ deploy_repository }}/.github/workflows/project.yml@{{ deploy_ref }}\n"
+    )
+    commit(template, "new deployment contract")
+    from cli.template_commands import git
+
+    git(template, "tag", "v3.0.0")
+    before = workflow.read_text()
+    arguments = [
+        "template",
+        "update",
+        "--project-dir",
+        str(project),
+        "--version",
+        "v3.0.0",
+    ]
+    if preview:
+        arguments.append("--dry-run")
+    # WHEN attempting the application update before upgrading shared deployment.
+    result = CliRunner().invoke(cli, arguments)
+    # THEN it explains the prerequisite and preserves every application/configuration file.
+    assert result.exit_code != 0
+    assert "Run startup update" in result.output
+    assert workflow.read_text() == before
+    assert (project / "README.md").read_text() == "v1\n"
+    assert not (project / ".github/workflows/startup.yml").exists()

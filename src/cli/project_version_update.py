@@ -75,6 +75,9 @@ def adopt_project_version(
         raise click.ClickException(
             "This release uses one deployment version; --roles-only cannot split it from CI."
         )
+    from cli.project_runtime import require_project_runtime
+
+    require_project_runtime(working_dir)
     updates, moved = consolidated_workflows(
         project, repository, router, revision, schema
     )
