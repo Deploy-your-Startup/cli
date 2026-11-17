@@ -39,7 +39,7 @@ fi
 
 if [ "$1" == "test_vault" ]; then
   echo "Running Vault integration tests and the real template matrix..."
-  uv run --extra dev pytest -v --durations=10 \
+  uv run --extra dev pytest -n auto --maxschedchunk=1 --durations=10 \
     tests/vault_features \
     tests/test_vault_process_integration.py \
     tests/test_secret_input_integration.py \
