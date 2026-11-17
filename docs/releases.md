@@ -31,8 +31,8 @@ PyPI publishing is a separate, optional manual workflow.
    archive downloads. Install that tag in an isolated tool directory and verify
    the installed package version, `startup --help` and the affected user flow. For terminal
    animations, use an interactive terminal; redirected output stays static.
-5. The website's Deploy workflow checks the latest stable CLI release every ten
-   minutes, updates `frontend/public/install.sh`, tests and commits the new pin,
+5. The website's Deploy workflow checks the latest stable CLI release every six
+   hours, updates `frontend/public/install.sh`, tests and commits the new pin,
    then dispatches a fresh website deploy. GitHub may delay scheduled runs.
    Dispatch Deploy manually to check sooner. Drafts, prereleases and older
    versions are skipped; the application template tag stays independent.
