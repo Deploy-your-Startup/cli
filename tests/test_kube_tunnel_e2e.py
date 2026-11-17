@@ -128,6 +128,7 @@ def ssh_server(tmp_path_factory):
                 "user": {
                     "client-certificate-data": base64.b64encode(
                         (root / "client.crt").read_bytes()
+                        + (root / "ca.crt").read_bytes()
                     ).decode(),
                     "client-key-data": base64.b64encode(
                         (root / "client.key").read_bytes()
@@ -140,9 +141,12 @@ def ssh_server(tmp_path_factory):
         ],
     }
     (root / "k3s.yaml").write_text(yaml.safe_dump(config))
+    (root / "source.json").write_text(json.dumps(config))
+    (root / "node-count").write_text("1")
     shutil.copy(ROOT / "tests/fixtures/kube-tunnel/server.py", root / "server.py")
+    shutil.copy(ROOT / "tests/fixtures/kube-tunnel/k3s.py", root / "k3s.py")
     (root / "Dockerfile").write_text("""FROM alpine:3.20
-RUN apk add --no-cache openssh-server python3 && ssh-keygen -A && passwd -d root
+RUN apk add --no-cache openssh-server python3 openssl && ssh-keygen -A && passwd -d root
 RUN mkdir -p /root/.ssh /etc/rancher/k3s && chmod 700 /root/.ssh
 COPY id.pub /root/.ssh/authorized_keys
 RUN chmod 600 /root/.ssh/authorized_keys
@@ -293,9 +297,158 @@ def test_native_clients_reconnect_and_keep_namespaces(client):
     assert config.stat().st_mode & 0o777 == 0o600
     for state in (config.parent / "startup").glob("*.yml"):
         assert state.stat().st_mode & 0o777 == 0o600
+        assert "client-key-data" not in state.read_text()
+        assert "client-certificate-data" not in state.read_text()
     # WHEN setup is repeated THEN it preserves the existing port and other context.
     assert run(*args, env=env).returncode == 0
     assert yaml.safe_load(config.read_text()) == before
+
+
+def test_inspection_only_emits_public_fields_even_for_legacy_state(client):
+    env, config, args = client
+    # GIVEN legacy tunnel state containing a private credential and extra fields.
+    assert run(*args, env=env).returncode == 0
+    state = next((config.parent / "startup").glob("*.yml"))
+    settings = yaml.safe_load(state.read_text())
+    marker = "synthetic-private-key-must-not-be-logged"
+    settings["user"] = {"client-key-data": marker}
+    settings["unexpected"] = {"token": marker}
+    state.write_text(yaml.safe_dump(settings))
+    # WHEN the public diagnostic command inspects the connection.
+    result = run(
+        sys.executable,
+        "-m",
+        "cli.startup",
+        "cluster",
+        "inspect",
+        "--context",
+        "shop",
+        "--kubeconfig",
+        str(config),
+        env=env,
+    )
+    # THEN only explicitly allowed connection metadata reaches either stream.
+    assert result.returncode == 0, result.stderr
+    assert marker not in result.stdout + result.stderr
+    assert json.loads(result.stdout) == {
+        "context": "shop",
+        "host": "127.0.0.1",
+        "ssh_user": "root",
+        "ssh_port": int(args[args.index("--ssh-port") + 1]),
+        "namespace": "shop",
+        "credential_storage": "legacy-local",
+    }
+    # WHEN a real client uses the legacy connection, THEN credentials are fetched
+    # over SSH and the credential-bearing legacy fields are removed from disk.
+    result = run(
+        "kubectl",
+        "--kubeconfig",
+        str(config),
+        "--context",
+        "shop",
+        "get",
+        "pods",
+        "--request-timeout=15s",
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    assert marker not in state.read_text()
+
+
+def test_remote_parse_errors_do_not_echo_credentials(client, ssh_server):
+    env, _, args = client
+    root, port = ssh_server
+    marker = "synthetic-private-key-must-not-be-logged"
+    remote = [
+        "ssh",
+        "-p",
+        port,
+        "-i",
+        str(root / "id"),
+        "-o",
+        "IdentitiesOnly=yes",
+        "root@127.0.0.1",
+        "cat > /etc/rancher/k3s/k3s.yaml",
+    ]
+    # GIVEN a remote response whose YAML parser error includes secret text.
+    try:
+        run(*remote, input=f"user: [{marker}\n", env=env, check=True)
+        # WHEN connecting, THEN the CLI fails without echoing the response.
+        result = run(*args, env=env)
+        assert result.returncode != 0
+        assert "invalid k3s kubeconfig" in result.stderr
+        assert marker not in result.stdout + result.stderr
+    finally:
+        run(*remote, input=(root / "k3s.yaml").read_text(), env=env, check=True)
+
+
+def test_client_ca_recovery_revokes_old_credentials_without_logging_them(
+    client, ssh_server
+):
+    env, config, args = client
+    root, port = ssh_server
+    remote = ["ssh", "-p", port, "-i", str(root / "id"), "root@127.0.0.1"]
+    # GIVEN real SSH and TLS with K3s's operations supplied at the external boundary.
+    setup = """set -e
+mkdir -p /var/lib/rancher/k3s/server/tls /var/lib/rancher/k3s/agent
+cp /fixtures/ca.crt /var/lib/rancher/k3s/server/tls/client-ca.crt
+cp /fixtures/k3s.py /usr/local/bin/k3s
+chmod +x /usr/local/bin/k3s
+printf '#!/bin/sh\\nexit 0\\n' > /usr/local/bin/systemctl
+chmod +x /usr/local/bin/systemctl
+"""
+    run(*remote, "sh -s", input=setup, env=env, check=True)
+    assert run(*args, env=env).returncode == 0
+    command = [
+        sys.executable,
+        "-m",
+        "cli.startup",
+        "cluster",
+        "rotate-client-ca",
+        "--context",
+        "shop",
+        "--kubeconfig",
+        str(config),
+    ]
+    before = config.read_bytes()
+    # WHEN previewing or omitting backup confirmation THEN no trust is changed.
+    assert run(*command, env=env).returncode == 0
+    denied = run(*command, "--execute", env=env)
+    assert denied.returncode != 0
+    assert config.read_bytes() == before
+    # WHEN multiple nodes are found THEN rotation fails before a snapshot/mutation.
+    run(*remote, "sh -c 'echo 2 > /fixtures/node-count'", env=env, check=True)
+    denied = run(*command, "--execute", "--backup-confirmed", env=env)
+    assert denied.returncode != 0
+    assert (
+        run(
+            *remote, "test ! -e /var/lib/rancher/k3s/server/snapshot-created", env=env
+        ).returncode
+        == 0
+    )
+    run(*remote, "sh -c 'echo 1 > /fixtures/node-count'", env=env, check=True)
+    try:
+        # WHEN executing THEN the command proves old TLS access fails and new access works.
+        result = run(*command, "--execute", "--backup-confirmed", env=env)
+        assert result.returncode == 0, result.stderr
+        assert "previous certificate is rejected" in result.stdout
+        assert "PRIVATE KEY" not in result.stdout + result.stderr
+        assert (
+            base64.b64encode((root / "client.key").read_bytes()).decode()
+            not in result.stdout + result.stderr
+        )
+        assert (
+            "client-key-data"
+            not in next((config.parent / "startup").glob("*.yml")).read_text()
+        )
+    finally:
+        # Restore the shared SSH fixture's trust and response for subsequent scenarios.
+        run(
+            *remote,
+            "sh -c 'cp /fixtures/ca.crt /var/lib/rancher/k3s/server/tls/client-ca.crt; cp /fixtures/k3s.yaml /etc/rancher/k3s/k3s.yaml'",
+            env=env,
+            check=True,
+        )
 
 
 def test_denied_ssh_and_wrong_tls_leave_config_unchanged(client, tmp_path):

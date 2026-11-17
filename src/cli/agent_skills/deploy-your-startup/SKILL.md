@@ -376,6 +376,20 @@ Auth0 setup accepts the shared `oauth2_proxy_enabled` setting while preserving
 
 Kubernetes access uses an on-demand SSH tunnel by default. Keep the CLI installed and use an unlocked SSH agent or a persistent identity file; never persist a decrypted deployment key for reconnecting. After verifying all attached startup contexts, the cluster owner can set `firewall_api_source_ips: []`, preview `startup ansible firewall --dry-run`, then apply with `--execute`. Check SSH, Kubernetes and public HTTPS after the change. `startup ansible kubeconfig --direct` explicitly opts out of tunnels.
 
+For Kubernetes diagnosis, use `startup cluster inspect --context <context>`.
+Never dump kubeconfigs, `~/.kube/startup` files, raw SSH responses, private keys,
+or credential-helper output into logs. The helper's ExecCredential stdout is
+only for Kubernetes clients. Managed metadata contains no client private keys;
+credentials are fetched over SSH when needed, and legacy embedded credentials
+are removed on the next use. Explicit `--direct` exports remain secret files.
+For an exposed administrator certificate, a new key alone does not revoke the
+old certificate. With owner authorization and verified application backups,
+`startup cluster rotate-client-ca --context <context>` previews single-node
+embedded-etcd recovery; `--execute --backup-confirmed` replaces that cluster's
+client CA, renews internal clients and restarts K3s. It must verify new access and
+old-certificate rejection. Refresh other saved copies with `startup cluster connect`.
+Multi-node recovery requires a separate coordinated procedure.
+
 ## Service lint contract
 
 Services expose `./make.sh format` (writes fixes) and `./make.sh lint` (checks

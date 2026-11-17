@@ -395,7 +395,10 @@ k9s --context my-startup-production
 Verify the server's SSH host key before connecting. `cluster connect` preserves
 other contexts and the selected context; an existing namespace is retained
 unless `--namespace` is supplied. Each context has its own loopback port and
-owner-readable credential file under `~/.kube/startup`. Keep the CLI installed:
+owner-readable connection metadata under `~/.kube/startup`. Client certificates
+and private keys are fetched over SSH when Kubernetes needs them and are not
+stored in those metadata files. Existing metadata containing credentials is
+automatically cleaned on its next use. Keep the CLI installed:
 the kubeconfig calls the Python environment that configured it. Re-run connect
 after moving or replacing that installation. `--ssh-port` and `--identity-file`
 support custom SSH setups; `--kubeconfig` selects a single configuration file.
@@ -406,6 +409,31 @@ interruption can briefly interrupt watches or exec sessions. New client
 processes reconnect automatically. An idle tunnel exits after two minutes.
 Use `startup ansible kubeconfig --direct` for an explicitly configured direct
 or private-network API endpoint instead.
+
+For diagnostics, use `startup cluster inspect --context my-startup-production`.
+It only emits allowed connection fields. Do not dump kubeconfigs, tunnel files,
+raw SSH responses, or credential-helper output into logs. The exec helper's
+credential output is reserved for Kubernetes clients. Explicit `--direct`
+kubeconfigs still contain credentials and must be treated as secrets.
+
+If an administrator client certificate is exposed, importing a new certificate
+does not revoke the old one: Kubernetes has no individual certificate revocation.
+For a single-node K3s cluster using embedded etcd and the default data directory,
+preview recovery with:
+
+```bash
+startup cluster rotate-client-ca --context my-startup-production
+```
+
+After owner authorization and verification of application backups, add
+`--execute --backup-confirmed`. This saves an etcd snapshot and protected PKI
+recovery files on the server, replaces only client-CA trust, renews the affected
+internal client certificates and restarts K3s. Some internal serving certificates
+are renewed together with their client certificates; server, etcd, request-header
+and service-account trust are preserved. The command requires new administrator
+access to succeed and the previous certificate to be rejected before reporting
+success. Other saved administrator copies for this cluster must be refreshed
+with `startup cluster connect`; multi-node recovery needs a coordinated procedure.
 
 After verifying SSH access for every startup on a cluster, set
 `firewall_api_source_ips: []` in the owner's production group vars. Preview and
