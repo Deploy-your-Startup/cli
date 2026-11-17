@@ -39,7 +39,7 @@ ROLES = (
     else "https://github.com/Deploy-your-Startup/deploy.git"
 )
 # The published Deploy-your-Startup/deploy release whose roles this test runs.
-ROLES_VERSION = "v1.0.0"
+ROLES_VERSION = "v2.1.0"
 OWNER = "cluster-owner"
 ATTACHED = "second-startup"
 IMAGE = "startup-cli-test-cluster-master:1"
