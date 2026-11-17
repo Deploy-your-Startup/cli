@@ -20,7 +20,7 @@ Before sending the email:
 
 ## 1. Inventory and preserve local work
 
-In the Factory root, inspect `startup --version`, `.copier-answers.yml`,
+In the Factory root, inspect the installed CLI package version, `.copier-answers.yml`,
 `projects.yaml`, Git status and remotes. List all registered application folders
 and any personal deployment copies. Preserve dirty working trees; do not stash,
 reset or overwrite the owner's work automatically. Start each update from a clean,
@@ -38,9 +38,10 @@ run it without `--onboard` (do not create another Factory):
 curl -fsSL https://deploy-your-startup.com/install.sh -o /tmp/startup-install.sh
 # Inspect /tmp/startup-install.sh; it must select v0.1.47 or the reviewed successor.
 bash /tmp/startup-install.sh
-startup --version
+"$HOME/.local/share/startup/tools/deploy-your-startup-cli/bin/python" -c 'from importlib.metadata import version; print(version("deploy-your-startup-cli"))'
 ```
 
+The CLI has no `--version` option; use the installer environment metadata above.
 Check `command -v startup` if the old version is still selected. Do not uninstall
 other tools or edit shell configuration blindly.
 
