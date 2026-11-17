@@ -41,6 +41,7 @@ def test_migration_keeps_jobs_and_records_only_one_version(shared):
     project, workflow = shared.project(DEPLOY)
     workflow.write_text(
         "on:\n  push:\n    paths: ['backend/**']\n  pull_request:\n    paths:\n      - backend/**\n"
+        "  pull_request_target:\n    paths:\n      [\n        'shared/**',\n      ]\n"
         + workflow.read_text()
     )
     shared.release("old runtime", "v1.0.0")

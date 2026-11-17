@@ -6,7 +6,6 @@ Only the entry point contains an external deployment revision.
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 
@@ -50,18 +49,21 @@ def include_version_changes(content: str) -> str:
             )
         position = mark.index
         if paths.flow_style:
-            separator = "," if content[position + 1 : position + 2] == "\n" else ", "
-            edits.append(
-                (
-                    position + 1,
-                    json.dumps(WORKFLOW) + (separator if paths.value else ""),
-                )
-            )
+            edits.append(_flow_path_edit(paths, mark))
         else:
             edits.append((position, "- '" + WORKFLOW + "'\n" + " " * mark.column))
     for position, addition in sorted(edits, reverse=True):
         content = content[:position] + addition + content[position:]
     return content
+
+
+def _flow_path_edit(paths: yaml.SequenceNode, mark: yaml.Mark) -> tuple[int, str]:
+    value = "'" + WORKFLOW + "'"
+    if paths.value:
+        first = paths.value[0].start_mark
+        if first and first.line > mark.line:
+            return first.index, value + ",\n" + " " * first.column
+    return mark.index + 1, value + (", " if paths.value else "")
 
 
 def _event_paths(document: yaml.Node | None) -> list[yaml.SequenceNode]:
