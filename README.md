@@ -442,7 +442,7 @@ in its own namespace. Verify Actions, DNS and HTTPS before attaching another
 startup. Cluster failures and upgrades affect every application using it.
 
 For Vue, select `--template https://github.com/Deploy-your-Startup/vue-django-template.git
---template-version v0.1.11`. Older templates without shared-cluster support are
+--template-version v0.1.12`. Older templates without shared-cluster support are
 rejected before account or server setup.
 
 From the owner's project, export its public connection settings:
