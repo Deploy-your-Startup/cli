@@ -698,6 +698,11 @@ deploy or decrypt Vault. Commit local template changes before using `HEAD` so
 Copier records a reachable baseline for later updates. The default target is the
 template's HEAD; pass a tag or commit for repeatable updates.
 
+The update renders `deploy_repository` and `deploy_ref` from the project's
+current shared deployment (`deployment/shared-roles.ref`, the recorded fork or
+owner copy), not from the original answers, and keeps the project's line where
+a workflow conflict only differs in the release comment after that reference.
+
 Copier keeps earlier divergences as customizations, so both modes also compare
 the agent harness files the template owns (template ADRs 0001-0099, testing
 policy, commit conventions and their link check) with a fresh render at the

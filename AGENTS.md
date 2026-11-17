@@ -68,7 +68,8 @@ mise run test-vault
   latest release (`wizard/steps/shared_deployment.py`); only older templates
   get an owner copy. `startup sync` (`sync_release.py`) only maintains those
   legacy owner copies; never move a published tag. Keep all of this distinct from
-  `startup template update`.
+  `startup template update`, which renders the project's current shared
+  repository and pin instead of its original answers (`template_deploy_pin.py`).
 - The `deploy-your-startup` skill ships twice with identical content:
   `skills/deploy-your-startup/SKILL.md` and `src/cli/agent_skills/`. Update
   both; `tests/test_agent_skill_integration.py` fails on drift.
