@@ -79,10 +79,14 @@ def ssh_server(tmp_path_factory):
             check=True,
         )
         ext = root / f"{name}.ext"
+        # Python 3.14 verifies RFC 5280 identifiers in the test certificate chain.
         ext.write_text(
-            "subjectAltName=DNS:cluster.test,IP:127.0.0.1\nextendedKeyUsage=serverAuth\n"
-            if name == "server"
-            else "extendedKeyUsage=clientAuth\n"
+            "authorityKeyIdentifier=keyid,issuer\nsubjectKeyIdentifier=hash\n"
+            + (
+                "subjectAltName=DNS:cluster.test,IP:127.0.0.1\nextendedKeyUsage=serverAuth\n"
+                if name == "server"
+                else "extendedKeyUsage=clientAuth\n"
+            )
         )
         run(
             "openssl",

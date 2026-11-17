@@ -1,0 +1,14 @@
+Betreff: Einmaliges Update deiner Startup Factory
+
+Hallo,
+
+wir haben die gemeinsamen Deployment-Bausteine in ein zentrales Repository verschoben. Deine Startup-Repositories, Server und Daten bleiben in deinem Account. Die bisherige persönliche Kopie von „deploy-your-startup“ wird danach nicht mehr benötigt, bleibt aber zunächst für einen möglichen Rückweg erhalten.
+
+Bitte öffne deine bestehende Startup Factory im Coding-Agenten und füge den beigefügten Prompt ein. Er aktualisiert die CLI von v0.1.43 auf v0.1.47 und die Factory von v0.1.25 auf v0.1.26. Anschließend bereitet er die Umstellung deiner bestehenden Startups vor. Falls bei dir andere Versionen installiert sind, prüft er zuerst den Ausgangsstand.
+
+Lokale Änderungen und eigene Anpassungen sollen erhalten bleiben. Bevor Änderungen an einem laufenden Startup ausgerollt werden, zeigt dir der Agent den konkreten Stand zur Freigabe. Bitte lass zuerst ein Startup umstellen und prüfen, dann die übrigen.
+
+Schick mir anschließend die Abschlussmeldung des Agenten. Bitte lösche das alte Deploy-Repo noch nicht und teile keine Zugangsdaten oder entschlüsselten Konfigurationen.
+
+Danke!
+Philipp
