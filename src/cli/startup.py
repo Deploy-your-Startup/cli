@@ -31,6 +31,11 @@ __all__ = ["_password_scope", "bootstrap", "cli"]  # imported by tests and facto
 
 
 @click.group()
+@click.version_option(
+    package_name="deploy-your-startup-cli",
+    prog_name="startup",
+    message="%(prog)s %(version)s",
+)
 def cli():
     """Startup CLI - Command line tool for Deploy Your Startup operations.
 
