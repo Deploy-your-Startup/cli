@@ -1,6 +1,26 @@
 """Keep concurrent integration workers out of shared Ansible state."""
 
+import os
+import shlex
+
 import pytest
+
+
+@pytest.fixture(scope="session", autouse=True)
+def reject_ambient_startup(tmp_path_factory):
+    """Catch accidental CLI calls even if the caller ignores their exit status."""
+    binaries = tmp_path_factory.mktemp("ambient-startup")
+    calls = binaries / "calls"
+    startup = binaries / "startup"
+    startup.write_text(
+        f"#!/bin/sh\nprintf 'unexpected startup call\\n' >> {shlex.quote(str(calls))}\n"
+        "echo 'Use the checkout Python with -m cli.startup' >&2\nexit 97\n"
+    )
+    startup.chmod(0o755)
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("PATH", str(binaries) + os.pathsep + os.environ["PATH"])
+        yield
+    assert not calls.exists(), "Tests called startup through the ambient PATH"
 
 
 @pytest.fixture(scope="session", autouse=True)

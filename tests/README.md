@@ -21,6 +21,11 @@ installs cannot overwrite each other or modify the developer's collections.
 and Ansible's effective configuration. CI checks Docker and kubectl before
 starting the suite; SSH and browser scenarios remain enabled.
 
+Tests use the checkout's Python interpreter (`python -m cli.startup`). A session
+fixture rejects ambient `startup` calls and fails even when their errors are
+swallowed. The Factory onboarding E2E binds nested shell calls to the candidate
+interpreter and source. No global CLI install or update is required for tests.
+
 For focused runs:
 
 ```bash

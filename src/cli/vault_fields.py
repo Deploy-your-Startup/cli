@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -12,7 +13,17 @@ import click
 def read_vault_field(target: Path, field: str) -> str | None:
     """Return a field's decrypted value, or None when it cannot be read."""
     result = subprocess.run(
-        ["startup", "secrets", "get-field", "-f", str(target), "--field", field],
+        [
+            sys.executable,
+            "-m",
+            "cli.startup",
+            "secrets",
+            "get-field",
+            "-f",
+            str(target),
+            "--field",
+            field,
+        ],
         text=True,
         capture_output=True,
         check=False,
@@ -28,7 +39,9 @@ def store_vault_fields(
         if read_vault_field(target, field) == value:
             continue
         command = [
-            "startup",
+            sys.executable,
+            "-m",
+            "cli.startup",
             "secrets",
             "update",
             "-r",
