@@ -48,9 +48,16 @@ def main():
             "  *) echo 'Unexpected GitHub mutation' >&2; exit 99 ;;\nesac\n"
         )
         gh.chmod(0o755)
+        # Nested Factory setup scripts must use this candidate, too.
+        startup = binaries / "startup"
+        startup.write_text(
+            f'#!/bin/sh\nexec {shlex.quote(sys.executable)} -m cli.startup "$@"\n'
+        )
+        startup.chmod(0o755)
         environment = {
             **os.environ,
             "HOME": str(home),
+            "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
             "PATH": os.pathsep.join(
                 (str(binaries), str(runtime_bin), os.environ["PATH"])
             ),

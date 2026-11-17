@@ -124,8 +124,6 @@ path = Path(os.environ['TEST_KEYCHAIN'])
 if sys.argv[1] == 'find-generic-password' and path.exists(): print(path.read_text())
 else: sys.exit(1)
 """)
-    startup = binaries / "startup"
-    startup.write_text(f'#!/bin/sh\nexec "{sys.executable}" -m cli.startup "$@"\n')
     auth0 = binaries / "auth0"
     auth0.write_text(f"""#!{sys.executable}
 import json, sys
