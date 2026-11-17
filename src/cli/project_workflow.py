@@ -32,14 +32,6 @@ PERMISSIONS = {
 }
 
 
-class WorkflowDumper(yaml.SafeDumper):
-    """Use double quotes for quoted scalars, matching generated-project Prettier."""
-
-    def choose_scalar_style(self):
-        style = super().choose_scalar_style()
-        return '"' if style == "'" else style
-
-
 def include_version_changes(content: str) -> str:
     """Include the one version file in each caller's existing event path filters."""
     # Copier's raw delimiters occur only around otherwise plain caller YAML.
@@ -100,7 +92,7 @@ def entry_workflow(schema: dict, repository: str, router: str, revision: str) ->
             name: "${{ secrets." + name + " }}" for name in call.get("secrets", {})
         },
     }
-    return yaml.dump(
+    return yaml.safe_dump(
         {
             "name": "Shared deployment version",
             "on": {"workflow_call": call},
@@ -108,7 +100,6 @@ def entry_workflow(schema: dict, repository: str, router: str, revision: str) ->
         },
         sort_keys=False,
         width=1000,
-        Dumper=WorkflowDumper,
     )
 
 
