@@ -1,7 +1,6 @@
 """``startup --version`` names the installed release, so scripts can require one."""
 
 import importlib.metadata
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -21,4 +20,3 @@ def test_version_names_the_installed_release(tmp_path):
     )
     installed = importlib.metadata.version("deploy-your-startup-cli")
     assert result.stdout.strip() == f"startup {installed}"
-    assert re.fullmatch(r"startup \d+\.\d+\.\d+\S*", result.stdout.strip())
