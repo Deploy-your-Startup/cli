@@ -58,6 +58,14 @@ It covers exact multiline values, whitespace, comments, nested inline fields,
 creation, wrong passwords, dry runs, rotation, credential transport and the
 built wheel's dependency/license boundary. The CLI process is also tested with
 Ansible Python imports blocked; Ansible runs in its own process.
+The run is parallel (`pytest -n auto`), like `mise run test`.
+
+On macOS an `ansible-vault` child occasionally no longer has its inherited
+password pipe when many processes start at once. The CLI repeats such a run
+with fresh pipes (at most three attempts) and nothing else: a wrong password or
+any other failure ends after one attempt.
+`test_vault_child_retry_integration.py` covers both with a stand-in in front of
+the real `ansible-vault`.
 
 `test_one_password_integration.py` covers the 1Password password backend and
 `startup config`: a fake `op` on PATH keeps items in a JSON file and records

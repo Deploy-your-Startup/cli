@@ -37,7 +37,46 @@ def _password_pipe(password):
         os.close(reader)
 
 
+# On macOS an ansible-vault child occasionally no longer has its inherited
+# password pipe when it looks for it, while many processes start at once.
+# Ansible then reports the /dev/fd path as missing (exit 1) or fails on it
+# with EBADF (exit 250, an unexpected exception). Such a run read no password
+# and changed nothing, so it is repeated with fresh pipes. A wrong password
+# reads the pipe and is never repeated.
+_ATTEMPTS = 3
+
+
+def _lost_password_pipe(result, descriptors):
+    if not result.returncode:
+        return False
+    stderr = result.stderr.decode(errors="replace")
+    for descriptor in descriptors:
+        path = f"/dev/fd/{descriptor}"
+        if (
+            f"Bad file descriptor: '{path}'" in stderr
+            or f"{path} was not found" in stderr
+        ):
+            return True
+    return False
+
+
 def _run(operation, data, password, *arguments, new_password=None):
+    for attempt in range(1, _ATTEMPTS + 1):
+        result, descriptors = _run_once(
+            operation, data, password, arguments, new_password
+        )
+        if attempt == _ATTEMPTS or not _lost_password_pipe(result, descriptors):
+            break
+    if result.returncode:
+        # Ansible's diagnostics can contain input fragments. Do not forward
+        # them, or a CalledProcessError carrying argv/input, to callers.
+        raise VaultError(
+            f"ansible-vault {operation} failed; check the password and Vault input."
+        )
+    return result.stdout
+
+
+def _run_once(operation, data, password, arguments, new_password):
     with ExitStack() as stack:
         descriptor = stack.enter_context(_password_pipe(password))
         descriptors = [descriptor]
@@ -65,13 +104,7 @@ def _run(operation, data, password, *arguments, new_password=None):
             )
         except OSError:
             raise VaultError("Could not start ansible-vault.") from None
-        if result.returncode:
-            # Ansible's diagnostics can contain input fragments. Do not forward
-            # them, or a CalledProcessError carrying argv/input, to callers.
-            raise VaultError(
-                f"ansible-vault {operation} failed; check the password and Vault input."
-            )
-        return result.stdout
+        return result, descriptors
 
 
 def decrypt(data, password):
