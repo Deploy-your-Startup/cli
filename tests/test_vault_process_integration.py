@@ -1,5 +1,6 @@
 """Real CLI / Ansible interoperability, including lossless inline editing."""
 
+import json
 import os
 import subprocess
 import sys
@@ -169,7 +170,13 @@ def test_inline_update_preserves_neighbours_and_exact_value(tmp_path, value):
     assert read.stdout == value + b"\n"
     argv = (tmp_path / "argv.jsonl").read_text()
     assert PASSWORD not in argv
-    assert value.decode() not in argv
+    # The executable's installation path may contain a fixture value such as
+    # "single". Inspect arguments, where secret material must never appear.
+    assert all(
+        value.decode() not in argument
+        for line in argv.splitlines()
+        for argument in json.loads(line)[1:]
+    )
     assert value not in result.stdout + result.stderr
 
 

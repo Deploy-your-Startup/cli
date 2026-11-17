@@ -37,6 +37,12 @@ COMMIT = re.compile(r"[0-9a-f]{40}")
 def _pin(working_dir: Path) -> tuple[str, str]:
     """The project's recorded release commit and role checksum, empty if unpinned."""
 
+    from cli.project_version import project_version
+
+    configured = project_version(working_dir.parent, validate_calls=False)
+    if configured:
+        return configured.revision, ""
+
     def read(name: str) -> str:
         path = working_dir / name
         return path.read_text().strip() if path.exists() else ""
@@ -109,10 +115,10 @@ def _report_check(working_dir: Path, repository: str, release: str) -> None:
     if current == revision and workflow_revisions(working_dir.parent, repository) <= {
         revision
     }:
-        click.echo(f"Up to date: this project runs release {release}.")
+        click.echo(f"Up to date: configured deployment release {release}.")
         return
     click.echo(f"Update available: release {release} of {repository}.")
-    click.echo(f"This project runs {current[:12] or 'an unpinned revision'}.")
+    click.echo(f"Configured deployment: {current[:12] or 'an unpinned revision'}.")
     click.echo(f"Adopt it with: startup update --version {release}")
 
 
@@ -121,12 +127,17 @@ def _report_update(
 ) -> None:
     after = _pin(working_dir)
     if after == before and not moved:
-        click.echo(f"Up to date: this project already runs release {release}.")
+        click.echo(f"Up to date: this project already targets release {release}.")
         return
-    roles = "unchanged" if after[1] == before[1] else "changed"
+    from cli.project_version import project_version
+
+    roles = ""
+    if project_version(working_dir.parent, validate_calls=False) is None:
+        state = "unchanged" if after[1] == before[1] else "changed"
+        roles = f"; role contents {state}"
     click.echo(
         f"\nThis project now targets release {release} "
-        f"({before[0][:12] or 'unpinned'} → {after[0][:12]}); role contents {roles}.\n"
+        f"({before[0][:12] or 'unpinned'} → {after[0][:12]}){roles}.\n"
         "Nothing is deployed yet. Review the diff, commit and push to roll it out.\n"
         "To go back, run: startup update --version <previous release or commit>"
     )

@@ -121,3 +121,55 @@ def test_a_real_change_to_the_shared_reference_stays_a_conflict(tmp_path):
     assert result.exit_code != 0
     assert "conflicts" in result.output
     assert "<<<<<<<" in workflow.read_text()
+
+
+@pytest.mark.parametrize("ansible", [True, False])
+def test_template_update_preserves_the_one_active_reference(tmp_path, ansible):
+    # GIVEN a real template with the single-version entry and historical Copier answers.
+    template = tmp_path.resolve() / "template"
+    init(template)
+    workflows = template / ".github/workflows"
+    workflows.mkdir(parents=True)
+    entry_source = workflows / "startup.yml.jinja"
+    entry_source.write_text(
+        "jobs:\n  runtime:\n    uses: {{ deploy_repository }}"
+        "/.github/workflows/project.yml@{{ deploy_ref }}\n"
+    )
+    caller = "jobs:\n  deploy:\n    uses: ./.github/workflows/startup.yml\n    with:\n      operation: deploy\n"
+    template_release(template, DIRECT, caller, "v1\n", "v1.0.0")
+    project = tmp_path.resolve() / "project"
+    run_copy(str(template), str(project), vcs_ref="v1.0.0", defaults=True, quiet=True,
+             data={"project_name": "demo", "github_username": "example", "deploy_ref": OLD})  # fmt: skip
+    from cli.template_commands import git
+
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "Template integration")
+    git(project, "config", "user.email", "test@example.invalid")
+    git(project, "config", "commit.gpgsign", "false")
+    entry = project / ".github/workflows/startup.yml"
+    entry.write_text(entry.read_text().replace(OLD, PIN + " # v1.2.0"))
+    if ansible:
+        (project / "deployment").mkdir()
+        (project / "deployment/playbook.yml").write_text("[]\n")
+    commit(project, "configured release independent of original answers")
+    template_release(template, DIRECT, caller, "v2\n", "v2.0.0")
+    # WHEN previewing and applying the application template update.
+    before = entry.read_text()
+    arguments = [
+        "template",
+        "update",
+        "--project-dir",
+        str(project),
+        "--version",
+        "v2.0.0",
+    ]
+    preview = CliRunner().invoke(cli, [*arguments, "--dry-run"])
+    assert preview.exit_code == 0, preview.output
+    assert entry.read_text() == before
+    result = CliRunner().invoke(cli, arguments)
+    # THEN the active version remains pinned and no duplicate pin files appear.
+    assert result.exit_code == 0, result.output
+    assert entry.read_text() == before
+    assert (project / "README.md").read_text() == "v2\n"
+    assert not list(project.glob("**/shared-roles.ref"))
+    assert not list(project.glob("**/shared-roles.sha256"))

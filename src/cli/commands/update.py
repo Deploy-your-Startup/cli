@@ -31,8 +31,9 @@ def update(working_directory, project_directory, version, check):
 
     Without --version, adopts the latest vX.Y.Z release of the project's shared
     repository (Deploy-your-Startup/deploy, or the fork recorded in
-    deployment/shared-roles.source) and points the role pin and workflow
-    references at it. --version selects a release that exists there (also an
+    the project entry) and updates the one reference in
+    .github/workflows/startup.yml. Supported older callers are migrated and
+    shared-roles.ref / shared-roles.sha256 are removed. --version selects a release that exists there (also an
     earlier one, to roll back) or a full commit. Other projects are not
     affected. A project that still calls an owner copy is moved once with
     `startup migrate deploy`.

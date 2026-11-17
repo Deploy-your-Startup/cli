@@ -39,15 +39,19 @@ def run_workflow_update(project: Path, *, version: str | None, check: bool) -> N
     )
     if check:
         if revisions == {revision}:
-            click.echo(f"Up to date: this project runs release {release}.")
+            click.echo(f"Up to date: configured deployment release {release}.")
         else:
             click.echo(f"Update available: release {release} of {repository}.")
             click.echo(f"Adopt it with: startup update --version {release}")
         return
-    moved = pin_workflow_references(project, repository, revision, release)
+    from cli.project_version_update import adopt_workflow_version
+
+    moved = adopt_workflow_version(metadata, repository, revision, release)
+    if moved is None:
+        moved = pin_workflow_references(project, repository, revision, release)
     stop_following(metadata)
     if not moved:
-        click.echo(f"Up to date: this project already runs release {release}.")
+        click.echo(f"Up to date: this project already targets release {release}.")
         return
     click.echo(
         f"This project now targets release {release} ({revision[:12]}); "

@@ -56,11 +56,12 @@ mise run test-vault
 - Projects pin releases of `Deploy-your-Startup/deploy`, or of the fork in
   `deployment/shared-roles.source`; `shared_source.py` resolves which one, and
   workflows that still call `<owner>/deploy-your-startup` keep their owner copy.
-  `startup update` moves one project's role pin, checksum and shared workflow
-  refs to a published `vX.Y.Z` tag (`project_update.py`, on top of
+  `startup update` moves the sole deployment reference in
+  `.github/workflows/startup.yml` to a published release and migrates supported
+  older callers (`project_version_update.py`, on top of
   `ansible pin`); it never publishes a release. `--version latest` unpins
-  instead (`project_follow.py`); the marker `deployment/shared-roles.latest`
-  stops setup from pinning again. `startup migrate deploy`
+  instead (`project_follow.py`); the single reference records `main`. Older releases retain their legacy
+  pin/checksum and follow-marker contract for rollback. `startup migrate deploy`
   (`project_migrate.py`) moves an owner-copy project once to the current
   release and grants the shared build its nested permissions
   (`workflow_pins.grant_build_permissions`), which GitHub does not extend

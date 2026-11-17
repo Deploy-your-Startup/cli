@@ -51,6 +51,11 @@ def shared_repository(working_dir: Path) -> str:
     explicit = os.getenv("STARTUP_SHARED_REPOSITORY")
     if explicit:
         return explicit
+    from cli.project_version import project_version
+
+    version = project_version(working_dir.parent, validate_calls=False)
+    if version:
+        return version.repository
     return (
         recorded_source(working_dir)
         or legacy_copy(working_dir)

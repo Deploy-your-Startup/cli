@@ -622,34 +622,36 @@ startup update --check
 startup update
 ```
 
-Run it in the project. It points the project's role pin
-(`deployment/shared-roles.ref`, `shared-roles.sha256`) and its shared workflow
-references in `.github/workflows` at the latest release. No other project
-changes and nothing is deployed: review the diff, commit and push to roll it
-out. `startup update --version <release>` moves to a specific release,
-including back to an earlier one, or to a full commit.
+Run it in the project. The only active deployment version is the external
+`uses:` reference in `.github/workflows/startup.yml`. Build, deploy and
+infrastructure workflows call that local entry, and local CLI operations read
+the same reference. `startup update` selects a released commit and migrates
+supported older callers, removing `deployment/shared-roles.ref` and
+`deployment/shared-roles.sha256`. Review the diff, commit and push to adopt it;
+the command itself deploys nothing and changes no other project.
 
-Cloudflare Pages and other projects without Ansible use the same commands:
-their shared workflow references are the pin, and no `deployment/` directory is
-created. From another directory, use `startup update --project-dir <project>`.
-An explicit follow-main choice is recorded in `.github/shared-roles.latest`
-for these projects; a custom source can be recorded in `.github/shared-roles.source`.
+`startup update --version <release>` selects a specific release or full commit,
+including an earlier version. Rolling back to a pre-router release restores
+its legacy direct callers and role pin files. Unknown custom shared workflows
+are refused before files change, so their migration can be reviewed explicitly.
 
-`startup update --version latest` unpins the project instead: its workflows
-call the shared repository's `main`, the pin files are removed and
-`deployment/shared-roles.latest` records the choice. The project then changes
-with every merge there, without a diff to review, so keep deployed startups
-pinned. `startup update --version <release>` pins it again.
+Cloudflare Pages uses the same entry and commands without an Ansible directory.
+From another directory, use `startup update --project-dir <project>`.
 
-Local Ansible commands refresh `deployment/.shared-roles` from Git. CI exports
-the bundled roles and uses `--no-refresh` to consume that exported copy. Keep
-local refresh enabled and never edit `.shared-roles` directly.
+`startup update --version latest` changes the one reference to `main`. Plain
+updates then preserve that explicit choice. Every merge to the shared source
+can affect such a project, so keep deployed applications pinned to a release.
 
-The first Git-backed setup records `shared-roles.ref` and `shared-roles.sha256`;
-review and commit both files. Subsequent runs reuse that exact commit, and CI
-exports must match its checksum. `startup update` moves both to a newer
-release. `startup ansible pin --version <release>` is the underlying step, and
-its `--roles-only` leaves the workflow references unchanged.
+Local Ansible commands materialize `deployment/.shared-roles` at the configured
+version and refuse modified checkouts. CI exports without Git metadata are
+compared with an independently fetched tree of the same commit. There is no
+second checksum to maintain. Never edit `.shared-roles` directly.
+
+The reference configures the next operation; it does not prove what last
+succeeded on a server. Use the successful GitHub Actions deployment run as the
+execution record. Copier answers record the original template render only.
+`startup ansible pin` remains the underlying update command, but `--roles-only`
+cannot split local roles from CI for a single-version project.
 
 ### Use a fork
 
@@ -708,8 +710,8 @@ Copier records a reachable baseline for later updates. The default target is the
 template's HEAD; pass a tag or commit for repeatable updates.
 
 The update renders `deploy_repository` and `deploy_ref` from the project's
-current shared deployment (`deployment/shared-roles.ref`, the recorded fork or
-owner copy), not from the original answers, and keeps the project's line where
+current shared deployment (`.github/workflows/startup.yml`, with legacy pin
+fallback for older projects), not from the original answers, and keeps the project's line where
 a workflow conflict only differs in the release comment after that reference.
 
 Copier keeps earlier divergences as customizations, so both modes also compare
