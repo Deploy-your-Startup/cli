@@ -38,10 +38,11 @@ run it without `--onboard` (do not create another Factory):
 curl -fsSL https://deploy-your-startup.com/install.sh -o /tmp/startup-install.sh
 # Inspect /tmp/startup-install.sh; it must select v0.1.47 or the reviewed successor.
 bash /tmp/startup-install.sh
-"$HOME/.local/share/startup/tools/deploy-your-startup-cli/bin/python" -c 'from importlib.metadata import version; print(version("deploy-your-startup-cli"))'
+startup --version
 ```
 
-The CLI has no `--version` option; use the installer environment metadata above.
+CLI v0.1.43 does not support `--version`; inspect its installer environment
+metadata when determining the old version. The upgraded CLI supports it.
 Check `command -v startup` if the old version is still selected. Do not uninstall
 other tools or edit shell configuration blindly.
 
