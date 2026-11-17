@@ -130,9 +130,11 @@ def test_unsupported_calls_leave_all_files_unchanged(shared):
     assert not (project / "deployment/shared-roles.ref").exists()
 
 
-def test_single_version_refuses_role_only_updates_and_conflicting_pins(shared):
+@pytest.mark.parametrize("target", ["main", "v1.0.0"])
+def test_single_version_refuses_role_only_updates_and_conflicting_pins(shared, target):
     # GIVEN a project using the single-version release.
     project, workflow = shared.project(DEPLOY)
+    shared.release("older runtime", "v1.0.0")
     revision = publish_router(shared)
     assert shared.cli(project, "update").returncode == 0
     before = workflow.read_text()
@@ -144,6 +146,8 @@ def test_single_version_refuses_role_only_updates_and_conflicting_pins(shared):
         "--working-directory",
         str(project / "deployment"),
         "--roles-only",
+        "--version",
+        target,
     )
     assert result.returncode != 0
     assert "--roles-only cannot split" in result.stderr

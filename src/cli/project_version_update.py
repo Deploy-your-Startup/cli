@@ -54,6 +54,10 @@ def adopt_project_version(
 ) -> int | None:
     """Return None for an older release, otherwise migrate with one authoritative ref."""
     project = working_dir.parent
+    if not workflows and project_version(project, validate_calls=False):
+        raise click.ClickException(
+            "This project uses one deployment version; --roles-only cannot split it from CI."
+        )
     router = "project-pages.yml" if working_dir.name == ".github" else "project.yml"
     schema = _schema(root, router)
     if schema is None:
