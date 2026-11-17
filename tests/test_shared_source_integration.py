@@ -93,7 +93,7 @@ def test_update_moves_a_project_between_releases_and_back(shared):
     assert f"Update available: release v1.0.0 of {DEPLOY}." in result.stdout
     assert not (deployment / "shared-roles.ref").exists()
     # WHEN the project is updated.
-    result = shared.cli(project, "update")
+    result = shared.cli(shared.root, "update", "--project-dir", str(project))
     # THEN roles and shared workflows name the release commit; other references stay.
     assert result.returncode == 0, result.stdout + result.stderr
     assert (deployment / "shared-roles.ref").read_text().strip() == first
@@ -261,3 +261,66 @@ def test_a_project_migrated_without_the_grant_gets_it_on_a_rerun(shared):
         yaml.safe_load(workflow.read_text())["jobs"]["build"]["permissions"]["id-token"]
         == "write"
     )
+
+
+def test_pages_project_updates_checks_rolls_back_and_follows_explicitly(shared):
+    # GIVEN a Pages project with shared workflows and no Ansible directory.
+    project, workflow = shared.project(DEPLOY)
+    (project / "deployment").rmdir()
+    first = shared.release("first roles", "v1.0.0")
+    before = workflow.read_text()
+    # WHEN previewing, THEN no metadata or workflow changes are written.
+    result = shared.cli(project, "update", "--check")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Update available" in result.stdout
+    assert workflow.read_text() == before
+    # WHEN updating through the public project option, THEN only shared refs move.
+    result = shared.cli(project, "update", "--project-dir", str(project))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"@{first} # v1.0.0" in workflow.read_text()
+    assert "someone/else/.github/workflows/x.yml@v1" in workflow.read_text()
+    assert not (project / "deployment").exists()
+    assert not (project / ".github/shared-roles.ref").exists()
+    assert "Up to date" in shared.cli(project, "update", "--check").stdout
+    second = shared.release("second roles", "v1.1.0")
+    assert shared.cli(project, "update").returncode == 0
+    assert f"@{second}" in workflow.read_text()
+    assert shared.cli(project, "update", "--version", "v1.0.0").returncode == 0
+    assert f"@{first}" in workflow.read_text()
+    # WHEN a release is invalid, THEN the recorded workflow pin is preserved.
+    before = workflow.read_text()
+    assert shared.cli(project, "update", "--version", "v9.0.0").returncode != 0
+    assert workflow.read_text() == before
+    # WHEN explicitly following main, THEN plain updates leave that choice alone.
+    assert shared.cli(project, "update", "--version", "latest").returncode == 0
+    assert (project / ".github/shared-roles.latest").exists()
+    assert "follows latest" in shared.cli(project, "update").stdout
+    assert shared.cli(project, "update", "--version", "v1.0.0").returncode == 0
+    assert not (project / ".github/shared-roles.latest").exists()
+    assert f"@{first}" in workflow.read_text()
+
+
+def test_update_check_detects_workflow_drift_even_with_current_roles(shared):
+    # GIVEN current roles but a workflow accidentally moved back to main.
+    project, workflow = shared.project(DEPLOY)
+    first = shared.release("roles", "v1.0.0")
+    assert shared.cli(project, "update").returncode == 0
+    workflow.write_text(workflow.read_text().replace(f"@{first}", "@main", 1))
+    before = workflow.read_text()
+    # WHEN checking, THEN the drift is reported without changing files.
+    result = shared.cli(project, "update", "--check")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Update available" in result.stdout
+    assert workflow.read_text() == before
+    assert shared.cli(project, "update").returncode == 0
+    assert "@main" not in workflow.read_text()
+
+
+def test_workflow_only_update_rejects_projects_without_shared_workflows(shared):
+    # GIVEN an unrelated repository, WHEN updating, THEN no deployment is invented.
+    project = shared.root / "unrelated"
+    project.mkdir()
+    result = shared.cli(project, "update", "--project-dir", str(project))
+    assert result.returncode != 0
+    assert "No shared deployment workflows" in result.stderr
+    assert list(project.iterdir()) == []

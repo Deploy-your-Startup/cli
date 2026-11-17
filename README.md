@@ -629,6 +629,12 @@ changes and nothing is deployed: review the diff, commit and push to roll it
 out. `startup update --version <release>` moves to a specific release,
 including back to an earlier one, or to a full commit.
 
+Cloudflare Pages and other projects without Ansible use the same commands:
+their shared workflow references are the pin, and no `deployment/` directory is
+created. From another directory, use `startup update --project-dir <project>`.
+An explicit follow-main choice is recorded in `.github/shared-roles.latest`
+for these projects; a custom source can be recorded in `.github/shared-roles.source`.
+
 `startup update --version latest` unpins the project instead: its workflows
 call the shared repository's `main`, the pin files are removed and
 `deployment/shared-roles.latest` records the choice. The project then changes

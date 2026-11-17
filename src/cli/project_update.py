@@ -28,6 +28,7 @@ from cli.shared_source import (
     legacy_copy,
     shared_repository,
 )
+from cli.workflow_pins import workflow_revisions
 
 LATEST = "latest"
 COMMIT = re.compile(r"[0-9a-f]{40}")
@@ -104,7 +105,10 @@ def _requested_release(working_dir: Path, repository: str, version: str | None) 
 def _report_check(working_dir: Path, repository: str, release: str) -> None:
     current, _checksum = _pin(working_dir)
     tags = {} if COMMIT.fullmatch(release) else _remote_tags(working_dir, repository)
-    if current and current in {release, tags.get(release)}:
+    revision = release if COMMIT.fullmatch(release) else tags.get(release)
+    if current == revision and workflow_revisions(working_dir.parent, repository) <= {
+        revision
+    }:
         click.echo(f"Up to date: this project runs release {release}.")
         return
     click.echo(f"Update available: release {release} of {repository}.")
@@ -128,8 +132,23 @@ def _report_update(
     )
 
 
-def run_update(working_directory: str, *, version: str | None, check: bool) -> None:
-    working_dir = _resolve_working_dir(working_directory)
+def run_update(
+    working_directory: str,
+    *,
+    version: str | None,
+    check: bool,
+    project_directory: str | None = None,
+) -> None:
+    working_dir = (
+        Path(project_directory).resolve() / "deployment"
+        if project_directory
+        else _resolve_working_dir(working_directory)
+    )
+    if not working_dir.is_dir():
+        from cli.project_workflow_update import run_workflow_update
+
+        run_workflow_update(working_dir.parent, version=version, check=check)
+        return
     repository = shared_repository(working_dir)
     if version == LATEST:
         follow_latest(working_dir, repository, check=check)
@@ -144,6 +163,6 @@ def run_update(working_directory: str, *, version: str | None, check: bool) -> N
     before = _pin(working_dir)
     stop_following(working_dir)
     moved = run_pin(
-        working_directory=working_directory, version=release, repository=repository
+        working_directory=str(working_dir), version=release, repository=repository
     )
     _report_update(before, working_dir, release, moved)
