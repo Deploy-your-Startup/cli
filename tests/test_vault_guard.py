@@ -36,6 +36,8 @@ def encrypted_file(folder, filename, password):
     for extra in (["--dry-run"], []):
         result = subprocess.run(
             command + extra,
+            # A dry run writes dry-run-output/ into the working directory.
+            cwd=folder,
             input="synthetic-value",
             text=True,
             capture_output=True,
