@@ -1,4 +1,4 @@
-"""Keep concurrent integration workers out of shared Ansible state."""
+"""Keep concurrent integration workers out of shared user state."""
 
 import os
 import shlex
@@ -37,6 +37,14 @@ def isolated_ansible_home(tmp_path_factory):
         for name in ("STARTUP_VAULT_BACKEND", "STARTUP_OP_VAULT", "OP_ACCOUNT"):
             patch.delenv(name, raising=False)
         yield home
+
+
+@pytest.fixture(scope="session", autouse=True)
+def isolated_copier_cache(tmp_path_factory):
+    # Concurrent mirror refreshes can race when a remote advances during tests.
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("COPIER_CACHE_DIR", str(tmp_path_factory.mktemp("copier-cache")))
+        yield
 
 
 def pytest_addoption(parser):
