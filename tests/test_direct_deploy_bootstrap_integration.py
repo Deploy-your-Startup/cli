@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 ENVOPS = """_subdirectory: template
@@ -211,23 +212,41 @@ def test_every_pinned_template_bootstraps_without_an_owner_copy(template, versio
     ],
 )
 def test_every_pinned_server_template_grants_the_shared_build_its_permissions(
-    template, version
+    template, version, tmp_path
 ):
-    # GIVEN a server template release this CLI offers by default.
-    from copier.main import Worker
+    # GIVEN a published server template offered by this CLI.
+    from copier import run_copy
 
     from cli import template_commands
 
-    with Worker(
-        src_path=getattr(template_commands, template),
+    project = tmp_path / "application"
+    run_copy(
+        getattr(template_commands, template),
+        project,
         vcs_ref=getattr(template_commands, version),
+        defaults=True,
         skip_tasks=True,
         quiet=True,
-    ) as worker:
-        workflows = worker.template.local_abspath / "template/.github/workflows"
-        # WHEN its shared build caller is read.
-        caller = next(workflows.glob("build-and-deploy-backend.yml*")).read_text()
-    # THEN it grants what the other owner's nested jobs request; without it the run never starts.
-    assert "/.github/workflows/build-and-deploy-service.yml@" in caller
-    assert "      id-token: write\n" in caller
-    assert "      packages: write\n" in caller
+        data={
+            "project_name": "permissions-check",
+            "base_domain": "example.com",
+            "github_username": "example",
+        },
+    )
+    workflows = project / ".github/workflows"
+    caller = yaml.safe_load((workflows / "build-and-deploy-backend.yml").read_text())
+    # WHEN GitHub follows the local entry, THEN the caller grants the nested build permissions.
+    build = next(
+        job
+        for job in caller["jobs"].values()
+        if job.get("with", {}).get("operation") == "build"
+    )
+    assert build["uses"] == "./.github/workflows/startup.yml"
+    assert build["permissions"]["id-token"] == "write"
+    assert build["permissions"]["packages"] == "write"
+    entry = yaml.safe_load((workflows / "startup.yml").read_text())
+    external = [job["uses"] for job in entry["jobs"].values() if "uses" in job]
+    assert len(external) == 1
+    assert "Deploy-your-Startup/deploy/.github/workflows/project.yml@" in external[0]
+    assert not (project / "deployment/shared-roles.ref").exists()
+    assert not (project / "deployment/shared-roles.sha256").exists()
