@@ -24,6 +24,11 @@ MARKER_TEXT = (
 
 
 def follows_latest(working_dir: Path) -> bool:
+    from cli.project_version import project_version
+
+    version = project_version(working_dir.parent, validate_calls=False)
+    if version:
+        return version.revision == "main"
     return (working_dir / FOLLOW_MARKER).exists()
 
 
@@ -54,7 +59,10 @@ def follow_latest(working_dir: Path, repository: str, *, check: bool) -> None:
     removed = [name for name in PIN_FILES if (working_dir / name).exists()]
     for name in removed:
         (working_dir / name).unlink()
-    (working_dir / FOLLOW_MARKER).write_text(MARKER_TEXT)
+    from cli.project_version import project_version
+
+    if project_version(working_dir.parent) is None:
+        (working_dir / FOLLOW_MARKER).write_text(MARKER_TEXT)
     click.echo(
         f"This project now follows latest: {moved} shared reference(s) point at "
         f"main and {len(removed)} pin file(s) were removed.\n"

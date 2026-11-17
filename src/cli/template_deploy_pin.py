@@ -23,7 +23,12 @@ _CONFLICT = re.compile(
 
 def pinned_deployment_data(project: Path) -> dict[str, str]:
     """``deploy_repository`` and ``deploy_ref`` as the project uses them today."""
+    from cli.project_version import project_version
     from cli.shared_source import shared_repository
+
+    version = project_version(project)
+    if version:
+        return {"deploy_repository": version.repository, "deploy_ref": version.revision}
 
     deployment = project / "deployment"
     if not deployment.is_dir():

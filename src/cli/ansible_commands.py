@@ -341,6 +341,15 @@ def _is_up_to_date(target_dir: Path, working_dir: Path, version: str) -> bool:
 
 def _requested_roles_version(working_dir: Path, version: str) -> str:
     """Apply the project's pins: shared-roles.ref, else Copier's deploy_ref."""
+    from cli.project_version import configured_revision
+
+    configured = configured_revision(working_dir)
+    if configured:
+        if version not in {DEFAULT_VERSION, configured}:
+            raise click.ClickException(
+                "Requested roles differ from .github/workflows/startup.yml; use startup update first."
+            )
+        return configured
     pin_file = working_dir / "shared-roles.ref"
     if pin_file.exists():
         pinned = pin_file.read_text().strip()
@@ -624,6 +633,13 @@ def run_pin(
             cwd=working_dir,
             capture_output=True,
         ).stdout.strip()
+        from cli.project_version_update import adopt_project_version
+
+        moved = adopt_project_version(
+            working_dir, root, repository, revision, version, workflows=workflows
+        )
+        if moved is not None:
+            return moved
         fingerprint = _shared_roles_fingerprint(root)
     (working_dir / "shared-roles.sha256").write_text(fingerprint + "\n")
     (working_dir / "shared-roles.ref").write_text(revision + "\n")
@@ -664,6 +680,14 @@ def setup_ansible(
         refresh=refresh,
     )
     working_dir = _resolve_working_dir(working_directory)
+    from cli.project_role_integrity import verify_project_roles
+    from cli.project_version import configured_revision
+
+    configured = configured_revision(working_dir)
+    if configured:
+        verify_project_roles(working_dir, shared_roles_dir, configured, repo_url)
+        install_collections(working_directory=working_directory, shared_dir=shared_dir)
+        return shared_roles_dir
     fingerprint = _shared_roles_fingerprint(shared_roles_dir)
     fingerprint_file = working_dir / "shared-roles.sha256"
     pin_file = working_dir / "shared-roles.ref"

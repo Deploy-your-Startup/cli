@@ -216,3 +216,21 @@ def test_directory_without_services_is_an_error(tmp_path):
     # THEN the command fails instead of reporting an empty pass.
     assert code == 1
     assert "No make.sh found" in output
+
+
+def test_local_single_version_entry_keeps_the_service_lint_gate(project):
+    # GIVEN a service caller routed through the local single-version entry.
+    workflow = project / ".github/workflows/build-and-deploy-backend.yml"
+    content = WORKFLOW.replace(
+        "owner/deploy-your-startup/.github/workflows/build-and-deploy-service-parallel.yml@abc",
+        "./.github/workflows/startup.yml",
+    ).replace(
+        "      service: backend", "      operation: build\n      service: backend"
+    )
+    workflow.write_text(content)
+    assert lint_contract(project)[0] == 0
+    # WHEN a caller disables its existing lint gate, THEN the real CLI still refuses it.
+    workflow.write_text(content.replace("run_lint: true", "run_lint: false"))
+    code, output = lint_contract(project)
+    assert code != 0
+    assert "set run_lint: true" in output

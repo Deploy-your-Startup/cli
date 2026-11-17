@@ -62,8 +62,7 @@ class Shared:
         )  # fmt: skip
 
 
-@pytest.fixture
-def shared(tmp_path):
+def make_shared(tmp_path):
     env = {
         **os.environ,
         "PYTHONPATH": str(SOURCE),
@@ -80,6 +79,11 @@ def shared(tmp_path):
     (work / "roles").mkdir()
     env["STARTUP_ANSIBLE_REPO_URL"] = remote.as_uri()
     return Shared(tmp_path, work, remote, env)
+
+
+@pytest.fixture
+def shared(tmp_path):
+    return make_shared(tmp_path)
 
 
 def test_update_moves_a_project_between_releases_and_back(shared):
@@ -103,7 +107,7 @@ def test_update_moves_a_project_between_releases_and_back(shared):
     )
     assert "someone/else/.github/workflows/x.yml@v1" in workflow.read_text()
     assert (
-        "Up to date: this project runs release v1.0.0."
+        "Up to date: configured deployment release v1.0.0."
         in shared.cli(project, "update", "--check").stdout
     )
     # WHEN a newer release appears, it is adopted; THEN the earlier one can be restored by name.
@@ -206,7 +210,7 @@ def test_an_owner_copy_project_migrates_once_to_the_current_release(shared):
     assert "nothing to migrate" in again.stdout and "now grant" not in again.stdout
     assert workflow.read_text().count("id-token: write") == 1
     assert (
-        "Up to date: this project runs release v1.1.0."
+        "Up to date: configured deployment release v1.1.0."
         in shared.cli(project, "update", "--check").stdout
     )
 
@@ -230,7 +234,7 @@ def test_a_project_can_move_to_a_fork_and_back(shared):
         in workflow.read_text()
     )
     assert (
-        "Up to date: this project runs release v2.0.0."
+        "Up to date: configured deployment release v2.0.0."
         in shared.cli(project, "update", "--check").stdout
     )
     # WHEN it migrates back to the default source, THEN the record is removed.

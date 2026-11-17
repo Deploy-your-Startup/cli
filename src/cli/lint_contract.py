@@ -154,7 +154,13 @@ def workflow_findings(project: Path) -> list[str]:
             job
             for job in jobs.values()
             if isinstance(job, dict)
-            and any(name in str(job.get("uses", "")) for name in SERVICE_WORKFLOWS)
+            and (
+                any(name in str(job.get("uses", "")) for name in SERVICE_WORKFLOWS)
+                or (
+                    job.get("uses") == "./.github/workflows/startup.yml"
+                    and (job.get("with") or {}).get("operation") == "build"
+                )
+            )
         ]
         if not callers:
             continue

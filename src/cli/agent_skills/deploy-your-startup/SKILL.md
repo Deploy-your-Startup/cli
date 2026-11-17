@@ -185,9 +185,15 @@ Pages and other workflow-only projects use `startup update` too: their workflow
 references are the pin; no Ansible directory is created. From outside the
 project, use `startup update --project-dir <project>`.
 
-Keep the two update paths apart: `startup update` moves one project's role pin
-and shared workflow references to a release of `Deploy-your-Startup/deploy` (or
-the fork in `deployment/shared-roles.source`); `startup template update` changes
+Keep the two update paths apart: `startup update` moves the sole deployment
+reference in `.github/workflows/startup.yml` to a release of
+`Deploy-your-Startup/deploy` (or its configured fork). Supported older callers
+are migrated and `shared-roles.ref` / `shared-roles.sha256` are removed; legacy
+releases retain their pin contract for rollback. Migration checks the CLI locked
+by the project, which is separate from the global installation; update that
+dependency and its lockfile first when requested. Templates declaring the new
+format require `startup update` before `startup template update`. The configured version is for
+the next operation; the successful Actions run records an actual deployment; `startup template update` changes
 the application files of one project. Releases are immutable tags published in
 that repository; a pinned project changes only when `startup update` moves it.
 That edits files and deploys nothing: the owner reviews, commits and pushes.
