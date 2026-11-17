@@ -6,6 +6,20 @@ import re
 from pathlib import Path
 
 
+def workflow_revisions(project_root: Path, repository: str) -> set[str]:
+    """All shared workflow/action revisions actually used by a project."""
+    from cli.shared_source import workflow_files
+
+    pattern = re.compile(
+        r"uses:\s*" + re.escape(repository) + r"/\.github/[\w./-]+@([^\s#]+)"
+    )
+    return {
+        revision
+        for path in workflow_files(project_root)
+        for revision in pattern.findall(path.read_text(encoding="utf-8"))
+    }
+
+
 def pin_workflow_references(
     project_root: Path, repository: str, revision: str, label: str
 ) -> int:

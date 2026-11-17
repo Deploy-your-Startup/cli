@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import pytest
 import yaml
 from click.testing import CliRunner
 from copier import run_copy
@@ -78,9 +79,14 @@ def migrated_project(tmp_path, new_workflow):
     return project, workflow
 
 
-def test_template_update_keeps_the_projects_shared_deployment_pin(tmp_path):
+@pytest.mark.parametrize("ansible", [True, False])
+def test_template_update_keeps_the_projects_shared_deployment_pin(tmp_path, ansible):
     # GIVEN a project moved to a deploy release and a template release with deploy_repository.
     project, workflow = migrated_project(tmp_path, DIRECT_WORKFLOW)
+    if not ansible:
+        (project / "deployment/shared-roles.ref").unlink()
+        (project / "deployment").rmdir()
+        commit(project, "workflow-only project")
     # WHEN the application template is updated.
     result = CliRunner().invoke(
         cli,

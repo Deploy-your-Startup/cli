@@ -181,6 +181,10 @@ password comes from the configured backend (Keychain or 1Password).
 | Update application template files | `startup template update --dry-run`, then `startup template update` |
 | Record a template baseline for an older project | `startup template adopt --version <tag>` |
 
+Pages and other workflow-only projects use `startup update` too: their workflow
+references are the pin; no Ansible directory is created. From outside the
+project, use `startup update --project-dir <project>`.
+
 Keep the two update paths apart: `startup update` moves one project's role pin
 and shared workflow references to a release of `Deploy-your-Startup/deploy` (or
 the fork in `deployment/shared-roles.source`); `startup template update` changes

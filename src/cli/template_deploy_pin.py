@@ -27,7 +27,14 @@ def pinned_deployment_data(project: Path) -> dict[str, str]:
 
     deployment = project / "deployment"
     if not deployment.is_dir():
-        return {}
+        from cli.workflow_pins import workflow_revisions
+
+        metadata = project / ".github"
+        repository = shared_repository(metadata)
+        revisions = workflow_revisions(project, repository)
+        if len(revisions) != 1:
+            return {}
+        return {"deploy_repository": repository, "deploy_ref": revisions.pop()}
     data = {"deploy_repository": shared_repository(deployment)}
     pin = deployment / "shared-roles.ref"
     if pin.is_file():

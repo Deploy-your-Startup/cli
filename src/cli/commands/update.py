@@ -5,6 +5,12 @@ import click
 
 @click.command("update")
 @click.option(
+    "--project-dir",
+    "project_directory",
+    type=click.Path(exists=True, file_okay=False),
+    help="Project root; supports Ansible projects and workflow-only/Pages projects",
+)
+@click.option(
     "--working-directory",
     default="deployment",
     show_default=True,
@@ -20,7 +26,7 @@ import click
 @click.option(
     "--check", is_flag=True, help="Show the available release without changing files"
 )
-def update(working_directory, version, check):
+def update(working_directory, project_directory, version, check):
     """Move this project to a release of the shared roles and workflows.
 
     Without --version, adopts the latest vX.Y.Z release of the project's shared
@@ -35,9 +41,17 @@ def update(working_directory, version, check):
     shared repository's main and changes with every merge there, without a diff
     to review. A plain `startup update` leaves such a project alone.
 
+    Pages projects update their workflow references without creating Ansible
+    files. Use --project-dir to select a project from another directory.
+
     Application template files are updated separately with
     `startup template update`.
     """
     from cli.project_update import run_update
 
-    run_update(working_directory, version=version, check=check)
+    run_update(
+        working_directory,
+        version=version,
+        check=check,
+        project_directory=project_directory,
+    )
