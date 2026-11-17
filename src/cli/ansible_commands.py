@@ -1422,7 +1422,9 @@ def run_kubeconfig(
                     remote_name, environment, env_suffix
                 )
 
-        kubeconfig = yaml.safe_load(tmp_path.read_text(encoding="utf-8"))
+        from cli.kube_credentials import read_yaml
+
+        kubeconfig = read_yaml(tmp_path.read_text(encoding="utf-8"))
         # In private network mode master_ip is the node's MagicDNS name. That is
         # also its k3s node name, which k3s always puts into the API
         # certificate, so the name verifies without any extra SAN.

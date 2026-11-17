@@ -21,6 +21,8 @@ from pathlib import Path
 import click
 import yaml
 
+from cli.kube_credentials import fetch_kubeconfig, public_state, read_state
+
 
 def private_write(path: Path, value: dict) -> None:
     """Replace a credential-bearing file atomically, with owner-only access."""
@@ -109,7 +111,7 @@ def ensure_tunnel(settings: dict, state: Path) -> None:
             if result.returncode != 0:
                 raise click.ClickException(
                     "Cannot start Kubernetes SSH tunnel. Check SSH key/agent, known_hosts "
-                    "and local port availability. " + result.stderr.strip()
+                    "and local port availability."
                 )
 
 
@@ -129,6 +131,19 @@ def verify_tunnel(settings: dict) -> None:
         raise click.ClickException(
             f"Cannot verify Kubernetes TLS through SSH; kubeconfig was not changed: {exc}"
         ) from exc
+
+
+def available_port(root: Path, previous: dict | None) -> int:
+    if previous:
+        return previous["local_port"]
+    reserved = {read_state(p)["local_port"] for p in root.glob("*.yml")}
+    for _ in range(100):
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        if port not in reserved:
+            return port
+    raise click.ClickException("No free local Kubernetes tunnel port.")
 
 
 def configure_access(
@@ -170,7 +185,7 @@ def configure_access(
     key = hashlib.sha256(context_name.encode()).hexdigest()[:16]
     state = root / f"{key}.yml"
     with access_lock(root / "configure.lock"):
-        previous = yaml.safe_load(state.read_text()) if state.exists() else None
+        previous = read_state(state) if state.exists() else None
         connection = {
             "host": host,
             "ssh_user": ssh_user,
@@ -181,26 +196,12 @@ def configure_access(
             raise click.ClickException(
                 "SSH destination changed. Remove the old tunnel configuration before reconnecting."
             )
-        if previous:
-            port = previous["local_port"]
-        else:
-            reserved = {
-                yaml.safe_load(p.read_text())["local_port"] for p in root.glob("*.yml")
-            }
-            for _ in range(100):
-                with socket.socket() as probe:
-                    probe.bind(("127.0.0.1", 0))
-                    port = probe.getsockname()[1]
-                if port not in reserved:
-                    break
-            else:
-                raise click.ClickException("No free local Kubernetes tunnel port.")
+        port = available_port(root, previous)
         settings = {
             **connection,
             "local_port": port,
             "tls_name": tls_name or host,
             "cluster": cluster,
-            "user": user,
             "context": context_name,
         }
         ensure_tunnel(settings, state)
@@ -219,7 +220,7 @@ def configure_access(
                     ]
                 )
             raise
-        private_write(state, settings)
+        private_write(state, public_state(settings))
     managed_name = f"startup-ssh-{key}"
     selected["context"].update(cluster=managed_name, user=managed_name)
     result["clusters"] = [c for c in result["clusters"] if c["name"] != managed_name]
@@ -251,135 +252,17 @@ def configure_access(
     return result
 
 
-@click.command("connect")
-@click.option(
-    "--context", "context_name", required=True, help="Local Kubernetes context name."
-)
-@click.option("--host", required=True, help="SSH address of the cluster master.")
-@click.option("--ssh-user", default="root", show_default=True)
-@click.option(
-    "--ssh-port", type=click.IntRange(1, 65535), default=22, show_default=True
-)
-@click.option(
-    "--identity-file", type=click.Path(exists=True, dir_okay=False, resolve_path=True)
-)
-@click.option(
-    "--tls-server-name",
-    default=None,
-    help="Expected name in the API certificate; defaults to host.",
-)
-@click.option(
-    "--namespace",
-    default=None,
-    help="Preserve the existing namespace unless explicitly set.",
-)
-@click.option(
-    "--kubeconfig", "config_path", type=click.Path(path_type=Path), default=None
-)
-def connect(
-    context_name,
-    host,
-    ssh_user,
-    ssh_port,
-    identity_file,
-    tls_server_name,
-    namespace,
-    config_path,
-):
-    """Fetch Kubernetes credentials over SSH and enable automatic local tunnels.
-
-    Uses your SSH agent or --identity-file. Trust the server's host key with SSH
-    first. Public API access is unnecessary; firewall changes are separate.
-    """
-    if config_path is None:
-        configured = os.environ.get("KUBECONFIG", "")
-        if os.pathsep in configured:
-            raise click.ClickException(
-                "Multiple KUBECONFIG files: select one with --kubeconfig."
-            )
-        config_path = (
-            Path(configured) if configured else Path.home() / ".kube" / "config"
-        )
-    config_path = config_path.expanduser().resolve()
-    for value in (host, ssh_user):
-        if not re.fullmatch(r"[A-Za-z0-9_.:-]+", value) or value.startswith("-"):
-            raise click.ClickException("Invalid SSH host or user.")
-    connection = {
-        "host": host,
-        "ssh_user": ssh_user,
-        "ssh_port": ssh_port,
-        "identity": identity_file,
-    }
-    fetched = ssh_run(
-        [
-            *ssh_command(connection),
-            f"{ssh_user}@{host}",
-            "cat /etc/rancher/k3s/k3s.yaml",
-        ]
-    )
-    if fetched.returncode:
-        raise click.ClickException(
-            "Cannot fetch kubeconfig over SSH. Check SSH access and permissions. "
-            + fetched.stderr.strip()
-        )
-    try:
-        source = yaml.safe_load(fetched.stdout)
-        source["contexts"][0]["name"] = context_name
-        source["current-context"] = context_name
-        # k3s exports one context. Use context-specific names when merging.
-        source["clusters"][0]["name"] = context_name
-        source["users"][0]["name"] = context_name
-        source["contexts"][0]["context"].update(cluster=context_name, user=context_name)
-    except (KeyError, IndexError, TypeError, yaml.YAMLError) as exc:
-        raise click.ClickException("SSH returned an invalid k3s kubeconfig.") from exc
-    with access_lock(config_path.with_name(config_path.name + ".startup.lock")):
-        existing: dict = (
-            yaml.safe_load(config_path.read_text())
-            if config_path.exists()
-            else {
-                "apiVersion": "v1",
-                "kind": "Config",
-                "contexts": [],
-                "clusters": [],
-                "users": [],
-            }
-        )
-        old = next((c for c in existing["contexts"] if c["name"] == context_name), None)
-        source["contexts"][0]["context"]["namespace"] = namespace or (old or {}).get(
-            "context", {}
-        ).get("namespace", "default")
-        managed = configure_access(
-            source,
-            context_name,
-            host,
-            ssh_user,
-            ssh_port,
-            identity_file,
-            tls_server_name,
-        )
-        for kind in ("contexts", "clusters", "users"):
-            # Only import the managed cluster/user, not the unmodified source.
-            entries = managed[kind] if kind == "contexts" else managed[kind][-1:]
-            replacements = {entry["name"]: entry for entry in entries}
-            existing[kind] = [
-                replacements.pop(e["name"], e) for e in existing[kind]
-            ] + list(replacements.values())
-        if not existing.get("current-context"):
-            existing["current-context"] = context_name
-        private_write(config_path, existing)
-    click.echo(
-        f"SSH access ready: {context_name} (namespace {source['contexts'][0]['context']['namespace']})."
-    )
-
-
 def credential(state: Path) -> None:
     """ExecCredential stdout is consumed only by the Kubernetes client."""
     if not os.environ.get("KUBERNETES_EXEC_INFO"):
         raise click.ClickException("This helper is only for Kubernetes clients.")
     try:
-        settings = yaml.safe_load(state.read_text())
+        settings = public_state(read_state(state))
+        # Migrate legacy metadata before a client can print it during diagnosis.
+        with access_lock(state.with_suffix(".metadata.lock")):
+            private_write(state, settings)
         ensure_tunnel(settings, state)
-        user = settings["user"]
+        user = fetch_kubeconfig(settings, state)["users"][0]["user"]
         status = {
             "clientCertificateData": base64.b64decode(
                 user["client-certificate-data"]
@@ -398,10 +281,10 @@ def credential(state: Path) -> None:
                 }
             )
         )
-    except (OSError, KeyError, ValueError, yaml.YAMLError) as exc:
+    except (OSError, KeyError, ValueError):
         raise click.ClickException(
             "Cannot read tunnel credentials. Run startup cluster connect again."
-        ) from exc
+        ) from None
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 
 import yaml
+from copier import Worker
 
 from cli.factory_commands import FACTORY_TEMPLATE, FACTORY_VERSION
 
@@ -130,7 +131,15 @@ def main():
             assert (factory / "projects/tooling" / entry["name"] / ".git").is_dir()
         answers = yaml.safe_load((factory / ".copier-answers.yml").read_text())
         # The CLI's own pin, so a reviewed template bump needs no second edit here.
-        assert answers["_commit"] == FACTORY_VERSION
+        # Copier records git-describe ancestry for immutable commits as well as tags.
+        with Worker(
+            src_path=FACTORY_TEMPLATE,
+            vcs_ref=FACTORY_VERSION,
+            defaults=True,
+            skip_tasks=True,
+            quiet=True,
+        ) as worker:
+            assert answers["_commit"] == worker.template.commit
         assert answers["_src_path"] == FACTORY_TEMPLATE
         assert (home / ".agents/skills/deploy-your-startup/SKILL.md").is_file()
         assert not (factory / "projects/startups/example-app").exists()

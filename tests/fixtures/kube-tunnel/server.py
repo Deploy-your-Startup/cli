@@ -3,6 +3,7 @@
 import json
 import ssl
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -66,10 +67,22 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
-server = ThreadingHTTPServer(("127.0.0.1", 6443), Handler)
-context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-context.load_cert_chain("/fixtures/server.crt", "/fixtures/server.key")
-context.load_verify_locations("/fixtures/ca.crt")
-context.verify_mode = ssl.CERT_REQUIRED
-server.socket = context.wrap_socket(server.socket, server_side=True)
+class Server(ThreadingHTTPServer):
+    def get_request(self):
+        sock, address = self.socket.accept()
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain("/fixtures/server.crt", "/fixtures/server.key")
+        trust = Path("/var/lib/rancher/k3s/server/tls/client-ca.crt")
+        context.load_verify_locations(
+            str(trust) if trust.exists() else "/fixtures/ca.crt"
+        )
+        context.verify_mode = ssl.CERT_REQUIRED
+        try:
+            return context.wrap_socket(sock, server_side=True), address
+        except ssl.SSLError:
+            sock.close()
+            raise
+
+
+server = Server(("127.0.0.1", 6443), Handler)
 server.serve_forever()

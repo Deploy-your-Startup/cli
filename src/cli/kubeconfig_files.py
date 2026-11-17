@@ -9,8 +9,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import yaml
-
 
 def extract_master_host(inventory_data: dict) -> str | None:
     for group_name in ("k3s_masters", "masters", "control_plane"):
@@ -88,13 +86,14 @@ def ssh_options(
 def merge_into_kube_config(kubeconfig: dict, context: str, make_current: bool) -> None:
     """Replace this context's entries in ~/.kube/config, keeping all others."""
     from cli.kube_access import access_lock, private_write
+    from cli.kube_credentials import read_state
 
     kube_dir = Path.home() / ".kube"
     kube_dir.mkdir(parents=True, exist_ok=True)
     main_config = kube_dir / "config"
     with access_lock(kube_dir / "config.startup.lock"):
         merged: dict = (
-            yaml.safe_load(main_config.read_text())
+            read_state(main_config)
             if main_config.exists()
             else {
                 "apiVersion": "v1",

@@ -12,7 +12,9 @@ import yaml
 
 from cli import ansible_commands as ansible
 from cli import playbook_inputs
-from cli.kube_access import connect
+from cli.kube_connect import connect
+from cli.kube_inspect import inspect_connection
+from cli.kube_rotation import rotate_client_ca
 
 CLUSTER_FILE = "cluster.yml"
 
@@ -189,6 +191,8 @@ def cluster():
 
 
 cluster.add_command(connect)
+cluster.add_command(inspect_connection)
+cluster.add_command(rotate_client_ca)
 
 
 @cluster.command("export")

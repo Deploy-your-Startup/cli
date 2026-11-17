@@ -233,6 +233,22 @@ def test_every_pinned_server_template_grants_the_shared_build_its_permissions(
             "github_username": "example",
         },
     )
+    # The rendered project's own locked CLI must provide safe diagnostics.
+    subprocess.run(
+        [
+            "uv",
+            "run",
+            "--locked",
+            "--project",
+            str(project / "deployment"),
+            "startup",
+            "cluster",
+            "inspect",
+            "--help",
+        ],
+        check=True,
+        capture_output=True,
+    )
     workflows = project / ".github/workflows"
     caller = yaml.safe_load((workflows / "build-and-deploy-backend.yml").read_text())
     # WHEN GitHub follows the local entry, THEN the caller grants the nested build permissions.
