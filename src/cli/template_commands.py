@@ -332,6 +332,11 @@ def update_project(
         )
     answers = yaml.safe_load((project / ANSWERS_FILE).read_text())
     require_committed_template(answers["_src_path"], version)
+    from cli.template_deploy_pin import keep_pinned_references, pinned_deployment_data
+
+    # The shared deployment moves with `startup update`, not with its answers.
+    pinned = pinned_deployment_data(project)
+    data = {**pinned, **data}
     with tempfile.TemporaryDirectory(prefix="startup-template-update-") as temporary:
         target = project
         if dry_run:
@@ -358,6 +363,9 @@ def update_project(
             skip_tasks=True,
             skip_if_exists=PROTECTED,
         )
+        if "deploy_repository" in pinned:
+            for name in keep_pinned_references(target, data["deploy_repository"]):
+                click.echo(f"Kept this project's shared deployment pin in {name}.")
         conflicts = git(target, "diff", "--name-only", "--diff-filter=U")
         patch = git(target, "diff", "--", ".", ":(exclude)deployment/group_vars/**")
         if patch:
