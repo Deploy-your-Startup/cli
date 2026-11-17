@@ -37,6 +37,9 @@ now. Choose **No** to finish successfully and run `startup bootstrap` later.
 If GitHub login is cancelled, the CLI stays installed and the message explicitly
 says that GitHub is not connected.
 
+`startup --version` prints the installed release (`startup 0.1.47`), so scripts
+such as a Factory's `init.sh` can require a minimum CLI.
+
 The interactive wizard asks for the startup name, template (Django/FastAPI,
 Vue with Django/FastAPI, or Astro), then the parent folder and deployment target.
 Server applications offer Hetzner or your existing server (BYOS); Astro uses
