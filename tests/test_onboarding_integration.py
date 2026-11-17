@@ -126,7 +126,7 @@ def test_launch_plan_shows_the_pinned_default_template(tmp_path):
     # THEN the plan names the tested template release this CLI pins.
     assert result.returncode == 0, result.stderr
     assert (
-        "Template  Django/FastAPI 28b4c9eef510065633e7c051628053b581e3364c"
+        "Template  Django/FastAPI 954e4896e5363ae7182bd789ba715e53824b6ce0"
         in result.stdout
     )
 
@@ -166,7 +166,7 @@ def test_pitch_launch_pins_builtin_and_preserves_explicit_templates(tmp_path):
     )
     # THEN the plan names the pinned release, preserves overrides and cancels.
     for result, version in [
-        (default, "v0.1.5"),
+        (default, "v0.1.7"),
         (explicit, "v2.0.0"),
         (custom, "HEAD"),
     ]:
@@ -192,7 +192,7 @@ def test_shared_owner_launch_uses_the_compatible_published_default(tmp_path):
     # THEN no unpublished template ref or cloud resources are needed for the plan.
     assert result.returncode == 0, result.stdout + result.stderr
     assert (
-        "Template  Django/FastAPI 28b4c9eef510065633e7c051628053b581e3364c"
+        "Template  Django/FastAPI 954e4896e5363ae7182bd789ba715e53824b6ce0"
         in result.stdout
     )
     assert "Cancelled. No resources were created." in result.stdout
@@ -201,7 +201,7 @@ def test_shared_owner_launch_uses_the_compatible_published_default(tmp_path):
     assert (
         "The CLI pins a tested Django template with shared-cluster support." in readme
     )
-    assert "startup bootstrap --kind pitch --template-version v0.1.5" in readme
+    assert "startup bootstrap --kind pitch" in readme
     assert "startup sync --source-version v0.1.7 --dry-run" in readme
 
 
@@ -242,20 +242,20 @@ def test_interactive_stack_and_target_choices_precede_credentials(tmp_path):
         (
             "1",
             "2\n1\nexample.com\n\nn\n",
-            "Django/FastAPI 28b4c9eef510065633e7c051628053b581e3364c",
+            "Django/FastAPI 954e4896e5363ae7182bd789ba715e53824b6ce0",
             "Hetzner",
         ),
         (
             "2",
             "1\nexample.com\n\nn\n",
-            "Vue + Django/FastAPI 116563c74edfe7328c3dc6036d0c9d3bac9ca3d3",
+            "Vue + Django/FastAPI 3496954050ff0fd80b37f2d4b21f0f14a9139fea",
             "Bring your own server",
         ),
-        ("3", "example.com\nn\n", "Pitch v0.1.5", "Cloudflare Pages"),
+        ("3", "example.com\nn\n", "Pitch v0.1.7", "Cloudflare Pages"),
         (
             "4",
             "1\nexample.com\n\nn\n",
-            "Vue + NestJS 27a906a2afc2cc04fb92dcd3eeb07b1dd4ec9c6a",
+            "Vue + NestJS 3f699c7fb836a4d0196929608a22cc948a10afce",
             "Bring your own server",
         ),
     ]

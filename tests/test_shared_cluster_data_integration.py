@@ -33,14 +33,12 @@ TEMPLATE = (
     else "https://github.com/Deploy-your-Startup/django-backend-template.git"
 )
 LOCAL_ROLES = ROOT.parent / "deploy"
-# A file:// URI is cloned at ROLES_VERSION; a plain path would copy the worktree.
+# A file:// URI is cloned at the project revision; a plain path would copy the worktree.
 ROLES = (
     LOCAL_ROLES.as_uri()
     if (LOCAL_ROLES / ".git").exists()
     else "https://github.com/Deploy-your-Startup/deploy.git"
 )
-# The published Deploy-your-Startup/deploy release whose roles this test runs.
-ROLES_VERSION = "v1.0.0"
 OWNER = "cluster-owner"
 ATTACHED = "second-startup"
 IMAGE = "startup-cli-test-cluster-master:1"
@@ -302,8 +300,6 @@ def launch(deployment, env, *arguments):
             "production",
             "--repo-url",
             ROLES,
-            "--version",
-            ROLES_VERSION,
         ],
         cwd=deployment,
         env=env,
