@@ -6,7 +6,7 @@ permanent onboarding flow. Older versions need inspection before using these ste
 
 ## Maintainer delivery gate
 
-Before sending the email:
+Before using this guide:
 
 - Ship the website installer pin to published CLI v0.1.47 and verify the actual
   `https://deploy-your-startup.com/install.sh` content. Installation alone does
