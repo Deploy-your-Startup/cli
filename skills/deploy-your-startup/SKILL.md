@@ -437,6 +437,10 @@ when available and uses mise to install runtimes and clone public tooling.
 Without Homebrew, follow the printed prerequisites and rerun the same folder.
 Retries preserve owner files; template updates remain a separate reviewed step.
 
+For reusable improvements from a Factory, follow its `CONTRIBUTING.md` and open
+a PR in the public template recorded in `.copier-answers.yml`. After merge and
+release, other Factory owners can adopt the change with `startup template update`.
+
 After an error or interruption, run `startup factory status` to recover the
 saved path and inspect actual files. Continue with `startup factory init --resume`,
 or `startup factory onboard --resume` to proceed into the first-startup wizard.
