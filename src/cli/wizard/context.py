@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 
@@ -28,6 +28,10 @@ class BootstrapContext:
     template_version: str = "HEAD"
     site_policy: dict | None = None
     auth0_tenant: str | None = None
+    oidc_issuer: str | None = None
+    oidc_client_id: str | None = None
+    oidc_client_secret_stdin: bool = False
+    oidc_client_secret: str | None = field(default=None, repr=False)
     without_auth: bool = False
     # Optional error tracking: a Sentry project is created in this org.
     sentry_org: str | None = None

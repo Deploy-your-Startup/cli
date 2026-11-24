@@ -7,6 +7,9 @@ directly and are pinned to its latest release. Older templates call a per-owner
 
 import subprocess
 
+import click
+import yaml
+
 from cli import wizard_output as ui
 from cli.shared_source import DEFAULT_SHARED_REPOSITORY, LEGACY_REPO_NAME
 from cli.template_commands import template_kpis, template_uses_deploy
@@ -23,6 +26,37 @@ def choose_shared_deployment(ctx: BootstrapContext) -> None:
 
         ctx.deployment_release, ctx.deployment_ref = latest_published_release(
             DEFAULT_SHARED_REPOSITORY
+        )
+    if ctx.oidc_issuer:
+        _require_oidc_role(ctx)
+
+
+def _require_oidc_role(ctx: BootstrapContext) -> None:
+    repository = deploy_repository(ctx)
+    result = subprocess.run(
+        [
+            "gh",
+            "api",
+            "-X",
+            "GET",
+            "-H",
+            "Accept: application/vnd.github.raw+json",
+            f"repos/{repository}/contents/roles/oauth2-proxy/defaults/main.yml",
+            "-f",
+            f"ref={ctx.deployment_ref}",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    defaults = yaml.safe_load(result.stdout) if result.returncode == 0 else None
+    if not isinstance(defaults, dict) or not {
+        "oauth2_proxy_oidc_issuer_url",
+        "oauth2_proxy_bearer_enabled",
+    }.issubset(defaults):
+        raise click.ClickException(
+            "Could not verify OIDC support in the selected shared deployment. "
+            "Use a Deploy release or reviewed --deployment-ref with OIDC support."
         )
 
 

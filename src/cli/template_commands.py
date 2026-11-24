@@ -15,7 +15,7 @@ from copier.main import Worker
 
 DEFAULT_TEMPLATE = "https://github.com/Deploy-your-Startup/django-backend-template.git"
 VUE_TEMPLATE = "https://github.com/Deploy-your-Startup/vue-django-template.git"
-VUE_TEMPLATE_VERSION = "3496954050ff0fd80b37f2d4b21f0f14a9139fea"
+VUE_TEMPLATE_VERSION = "a32d247ab5e38681dbef6a0bb89690e5c66b3a22"
 VUE_NESTJS_TEMPLATE = "https://github.com/Deploy-your-Startup/vue-nestjs-template.git"
 VUE_NESTJS_TEMPLATE_VERSION = "3f699c7fb836a4d0196929608a22cc948a10afce"
 PITCH_TEMPLATE = "https://github.com/Deploy-your-Startup/pitch-template.git"
@@ -95,7 +95,7 @@ def template_authentication(source: str, version: str) -> str | None:
             return None
         values = yaml.safe_load(manifest.read_text())
         provider = values.get("authentication") if isinstance(values, dict) else None
-        if provider not in (None, "auth0"):
+        if provider not in (None, "auth0", "oidc"):
             raise click.ClickException("Unsupported template authentication provider.")
         return provider
 

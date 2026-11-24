@@ -53,6 +53,9 @@ class BootstrapOptions:
     template_source: str | None
     template_version: str | None
     auth0_tenant: str | None
+    oidc_issuer: str | None
+    oidc_client_id: str | None
+    oidc_client_secret_stdin: bool
     without_auth: bool
     sentry_org: str | None
     sentry_team: str | None
@@ -93,6 +96,10 @@ def _answered(value: str | None) -> str:
 
 
 def _read_hetzner_token_from_stdin(options: BootstrapOptions) -> None:
+    if options.hetzner_token_stdin and options.oidc_client_secret_stdin:
+        raise click.ClickException(
+            "--hetzner-token-stdin and --oidc-client-secret-stdin both need stdin."
+        )
     if not options.hetzner_token_stdin:
         return
     if options.hetzner_token:
@@ -399,6 +406,9 @@ def _wizard_context(
         template_source=_answered(options.template_source),
         template_version=_answered(options.template_version),
         auth0_tenant=options.auth0_tenant,
+        oidc_issuer=options.oidc_issuer,
+        oidc_client_id=options.oidc_client_id,
+        oidc_client_secret_stdin=options.oidc_client_secret_stdin,
         without_auth=options.without_auth,
         sentry_org=options.sentry_org,
         sentry_team=options.sentry_team,
