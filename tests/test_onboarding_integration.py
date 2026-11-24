@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from cli.template_commands import DEFAULT_TEMPLATE_VERSION
+from cli.template_commands import DEFAULT_TEMPLATE_VERSION, VUE_TEMPLATE_VERSION
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -244,7 +244,7 @@ def test_interactive_stack_and_target_choices_precede_credentials(tmp_path):
         (
             "2",
             "1\nexample.com\n\nn\n",
-            "Vue + Django/FastAPI 3496954050ff0fd80b37f2d4b21f0f14a9139fea",
+            f"Vue + Django/FastAPI {VUE_TEMPLATE_VERSION}",
             "Bring your own server",
         ),
         ("3", "example.com\nn\n", "Pitch v0.1.7", "Cloudflare Pages"),
