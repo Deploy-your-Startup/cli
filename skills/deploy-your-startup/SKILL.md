@@ -118,7 +118,9 @@ real browser for the user to sign in. If no token is passed, that browser path
 is used. Pass tokens via `--hetzner-token-stdin`, never as an argument.
 
 Full-stack Hetzner bootstrap previews monthly net/gross resource prices before
-provisioning and asks for confirmation (default No). `--yes` accepts the estimate;
+provisioning and asks for confirmation (default No). Use `--cheapest-available`
+for a fresh single-node EU project to compare available shared x86 hosts with
+at least 2 vCPUs and 4 GB RAM, including the project's IPv4 price. `--yes` accepts the estimate;
 use `--max-monthly-cost <amount>` for a user-approved gross cap in the project
 currency. The cap aborts if prices are unavailable or exceed it. Without a cap,
 `--yes` proceeds with a warning if pricing is unavailable. Domain prices are
