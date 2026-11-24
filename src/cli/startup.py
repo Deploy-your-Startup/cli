@@ -139,6 +139,18 @@ for command in (
     help="Create a dedicated Auth0 app/API for a template with oauth2-proxy.",
 )
 @click.option(
+    "--oidc-issuer",
+    help="Exact HTTPS issuer of a Keycloak realm or other OIDC provider.",
+)
+@click.option(
+    "--oidc-client-id", help="Client ID registered for the project's OIDC callback."
+)
+@click.option(
+    "--oidc-client-secret-stdin",
+    is_flag=True,
+    help="Read the OIDC client secret from stdin. Required with --yes and --oidc-issuer.",
+)
+@click.option(
     "--without-auth", is_flag=True, help="Explicitly skip optional template login."
 )
 @click.option(

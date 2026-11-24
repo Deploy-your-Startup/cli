@@ -767,13 +767,25 @@ Review and commit the answers. Adoption records existing customizations; it does
 not apply historical template changes. Shared deployment updates remain a
 separate `startup update` operation.
 
-## Optional Auth0 login
+## Optional application login
 
-Templates declaring Auth0 support in `startup-template.yml` can configure login
-during bootstrap with `--auth0-tenant <tenant>`. Install the official Auth0 CLI;
+Templates declaring `authentication: oidc` in `startup-template.yml` expose
+Auth0, Keycloak (existing realm), another OIDC provider, and no login. The
+template routes `/oauth2/callback` on its base domain to OAuth2 Proxy and keeps
+protected routes behind that proxy.
+
+For Keycloak or another OIDC provider, register a confidential Authorization
+Code client with `https://<base-domain>/oauth2/callback` and enable PKCE S256.
+Use the exact HTTPS issuer published in discovery, including any trailing slash.
+Bootstrap prompts for the client credentials and stores them in the project
+vault. For unattended bootstrap, use `--oidc-issuer`, `--oidc-client-id` and
+`--oidc-client-secret-stdin`. This configures browser login. For API clients,
+configure the bearer issuer and audience explicitly in the project.
+
+Select Auth0 in the wizard or pass `--auth0-tenant <tenant>`. Install the official Auth0 CLI;
 in a terminal without a usable login, the CLI starts `auth0 login` for you.
 Unattended runs need that login beforehand. For non-interactive bootstrap with
-such a template, pass the tenant or explicitly choose `--without-auth`.
+such a template, supply a login configuration or explicitly choose `--without-auth`.
 
 For an existing project, use `startup auth0 setup --help`. After deployment,
 `startup auth0 validate --tenant <tenant> --base-domain <domain>` opens a temporary

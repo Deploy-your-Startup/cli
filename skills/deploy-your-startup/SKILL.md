@@ -72,7 +72,10 @@ Ask **one** bundled question with only what is missing:
   be bought.
 
 Optional, ask only if the user brings it up: extra domains, the Vue template,
-Auth0 login (`--auth0-tenant`; otherwise pass `--without-auth`), Sentry error
+OIDC login (Auth0 with `--auth0-tenant`, or an existing Keycloak realm or other
+OIDC provider using `--oidc-issuer`, `--oidc-client-id` and
+`--oidc-client-secret-stdin` for unattended runs; otherwise pass
+`--without-auth`), Sentry error
 tracking (`--sentry-org` with a personal Sentry token; otherwise `--without-sentry`).
 
 Templates that ask for `deploy_repository` call `Deploy-your-Startup/deploy`
