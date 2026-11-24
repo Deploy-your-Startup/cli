@@ -120,6 +120,20 @@ def summary_page(contact, leave=False):
 </body></html>"""
 
 
+def current_summary(body):
+    return (
+        body.replace(
+            'name="billing_form" action="/order.php"',
+            'id="place_order_form" action="/orders/place_order_domain"',
+        )
+        .replace("accept_terms_and_conditions", "accepted_terms_and_conditions")
+        .replace(
+            "document.forms.billing_form.submit()",
+            "document.getElementById('place_order_form').submit()",
+        )
+    )
+
+
 @pytest.fixture
 def konsoleh(monkeypatch, tmp_path):
     """A stand-in for Hetzner's KonsoleH order pages, reached over real HTTP."""
@@ -207,11 +221,27 @@ def konsoleh(monkeypatch, tmp_path):
                     body = body.replace(
                         'action="/order.php"', 'action="/orders/validate_domain_owner"'
                     )
+                    body = body.replace(
+                        "addEventListener('change', () => {",
+                        "addEventListener('input', () => {\n"
+                        "  document.getElementById('emails').value = '';\n"
+                        "  setTimeout(fillContact, 150);\n"
+                        "});\nfunction fillContact() {",
+                    ).replace(
+                        "});\ndocument.getElementById('btnNextStep')",
+                        "}\ndocument.getElementById('btnNextStep')",
+                    )
                 self.respond(body)
             elif step == "4":
                 state["owner"] = state["contacts"][int(form["owner_index"]) - 1]
-                self.respond(summary_page(state["owner"], state["leave_summary"]))
-            elif "accept_terms_and_conditions" not in form:
+                body = summary_page(state["owner"], state["leave_summary"])
+                self.respond(
+                    current_summary(body) if state.get("current_checkout") else body
+                )
+            elif not {
+                "accept_terms_and_conditions",
+                "accepted_terms_and_conditions",
+            }.intersection(form):
                 self.respond(summary_page(state["owner"]))
             else:
                 state["orders"].append((state["domain"], state["owner"]["emails"]))
@@ -286,6 +316,23 @@ def test_current_orders_route_reaches_price_with_default_nameservers(
     assert konsoleh["domain"] == "sample.de"
     assert konsoleh["custom_nameservers"] is None
     assert konsoleh["orders"] == []
+
+
+def test_current_checkout_matches_duplicate_names_by_email(konsoleh, monkeypatch):
+    # GIVEN the new form populates fields on input and two contacts share a name.
+    konsoleh["current_checkout"] = True
+    monkeypatch.setattr(
+        config, "KONSOLEH_ORDER_URL", config.KONSOLEH_BASE_URL + "/orders"
+    )
+    # WHEN the user names the second contact and authorizes the simulated order,
+    # THEN the review matches that contact and exactly one order is submitted.
+    result = order(
+        "sample.de", "--contact-email", "office@example.com", "--confirm-order"
+    )
+    assert result.exit_code == 0, result.output
+    assert "Order summary from Hetzner" in result.output
+    assert konsoleh["owner"]["emails"] == "office@example.com"
+    assert konsoleh["orders"] == [("sample.de", "office@example.com")]
 
 
 def test_confirmed_order_uses_the_chosen_contact(konsoleh):

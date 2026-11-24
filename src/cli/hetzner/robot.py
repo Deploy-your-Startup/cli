@@ -213,6 +213,18 @@ class HetznerKonsoleHAutomation:
             return False
 
         summary = await self._read_order_summary()
+        if summary.get("domain", "").casefold() != domain.casefold() or not summary.get(
+            "price"
+        ):
+            raise click.ClickException(
+                "KonsoleH's order summary did not confirm the requested domain and price."
+            )
+        if contact_email and summary.get("email", "").strip().casefold() != (
+            contact_email.strip().casefold()
+        ):
+            raise click.ClickException(
+                "KonsoleH's order summary did not confirm the selected contact email."
+            )
         ui.info(
             "Order summary from Hetzner:\n"
             f"     Domain: {summary.get('domain') or domain}\n"
@@ -251,11 +263,12 @@ class HetznerKonsoleHAutomation:
         owners = self.page.locator(config.SELECTORS_KONSOLEH_DOMAIN_OWNERS)
         try:
             await owners.first.wait_for(state="attached", timeout=10000)
+            await self.page.wait_for_load_state("domcontentloaded", timeout=10000)
         except playwright_error():
             ui.warning("Hetzner did not show the domain owner step.")
             return False
 
-        contacts = await self.page.evaluate(_READ_CONTACTS_JS)
+        contacts = await self._read_domain_contacts(owners.first)
         if not contacts:
             ui.warning(
                 "No KonsoleH contact exists yet. Create the domain owner in the "
@@ -294,9 +307,38 @@ class HetznerKonsoleHAutomation:
             )
 
         await owners.first.select_option(index=chosen["index"])
-        await owners.first.dispatch_event("change")
+        await self._wait_for_contact_email(chosen["email"])
         ui.success(f"Domain owner: {_describe_contact(chosen)}")
         return True
+
+    async def _read_domain_contacts(self, select) -> list[dict]:
+        original, options = await select.evaluate(_CONTACT_OPTIONS_JS)
+        contacts = []
+        try:
+            for option in options:
+                await select.select_option(index=option["index"], timeout=5000)
+                await self._wait_for_contact_email()
+                details = await self.page.evaluate(_CONTACT_FIELDS_JS)
+                contacts.append({**option, **details})
+        finally:
+            if original >= 0:
+                await select.select_option(index=original, timeout=5000)
+        return contacts
+
+    async def _wait_for_contact_email(self, email: str | None = None) -> None:
+        try:
+            await self.page.wait_for_function(
+                """expected => {
+                    const actual = document.getElementById('emails')?.value.trim();
+                    return actual && (expected === null || actual === expected);
+                }""",
+                arg=email,
+                timeout=5000,
+            )
+        except playwright_error():
+            raise click.ClickException(
+                "KonsoleH did not finish loading the selected contact."
+            ) from None
 
     async def _continue_to_order_summary(self) -> None:
         try:
@@ -312,6 +354,7 @@ class HetznerKonsoleHAutomation:
             await self.page.locator(
                 config.SELECTORS_KONSOLEH_ORDER_FORM
             ).first.wait_for(state="attached", timeout=config.ORDER_WAIT_TIMEOUT)
+            await self.page.wait_for_load_state("domcontentloaded", timeout=10000)
             return True
         except playwright_error():
             return False
@@ -325,6 +368,10 @@ class HetznerKonsoleHAutomation:
     async def _place_order(self, domain: str) -> bool:
         """Accept the terms and submit the order form Hetzner just summarised."""
         order_form = await self._read_order_form()
+        if not order_form:
+            raise click.ClickException(
+                "Could not verify the KonsoleH order form before submitting."
+            )
         try:
             async with self._order_submission(order_form, 30_000) as submitted:
                 await self.page.locator(
@@ -703,30 +750,24 @@ async def _accepted(request) -> bool:
     return response is not None and response.ok
 
 
-_READ_CONTACTS_JS = """
+_CONTACT_OPTIONS_JS = """
+select => [
+    select.selectedIndex,
+    [...select.options].flatMap((option, index) =>
+        ['chooseContact', 'createNew'].includes(option.value)
+            ? [] : [{index, label: option.text.trim()}])
+]
+"""
+
+_CONTACT_FIELDS_JS = """
 () => {
-    const select = document.querySelector('#domain_owners');
-    if (!select) return [];
     const field = (id) => (document.getElementById(id) || {}).value || '';
-    const contacts = [];
-    const original = select.selectedIndex;
-    for (let index = 0; index < select.options.length; index++) {
-        const value = select.options[index].value;
-        if (value === 'chooseContact' || value === 'createNew') continue;
-        select.selectedIndex = index;
-        select.dispatchEvent(new Event('change', {bubbles: true}));
-        contacts.push({
-            index,
-            label: select.options[index].text.trim(),
-            first_name: field('first_name'),
-            surname: field('surname'),
-            email: field('emails'),
-            city: field('city'),
-        });
-    }
-    select.selectedIndex = original;
-    select.dispatchEvent(new Event('change', {bubbles: true}));
-    return contacts;
+    return {
+        first_name: field('first_name'),
+        surname: field('surname'),
+        email: field('emails'),
+        city: field('city'),
+    };
 }
 """
 
