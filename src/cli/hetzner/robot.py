@@ -17,6 +17,10 @@ from ..playwright_errors import playwright_error
 from . import _output as ui
 from . import config
 
+ORDER_LINK = 'a[href="/order.php"]'
+ORDER_PAGE = "form#orderform"
+DOMAIN_FORM = "form#domain_lookup_form"
+
 
 class HetznerKonsoleHAutomation:
     """Manages browser automation for Hetzner KonsoleH (domain registration)."""
@@ -77,11 +81,11 @@ class HetznerKonsoleHAutomation:
         target_url = config.KONSOLEH_ORDER_URL
 
         # Signed out, the order page leads to Hetzner's sign-in, whose browser
-        # check keeps navigating by script. A page load there can abort or
-        # never settle, so only the URL tells whether the session is valid,
-        # and the page is left alone while the user signs in.
+        # check keeps navigating by script. Leave it alone until KonsoleH
+        # is reached, then verify the account UI before declaring success.
         await self._open_konsoleh(target_url)
-        if _signed_in_konsoleh(self.page.url):
+        if _konsoleh_account_url(self.page.url):
+            await self._verify_account_page()
             ui.success("Already logged in to KonsoleH (saved session).")
             return True
 
@@ -96,6 +100,7 @@ class HetznerKonsoleHAutomation:
             await self.page.wait_for_url(
                 lambda url: _is_konsoleh(url) and "/auth.php" not in url,
                 timeout=config.LOGIN_WAIT_TIMEOUT,
+                wait_until="commit",
             )
         except playwright_error():
             return False
@@ -105,14 +110,41 @@ class HetznerKonsoleHAutomation:
                 "Hetzner redirected to a 404 page after login. Opening KonsoleH again..."
             )
             await self._open_konsoleh(target_url)
-        return _signed_in_konsoleh(self.page.url)
+        await self._verify_account_page()
+        return True
 
     async def _open_konsoleh(self, url: str) -> None:
-        """Start a navigation; an aborted or unsettled load is judged by the URL."""
+        """Load the document without waiting for unrelated background requests."""
         try:
-            await self.page.goto(url, wait_until="domcontentloaded")
+            response = await self.page.goto(url, wait_until="domcontentloaded")
         except playwright_error():
-            pass
+            # Authentication can cause another navigation while this one loads.
+            return
+        if response and _is_konsoleh(response.url) and response.status >= 400:
+            raise click.ClickException(
+                f"KonsoleH returned HTTP {response.status} when opening the order page."
+            )
+
+    async def _verify_account_page(self) -> None:
+        if not await self._wait_for_control(
+            f"{ORDER_PAGE}, {ORDER_LINK}, {DOMAIN_FORM}"
+        ):
+            raise click.ClickException(
+                "KonsoleH did not show the order navigation after sign-in."
+            )
+        if not _konsoleh_account_url(self.page.url):
+            raise click.ClickException(
+                "KonsoleH did not confirm the signed-in session."
+            )
+
+    async def _wait_for_control(self, selector: str, timeout: int = 5000) -> bool:
+        try:
+            await self.page.locator(selector).first.wait_for(
+                state="attached", timeout=timeout
+            )
+            return True
+        except playwright_error():
+            return False
 
     # ── Handle Check/Creation ────────────────────────────────────────
 
@@ -142,7 +174,7 @@ class HetznerKonsoleHAutomation:
 
         ``nameservers`` overrides the default Hetzner nameservers — pass the
         Cloudflare-assigned NS here to delegate DNS to Cloudflare directly at
-        registration time. Falls back to manual instructions if automation fails.
+        registration time.
 
         The domain owner is an existing KonsoleH contact: the only one, the one
         whose e-mail matches ``contact_email``, or the one the user picks. New
@@ -155,12 +187,7 @@ class HetznerKonsoleHAutomation:
         nameservers = nameservers or config.HETZNER_NAMESERVERS
         ui.info(f'Registering domain "{domain}"...')
 
-        if not await self._open_domain_registration_form():
-            ui.warning(
-                "Could not open KonsoleH's domain order form automatically. "
-                "Please navigate to Neue Bestellung -> Domains -> Auswaehlen manually."
-            )
-            ui.ask("Press Enter to continue", default="")
+        await self._open_domain_registration_form()
 
         domain_name, tld = _split_domain(domain)
 
@@ -169,7 +196,9 @@ class HetznerKonsoleHAutomation:
 
             ui.success(f"Domain name entered: {domain}")
         except playwright_error():
-            ui.warning(f"Could not pre-fill domain — please enter '{domain}' manually.")
+            raise click.ClickException(
+                "KonsoleH opened the domain form but its fields could not be completed."
+            ) from None
 
         if await self._choose_domain_owner(contact_email):
             await self._continue_to_order_summary()
@@ -272,7 +301,6 @@ class HetznerKonsoleHAutomation:
             await self.page.locator(config.SELECTORS_KONSOLEH_OWNER_NEXT).first.click(
                 timeout=5000
             )
-            await self.page.wait_for_load_state("networkidle")
         except playwright_error():
             pass
 
@@ -495,73 +523,49 @@ class HetznerKonsoleHAutomation:
         )
         return True
 
-    async def _open_domain_registration_form(self) -> bool:
+    async def _open_domain_registration_form(self) -> None:
         """Open KonsoleH's domain registration step via its own form submit."""
-        if not await self._ensure_order_page():
-            return False
+        if await self.page.locator(DOMAIN_FORM).count():
+            return
+        await self._ensure_order_page()
 
         try:
             await self.page.evaluate("selectProduct('regonly', 32, 2)")
-            try:
-                await self.page.wait_for_load_state("networkidle")
-            except playwright_error():
-                pass
-            try:
-                await self.page.wait_for_selector(
-                    "#domain_lookup_form, #search_domain, #tld_select, #next_button",
-                    timeout=8000,
-                )
-                return True
-            except playwright_error():
-                pass
+            if await self._wait_for_control(DOMAIN_FORM, timeout=8000):
+                return
         except playwright_error():
+            # The documented product link can still work without the legacy function.
             pass
 
         try:
             select_button = self.page.locator(
                 '#domain a.btn-select[onclick*="regonly"], '
                 'a.btn-select[onclick*="regonly"], '
-                'a.btn-primary:has-text("Auswählen")'
+                '#domain a.btn-primary:has-text("Auswählen")'
             ).first
             await select_button.click(timeout=5000)
-            await self.page.wait_for_load_state("networkidle")
-            await self.page.wait_for_selector(
-                "#domain_lookup_form, #search_domain, #tld_select, #next_button",
-                timeout=8000,
-            )
-            return True
         except playwright_error():
-            return False
+            raise click.ClickException(
+                "KonsoleH showed the order page but the domain registration action was missing."
+            ) from None
+        if not await self._wait_for_control(DOMAIN_FORM, timeout=8000):
+            raise click.ClickException(
+                "KonsoleH did not show the domain lookup form after selecting domain registration."
+            )
 
-    async def _ensure_order_page(self) -> bool:
-        """Navigate back to KonsoleH's order page, even from account/product views."""
-        candidates = [
-            config.KONSOLEH_ORDER_URL,
-            f"{config.KONSOLEH_ORDER_URL}#domain",
-        ]
-
-        for url in candidates:
+    async def _ensure_order_page(self) -> None:
+        """Use the order form already loaded by login or follow the order link."""
+        if await self.page.locator(ORDER_PAGE).count():
+            return
+        if await self.page.locator(ORDER_LINK).count():
             try:
-                await self.page.goto(url, wait_until="networkidle")
+                await self.page.locator(ORDER_LINK).first.click(timeout=5000)
             except playwright_error():
-                continue
-
-            if await self.page.locator("form#orderform").count() > 0:
-                return True
-
-            try:
-                order_link = self.page.locator(
-                    'a.top-bar-link[href="/order.php"], a[href="/order.php"]'
-                ).first
-                if await order_link.count() > 0:
-                    await order_link.click(timeout=5000)
-                    await self.page.wait_for_load_state("networkidle")
-                    if await self.page.locator("form#orderform").count() > 0:
-                        return True
-            except playwright_error():
-                pass
-
-        return False
+                raise click.ClickException(
+                    "Could not open KonsoleH's order navigation."
+                ) from None
+        if not await self._wait_for_control(ORDER_PAGE):
+            raise click.ClickException("KonsoleH did not show the product order form.")
 
     async def _fill_domain_step_three(
         self, domain_name: str, tld: str, nameservers: list[str] | None = None
@@ -625,10 +629,6 @@ class HetznerKonsoleHAutomation:
         )
 
         await self.page.locator("#next_button").first.click(timeout=5000)
-        try:
-            await self.page.wait_for_load_state("networkidle")
-        except playwright_error():
-            pass
 
     # ── Check Domain Availability ────────────────────────────────────
 
@@ -653,7 +653,7 @@ def _is_konsoleh(url: str) -> bool:
     return urlparse(url).netloc == urlparse(config.KONSOLEH_BASE_URL).netloc
 
 
-def _signed_in_konsoleh(url: str) -> bool:
+def _konsoleh_account_url(url: str) -> bool:
     return _is_konsoleh(url) and not any(part in url for part in ("/auth.php", "/404"))
 
 
