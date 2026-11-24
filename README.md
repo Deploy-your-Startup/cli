@@ -112,6 +112,10 @@ the estimate to continue; the default is No. `--yes` accepts the estimate. Add
 `--max-monthly-cost <amount>` to enforce a gross monthly cap in the displayed
 currency; bootstrap stops if the estimate exceeds it or pricing is unavailable.
 Without a cap, unavailable pricing requires interactive confirmation or `--yes`.
+For a fresh single-node Hetzner project, `--cheapest-available` compares
+available shared x86 plans with at least 2 vCPUs and 4 GB RAM in the EU.
+It ranks plans by the gross server and primary IPv4 price and saves the
+selection after cost approval. A configured server plan is kept on resume.
 Domain registration is billed yearly; the CLI shows Hetzner's price before
 the order is placed. Shared-cluster attachments create no infrastructure
 and skip this preview.

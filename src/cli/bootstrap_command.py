@@ -39,6 +39,7 @@ class BootstrapOptions:
 
     site_policy: Path | None
     max_monthly_cost: str | None
+    cheapest_available: bool
     verify_deployment: bool
     verify_timeout: int
     verbose: bool
@@ -364,6 +365,10 @@ def _summary(options: BootstrapOptions, cluster_config: dict | None) -> dict:
     summary["Provider"] = (
         "Hetzner" if options.provider == "hetzner" else "Bring your own server"
     )
+    if options.cheapest_available:
+        summary["Server plan"] = (
+            "Cheapest available in the EU, checked before deployment"
+        )
     if cluster_config:
         summary["Cluster owner"] = cluster_config["owner"]
         summary["Infrastructure"] = "Existing cluster; application deployment only"
@@ -425,6 +430,7 @@ def _wizard_context(
         cloudflare_api_token=options.cloudflare_token,
         cloudflare_account_id=options.cloudflare_account_id,
         max_monthly_cost=max_cost,
+        cheapest_available=options.cheapest_available,
         non_interactive=options.assume_yes,
         domain_owned=options.domain_owned,
         domain_contact=options.domain_contact,
@@ -487,6 +493,12 @@ def run_bootstrap(options: BootstrapOptions) -> None:
     _ask_stack(options, cluster_config)
     _ask_output_dir(options)
     _ask_provider(options)
+    if options.cheapest_available and (
+        options.kind != "fullstack" or options.provider != "hetzner" or cluster_config
+    ):
+        raise click.ClickException(
+            "--cheapest-available requires a new Hetzner full-stack server."
+        )
     if (options.shared_cluster or cluster_config) and options.kind != "fullstack":
         raise click.ClickException("Cluster options require --kind fullstack.")
     _ask_domain(options, cluster_config)

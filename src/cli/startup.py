@@ -87,6 +87,11 @@ for command in (
     "--max-monthly-cost",
     help="Maximum gross Hetzner monthly estimate in the project currency; abort if exceeded or unavailable.",
 )
+@click.option(
+    "--cheapest-available",
+    is_flag=True,
+    help="Use the lowest-priced available Hetzner single-node plan in the EU.",
+)
 @click.option("--verbose", "-V", is_flag=True, help="Verbose output")
 @click.option(
     "--kind",

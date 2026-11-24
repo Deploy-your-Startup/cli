@@ -61,6 +61,7 @@ class BootstrapContext:
     domain_contact: str | None = None
     confirm_domain_order: bool = False
     max_monthly_cost: Decimal | None = None
+    cheapest_available: bool = False
 
     ssh_public_key_path: Path | None = None
     user_public_key: str | None = None
