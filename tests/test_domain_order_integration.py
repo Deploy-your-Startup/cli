@@ -42,6 +42,23 @@ LOOKUP_PAGE = """<html><body>
   <button type="submit" id="next_button">Weiter</button>
 </form></body></html>"""
 
+CURRENT_ORDER_PAGE = """<html><body>
+<div id="domain"><a href="/orders/domain_registration">Auswählen</a></div>
+</body></html>"""
+
+CURRENT_LOOKUP_PAGE = (
+    LOOKUP_PAGE.replace('action="/order.php"', 'action="/orders/validate_domain"')
+    .replace(
+        'id="search_domain" name="domain"',
+        'id="domain_name_without_tld" name="domain_name_without_tld"',
+    )
+    .replace(
+        'id="enable_nameserver" name="own_ns"',
+        'id="custom_nameservers" name="custom_nameservers"',
+    )
+    .replace('value=".de">.de<', 'value=".de">.de (5,83 €)<')
+)
+
 
 def owner_page(contacts):
     options = "".join(
@@ -155,6 +172,13 @@ def konsoleh(monkeypatch, tmp_path):
                 self.redirect(f"http://127.0.0.1:{port}/order.php")
             elif not state["signed_in"]:
                 self.redirect("/auth.php")
+            elif state.get("current_checkout"):
+                if self.path == "/orders":
+                    self.respond(CURRENT_ORDER_PAGE)
+                elif self.path == "/orders/domain_registration":
+                    self.respond(CURRENT_LOOKUP_PAGE)
+                else:
+                    self.send_error(404)
             elif state.get("busy_order_page"):
                 self.respond(
                     ORDER_PAGE.replace(
@@ -174,8 +198,16 @@ def konsoleh(monkeypatch, tmp_path):
             if step == "2":
                 self.respond(LOOKUP_PAGE)
             elif step == "3":
-                state["domain"] = form["domain"] + form["tld"]
-                self.respond(owner_page(state["contacts"]))
+                state["domain"] = (
+                    form.get("domain") or form["domain_name_without_tld"]
+                ) + form["tld"]
+                state["custom_nameservers"] = form.get("custom_nameservers")
+                body = owner_page(state["contacts"])
+                if state.get("current_checkout"):
+                    body = body.replace(
+                        'action="/order.php"', 'action="/orders/validate_domain_owner"'
+                    )
+                self.respond(body)
             elif step == "4":
                 state["owner"] = state["contacts"][int(form["owner_index"]) - 1]
                 self.respond(summary_page(state["owner"], state["leave_summary"]))
@@ -234,6 +266,25 @@ def test_visible_checkout_works_while_network_stays_busy(konsoleh, monkeypatch):
     assert result.exit_code == 1
     assert "Order summary from Hetzner" in result.output
     assert "Press Enter to continue" not in result.output
+    assert konsoleh["orders"] == []
+
+
+def test_current_orders_route_reaches_price_with_default_nameservers(
+    konsoleh, monkeypatch
+):
+    # GIVEN KonsoleH serves the new /orders route and the old route is gone.
+    konsoleh["current_checkout"] = True
+    konsoleh["contacts"] = CONTACTS[:1]
+    monkeypatch.setattr(
+        config, "KONSOLEH_ORDER_URL", config.KONSOLEH_BASE_URL + "/orders"
+    )
+    # WHEN the CLI opens the current Domainregistrierung entry.
+    result = order("sample.de")
+    # THEN it submits the lookup and shows the price without an order.
+    assert result.exit_code == 1, result.output
+    assert "Price:  5,83 € (jährlich)" in result.output
+    assert konsoleh["domain"] == "sample.de"
+    assert konsoleh["custom_nameservers"] is None
     assert konsoleh["orders"] == []
 
 

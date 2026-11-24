@@ -11,7 +11,7 @@ HETZNER_PROJECTS_URL = f"{HETZNER_BASE_URL}/projects"
 
 # ── Hetzner KonsoleH URLs (domain registration) ─────────────────────
 KONSOLEH_BASE_URL = "https://konsoleh.hetzner.com"
-KONSOLEH_ORDER_URL = f"{KONSOLEH_BASE_URL}/order.php"
+KONSOLEH_ORDER_URL = f"{KONSOLEH_BASE_URL}/orders"
 KONSOLEH_DOMAINS_URL = f"{KONSOLEH_BASE_URL}/domain.php"
 KONSOLEH_HANDLES_URL = f"{KONSOLEH_BASE_URL}/contact.php"
 

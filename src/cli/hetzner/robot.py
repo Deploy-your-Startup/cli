@@ -17,9 +17,11 @@ from ..playwright_errors import playwright_error
 from . import _output as ui
 from . import config
 
-ORDER_LINK = 'a[href="/order.php"]'
-ORDER_PAGE = "form#orderform"
+ORDER_LINK = 'a[href="/orders"], a[href="/orders/"], a[href="/order.php"]'
+DOMAIN_PRODUCT = '#domain a[href="/orders/domain_registration"]'
+ORDER_PAGE = f"form#orderform, {DOMAIN_PRODUCT}"
 DOMAIN_FORM = "form#domain_lookup_form"
+DOMAIN_INPUT = "#domain_name_without_tld, #search_domain"
 
 
 class HetznerKonsoleHAutomation:
@@ -168,7 +170,7 @@ class HetznerKonsoleHAutomation:
         """
         Register a domain via KonsoleH order page.
 
-        Opens the order page at konsoleh.hetzner.com/order.php,
+        Opens the order page at konsoleh.hetzner.com/orders,
         tries to pre-fill the domain name, and guides the user
         through the remaining steps.
 
@@ -528,6 +530,10 @@ class HetznerKonsoleHAutomation:
         if await self.page.locator(DOMAIN_FORM).count():
             return
         await self._ensure_order_page()
+        domain_product = self.page.locator(DOMAIN_PRODUCT).first
+        if await domain_product.count():
+            await self._select_domain_product(domain_product)
+            return
 
         try:
             await self.page.evaluate("selectProduct('regonly', 32, 2)")
@@ -537,16 +543,19 @@ class HetznerKonsoleHAutomation:
             # The documented product link can still work without the legacy function.
             pass
 
+        select_button = self.page.locator(
+            '#domain a.btn-select[onclick*="regonly"], '
+            'a.btn-select[onclick*="regonly"], '
+            '#domain a.btn-primary:has-text("Auswählen")'
+        ).first
+        await self._select_domain_product(select_button)
+
+    async def _select_domain_product(self, link) -> None:
         try:
-            select_button = self.page.locator(
-                '#domain a.btn-select[onclick*="regonly"], '
-                'a.btn-select[onclick*="regonly"], '
-                '#domain a.btn-primary:has-text("Auswählen")'
-            ).first
-            await select_button.click(timeout=5000)
+            await link.click(timeout=5000)
         except playwright_error():
             raise click.ClickException(
-                "KonsoleH showed the order page but the domain registration action was missing."
+                "KonsoleH showed the order page but the domain registration action could not be opened."
             ) from None
         if not await self._wait_for_control(DOMAIN_FORM, timeout=8000):
             raise click.ClickException(
@@ -576,7 +585,7 @@ class HetznerKonsoleHAutomation:
         transfer_no = self.page.locator("#transfer_no").first
         await transfer_no.click(timeout=5000)
 
-        domain_input = self.page.locator("#search_domain").first
+        domain_input = self.page.locator(DOMAIN_INPUT).first
         await domain_input.click(timeout=5000)
         await domain_input.fill("")
         await domain_input.type(domain_name, delay=60)
@@ -587,23 +596,7 @@ class HetznerKonsoleHAutomation:
         await tld_select.select_option(value=tld, timeout=5000)
         await tld_select.dispatch_event("change")
 
-        nameserver_toggle = self.page.locator("#enable_nameserver").first
-        await nameserver_toggle.click(timeout=5000)
-        await self.page.wait_for_timeout(200)
-
-        # Three NS fields exist; fill the provided ones (Cloudflare gives 2),
-        # clear any leftover field so no stale Hetzner NS remains.
-        for index, selector in enumerate(
-            ("#nameserver1", "#nameserver2", "#nameserver3")
-        ):
-            value = nameservers[index] if index < len(nameservers) else ""
-            field = self.page.locator(selector).first
-            await field.click(timeout=5000)
-            await field.fill("")
-            if value:
-                await field.type(value, delay=30)
-            await field.dispatch_event("input")
-            await field.dispatch_event("change")
+        await self._fill_order_nameservers(nameservers)
 
         await self.page.evaluate(
             """
@@ -620,7 +613,7 @@ class HetznerKonsoleHAutomation:
             """
             () => {
                 const btn = document.querySelector('#next_button');
-                const domain = document.querySelector('#search_domain');
+                const domain = document.querySelector('#domain_name_without_tld, #search_domain');
                 const tld = document.querySelector('#tld_select');
                 return !!btn && !!domain && !!tld && domain.value.trim().length > 0 && tld.value.trim().length > 0 && !btn.disabled;
             }
@@ -629,6 +622,28 @@ class HetznerKonsoleHAutomation:
         )
 
         await self.page.locator("#next_button").first.click(timeout=5000)
+
+    async def _fill_order_nameservers(self, nameservers: list[str]) -> None:
+        modern = self.page.locator("#custom_nameservers")
+        if await modern.count():
+            if nameservers == config.HETZNER_NAMESERVERS:
+                await modern.uncheck(timeout=5000)
+                return
+            await modern.check(timeout=5000)
+        else:
+            await self.page.locator("#enable_nameserver").first.check(timeout=5000)
+
+        # Fill requested servers and clear the provider's remaining fields.
+        fields = await self.page.locator(
+            f"{DOMAIN_FORM} input[id^='nameserver']:visible"
+        ).all()
+        if len(fields) < len(nameservers):
+            raise click.ClickException(
+                "KonsoleH did not show enough nameserver fields."
+            )
+        for index, field in enumerate(fields):
+            await field.fill(nameservers[index] if index < len(nameservers) else "")
+            await field.dispatch_event("change")
 
     # ── Check Domain Availability ────────────────────────────────────
 
