@@ -22,7 +22,7 @@ PITCH_TEMPLATE = "https://github.com/Deploy-your-Startup/pitch-template.git"
 # The tested immutable DEFAULT_TEMPLATE revision this CLI bootstraps. This
 # is the only place the default template version is pinned; installers and
 # docs call `startup bootstrap` without --template-version.
-DEFAULT_TEMPLATE_VERSION = "954e4896e5363ae7182bd789ba715e53824b6ce0"
+DEFAULT_TEMPLATE_VERSION = "2ed57b3da570f35cc07601442901aeefd3efb69a"
 PITCH_TEMPLATE_VERSION = "v0.1.7"
 
 ANSWERS_FILE = ".copier-answers.yml"
