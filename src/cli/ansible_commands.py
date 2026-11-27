@@ -1453,7 +1453,10 @@ def run_kubeconfig(
             )
         kubeconfig_files.merge_into_kube_config(kubeconfig, context, make_current)
         click.echo(f"Wrote kubeconfig to: {output_path}")
-        click.echo(f"Imported context into ~/.kube/config as: {context}")
+        click.echo(
+            f"Imported cluster administrator context {context} into ~/.kube/config "
+            f"(default namespace {k8s_namespace})."
+        )
         return output_path
     finally:
         tmp_path.unlink(missing_ok=True)

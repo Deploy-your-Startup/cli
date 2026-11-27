@@ -302,7 +302,14 @@ separately. Installations made directly with uv are managed with `uv tool uninst
 
 ## Working with coding agents
 
-Open the generated repository in your coding agent and let it read `AGENTS.md`.
+For portfolio work, open the Factory with the owner credentials authorized for
+the task. A Factory agent can work across registered startups and shared tooling.
+For a single startup, start a separate session with only its checkout, repository
+credentials and any access it needs to its own services. The working directory
+selects the project. The files and credentials available to the session determine
+its access. Both sessions follow the same owner approval rules.
+
+Let the agent read the checkout's `AGENTS.md`.
 The project supplies service commands for local development, linting and tests;
 its workflows use the same commands. Describe the application you want, review
 the changes and run the relevant checks before deploying.
@@ -380,6 +387,12 @@ startup ansible update-vms --working-directory deployment --environment producti
 ```
 
 ### Kubernetes access over SSH
+
+`startup ansible kubeconfig` and `startup cluster connect` provide cluster
+administrator access. A context's default namespace selects resources for
+commands. For a startup agent that needs Kubernetes, bind a separate identity
+to the required operations in that startup's namespace. Keep administrative SSH
+keys and kubeconfigs in the owner environment.
 
 `startup ansible kubeconfig` configures an automatic SSH tunnel by default.
 Continue using `kubectl` and `k9s` normally: their kubeconfig credential helper

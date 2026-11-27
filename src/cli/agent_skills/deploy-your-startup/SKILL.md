@@ -253,9 +253,12 @@ startup bootstrap --yes --kind fullstack --cluster cluster-connection.yml \
   --project-name second-startup --base-domain second.example.com --without-auth
 ```
 
-Keep one kubeconfig context per startup with its own namespace. Dashboards must
-check that context's namespace, not all namespaces. Never describe namespace
-policies as customer isolation: SSH keys remain cluster administrators.
+The owner can use one kubeconfig context per startup with its own default
+namespace. `startup ansible kubeconfig` and `startup cluster connect` provide
+cluster administrator access. A startup agent that needs Kubernetes requires
+its own identity with the necessary RBAC permissions in its namespace.
+Dashboards query that namespace. Keep administrative SSH keys and kubeconfigs
+in the owner environment.
 
 Run infrastructure, update-vms, os-upgrade, k3s-upgrade and cert-manager-upgrade from the
 cluster owner, and account for every attached application before these operations.
@@ -433,6 +436,14 @@ account is required by the standard workflow.
 
 
 ## Factory workspaces
+
+For a portfolio task, use the Factory owner's session with the repositories,
+tools and credentials the owner authorizes across startups. For a single-startup
+task, use a separate session exposing only that startup's checkout, repository
+credentials and required services. A project folder, CLI working directory or
+context name selects a target. Filesystem access and credential permissions
+determine what the agent can reach. The owner's existing approval rules apply
+in either session.
 
 The guided installer runs `startup factory onboard` to create and set up the
 owner's Factory before bootstrap. For a workspace without a startup, use

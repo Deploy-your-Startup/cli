@@ -32,7 +32,7 @@ from cli.kube_credentials import fetch_kubeconfig, read_state
 @click.option(
     "--namespace",
     default=None,
-    help="Preserve the existing namespace unless explicitly set.",
+    help="Set the default namespace for this administrator context. Omit to keep the existing namespace.",
 )
 @click.option(
     "--kubeconfig", "config_path", type=click.Path(path_type=Path), default=None
@@ -47,7 +47,7 @@ def connect(
     namespace,
     config_path,
 ):
-    """Fetch Kubernetes credentials over SSH and enable automatic local tunnels.
+    """Configure cluster administrator access over SSH with automatic local tunnels.
 
     Uses your SSH agent or --identity-file. Trust the server's host key with SSH
     first. Public API access is unnecessary; firewall changes are separate.
@@ -117,5 +117,6 @@ def connect(
             existing["current-context"] = context_name
         private_write(config_path, existing)
     click.echo(
-        f"SSH access ready: {context_name} (namespace {source['contexts'][0]['context']['namespace']})."
+        f"Cluster administrator access ready for {context_name} over SSH "
+        f"(default namespace {source['contexts'][0]['context']['namespace']})."
     )
