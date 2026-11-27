@@ -252,6 +252,8 @@ def test_native_clients_reconnect_and_keep_namespaces(client):
     # GIVEN SSH-only Kubernetes and two startup namespaces.
     result = run(*args, env=env)
     assert result.returncode == 0, result.stderr
+    assert "Cluster administrator access" in result.stdout
+    assert "default namespace shop" in result.stdout
     second = args.copy()
     second[second.index("--context") + 1] = "other"
     second[second.index("--namespace") + 1] = "other"
@@ -614,6 +616,8 @@ def test_ansible_kubeconfig_defaults_to_ssh_and_preserves_other_contexts(
     )
     assert result.returncode == 0, result.stdout + result.stderr
     # THEN namespace, automatic access and the unrelated selection all survive.
+    assert "cluster administrator context shop" in result.stdout
+    assert "default namespace shop" in result.stdout
     saved = yaml.safe_load(config.read_text())
     assert saved["current-context"] == "unrelated"
     assert unrelated["contexts"][0] in saved["contexts"]

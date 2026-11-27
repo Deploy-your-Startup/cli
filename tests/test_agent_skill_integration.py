@@ -96,6 +96,8 @@ def test_published_skill_and_plugin_manifests_match_the_cli(tmp_path):
     assert manifest["plugins"][0]["name"] == plugin["name"] == "deploy-your-startup"
     assert manifest["plugins"][0]["source"] == "./"
     for command in (
+        ["factory"],
+        ["cluster", "connect"],
         ["bootstrap"],
         ["doctor"],
         ["sync"],
@@ -121,6 +123,10 @@ def test_published_skill_and_plugin_manifests_match_the_cli(tmp_path):
             timeout=30,
         )
         assert help_run.returncode == 0, (command, help_run.stderr)
+        if command in (["cluster", "connect"], ["ansible", "kubeconfig"]):
+            assert "cluster administrator" in help_run.stdout
+        if command == ["factory"]:
+            assert "across startups" in help_run.stdout
     for option in (
         "--hetzner-token-stdin",
         "--without-auth",

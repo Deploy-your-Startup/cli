@@ -304,7 +304,11 @@ def initialize_factory(
 
 @click.group()
 def factory():
-    """Create your local startup portfolio and reusable agent workspace."""
+    """Set up the owner's portfolio workspace and register startups.
+
+    Use a Factory session for work across startups. For a single-startup agent,
+    provide only its checkout and credentials scoped to the project's resources.
+    """
 
 
 @factory.command("init")

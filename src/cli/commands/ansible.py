@@ -398,7 +398,11 @@ def ansible_kubeconfig(
     ssh_identity,
     ssh_port,
 ):
-    """Fetch kubeconfig with automatic SSH access (public API access is unnecessary)."""
+    """Import a cluster administrator kubeconfig using SSH.
+
+    The project namespace becomes the default for kubectl. The credentials
+    retain cluster-wide access.
+    """
     from cli.ansible_commands import resolve_vault_password, run_kubeconfig
 
     resolved_vault_password = resolve_vault_password(
