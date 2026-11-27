@@ -11,7 +11,7 @@ HETZNER_PROJECTS_URL = f"{HETZNER_BASE_URL}/projects"
 
 # ── Hetzner KonsoleH URLs (domain registration) ─────────────────────
 KONSOLEH_BASE_URL = "https://konsoleh.hetzner.com"
-KONSOLEH_ORDER_URL = f"{KONSOLEH_BASE_URL}/order.php"
+KONSOLEH_ORDER_URL = f"{KONSOLEH_BASE_URL}/orders"
 KONSOLEH_DOMAINS_URL = f"{KONSOLEH_BASE_URL}/domain.php"
 KONSOLEH_HANDLES_URL = f"{KONSOLEH_BASE_URL}/contact.php"
 
@@ -34,8 +34,10 @@ SELECTORS_KONSOLEH_NS_FIELD = "#ns1, #ns2, #ns3, #ns4, #ns5, input[name='newdns[
 # Domain order: owner step, then the binding order summary ("Bestellung bestätigen").
 SELECTORS_KONSOLEH_DOMAIN_OWNERS = "#domain_owners"
 SELECTORS_KONSOLEH_OWNER_NEXT = "#btnNextStep"
-SELECTORS_KONSOLEH_ORDER_FORM = "form[name='billing_form']"
-SELECTORS_KONSOLEH_ACCEPT_TERMS = "#accept_terms_and_conditions"
+SELECTORS_KONSOLEH_ORDER_FORM = "form#place_order_form, form[name='billing_form']"
+SELECTORS_KONSOLEH_ACCEPT_TERMS = (
+    "#accepted_terms_and_conditions, #accept_terms_and_conditions"
+)
 SELECTORS_KONSOLEH_PLACE_ORDER = "a.btn-primary:has-text('Zahlungspflichtig bestellen')"
 
 # ── Hetzner Default Nameservers ──────────────────────────────────────

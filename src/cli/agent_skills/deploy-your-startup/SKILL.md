@@ -72,7 +72,10 @@ Ask **one** bundled question with only what is missing:
   be bought.
 
 Optional, ask only if the user brings it up: extra domains, the Vue template,
-Auth0 login (`--auth0-tenant`; otherwise pass `--without-auth`), Sentry error
+OIDC login (Auth0 with `--auth0-tenant`, or an existing Keycloak realm or other
+OIDC provider using `--oidc-issuer`, `--oidc-client-id` and
+`--oidc-client-secret-stdin` for unattended runs; otherwise pass
+`--without-auth`), Sentry error
 tracking (`--sentry-org` with a personal Sentry token; otherwise `--without-sentry`).
 
 Templates that ask for `deploy_repository` call `Deploy-your-Startup/deploy`
@@ -118,7 +121,9 @@ real browser for the user to sign in. If no token is passed, that browser path
 is used. Pass tokens via `--hetzner-token-stdin`, never as an argument.
 
 Full-stack Hetzner bootstrap previews monthly net/gross resource prices before
-provisioning and asks for confirmation (default No). `--yes` accepts the estimate;
+provisioning and asks for confirmation (default No). Use `--cheapest-available`
+for a fresh single-node EU project to compare available shared x86 hosts with
+at least 2 vCPUs and 4 GB RAM, including the project's IPv4 price. `--yes` accepts the estimate;
 use `--max-monthly-cost <amount>` for a user-approved gross cap in the project
 currency. The cap aborts if prices are unavailable or exceed it. Without a cap,
 `--yes` proceeds with a warning if pricing is unavailable. Domain prices are

@@ -4,7 +4,7 @@ browser, THEN it picks the owner and only places the binding order when told to.
 import html
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from threading import Thread
+from threading import Event, Thread
 from typing import Any
 from urllib.parse import parse_qs
 
@@ -41,6 +41,23 @@ LOOKUP_PAGE = """<html><body>
   <input id="nameserver3" name="ns3">
   <button type="submit" id="next_button">Weiter</button>
 </form></body></html>"""
+
+CURRENT_ORDER_PAGE = """<html><body>
+<div id="domain"><a href="/orders/domain_registration">Auswählen</a></div>
+</body></html>"""
+
+CURRENT_LOOKUP_PAGE = (
+    LOOKUP_PAGE.replace('action="/order.php"', 'action="/orders/validate_domain"')
+    .replace(
+        'id="search_domain" name="domain"',
+        'id="domain_name_without_tld" name="domain_name_without_tld"',
+    )
+    .replace(
+        'id="enable_nameserver" name="own_ns"',
+        'id="custom_nameservers" name="custom_nameservers"',
+    )
+    .replace('value=".de">.de<', 'value=".de">.de (5,83 €)<')
+)
 
 
 def owner_page(contacts):
@@ -103,6 +120,20 @@ def summary_page(contact, leave=False):
 </body></html>"""
 
 
+def current_summary(body):
+    return (
+        body.replace(
+            'name="billing_form" action="/order.php"',
+            'id="place_order_form" action="/orders/place_order_domain"',
+        )
+        .replace("accept_terms_and_conditions", "accepted_terms_and_conditions")
+        .replace(
+            "document.forms.billing_form.submit()",
+            "document.getElementById('place_order_form').submit()",
+        )
+    )
+
+
 @pytest.fixture
 def konsoleh(monkeypatch, tmp_path):
     """A stand-in for Hetzner's KonsoleH order pages, reached over real HTTP."""
@@ -113,6 +144,7 @@ def konsoleh(monkeypatch, tmp_path):
         "signed_in": True,
         "leave_summary": False,
     }
+    finish_background_request = Event()
 
     class KonsoleH(BaseHTTPRequestHandler):
         def respond(self, body):
@@ -132,7 +164,15 @@ def konsoleh(monkeypatch, tmp_path):
             # keeps reloading itself by script, so page loads never settle.
             # A few seconds later the user signs in and lands on the order page.
             port = state["port"]
-            if self.path == "/auth.php":
+            if self.path == "/background":
+                self.send_response(200)
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"a")
+                finish_background_request.wait(20)
+            elif state.get("order_status"):
+                self.send_error(state["order_status"])
+            elif self.path == "/auth.php":
                 state.setdefault("check_started", time.monotonic())
                 self.redirect(f"http://localhost:{port}/pow")
             elif self.path == "/pow":
@@ -146,6 +186,19 @@ def konsoleh(monkeypatch, tmp_path):
                 self.redirect(f"http://127.0.0.1:{port}/order.php")
             elif not state["signed_in"]:
                 self.redirect("/auth.php")
+            elif state.get("current_checkout"):
+                if self.path == "/orders":
+                    self.respond(CURRENT_ORDER_PAGE)
+                elif self.path == "/orders/domain_registration":
+                    self.respond(CURRENT_LOOKUP_PAGE)
+                else:
+                    self.send_error(404)
+            elif state.get("busy_order_page"):
+                self.respond(
+                    ORDER_PAGE.replace(
+                        "</body>", '<script>fetch("/background")</script></body>'
+                    )
+                )
             else:
                 self.respond(ORDER_PAGE)
 
@@ -159,12 +212,36 @@ def konsoleh(monkeypatch, tmp_path):
             if step == "2":
                 self.respond(LOOKUP_PAGE)
             elif step == "3":
-                state["domain"] = form["domain"] + form["tld"]
-                self.respond(owner_page(state["contacts"]))
+                state["domain"] = (
+                    form.get("domain") or form["domain_name_without_tld"]
+                ) + form["tld"]
+                state["custom_nameservers"] = form.get("custom_nameservers")
+                body = owner_page(state["contacts"])
+                if state.get("current_checkout"):
+                    body = body.replace(
+                        'action="/order.php"', 'action="/orders/validate_domain_owner"'
+                    )
+                    body = body.replace(
+                        "addEventListener('change', () => {",
+                        "addEventListener('input', () => {\n"
+                        "  document.getElementById('emails').value = '';\n"
+                        "  setTimeout(fillContact, 150);\n"
+                        "});\nfunction fillContact() {",
+                    ).replace(
+                        "});\ndocument.getElementById('btnNextStep')",
+                        "}\ndocument.getElementById('btnNextStep')",
+                    )
+                self.respond(body)
             elif step == "4":
                 state["owner"] = state["contacts"][int(form["owner_index"]) - 1]
-                self.respond(summary_page(state["owner"], state["leave_summary"]))
-            elif "accept_terms_and_conditions" not in form:
+                body = summary_page(state["owner"], state["leave_summary"])
+                self.respond(
+                    current_summary(body) if state.get("current_checkout") else body
+                )
+            elif not {
+                "accept_terms_and_conditions",
+                "accepted_terms_and_conditions",
+            }.intersection(form):
                 self.respond(summary_page(state["owner"]))
             else:
                 state["orders"].append((state["domain"], state["owner"]["emails"]))
@@ -186,6 +263,7 @@ def konsoleh(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "CHROME_USER_DATA_DIR", tmp_path / "profile")
     monkeypatch.setattr(config, "ORDER_WAIT_TIMEOUT", 3000)
     yield state
+    finish_background_request.set()
     server.shutdown()
     server.server_close()
     thread.join()
@@ -193,6 +271,68 @@ def konsoleh(monkeypatch, tmp_path):
 
 def order(*args):
     return CliRunner().invoke(cli, ["hetzner", "domain", "--headless", *args])
+
+
+def test_konsoleh_error_response_is_not_a_login(konsoleh):
+    # GIVEN an access error served from KonsoleH's own order URL.
+    konsoleh["order_status"] = 403
+    # WHEN the CLI opens KonsoleH, THEN it stops with the HTTP status.
+    result = order("sample.de")
+    assert result.exit_code == 1
+    assert "HTTP 403" in result.output
+    assert "login successful" not in result.output
+    assert "Press Enter to continue" not in result.output
+    assert konsoleh["orders"] == []
+
+
+def test_visible_checkout_works_while_network_stays_busy(konsoleh, monkeypatch):
+    # GIVEN a usable order page with an unrelated long-running HTTP request.
+    konsoleh["busy_order_page"] = True
+    konsoleh["contacts"] = CONTACTS[:1]
+    monkeypatch.setattr(config, "DEFAULT_TIMEOUT", 1500)
+    # WHEN the CLI opens the domain form, THEN it reaches the price summary
+    # before the background request completes and submits no unapproved order.
+    result = order("sample.de")
+    assert result.exit_code == 1
+    assert "Order summary from Hetzner" in result.output
+    assert "Press Enter to continue" not in result.output
+    assert konsoleh["orders"] == []
+
+
+def test_current_orders_route_reaches_price_with_default_nameservers(
+    konsoleh, monkeypatch
+):
+    # GIVEN KonsoleH serves the new /orders route and the old route is gone.
+    konsoleh["current_checkout"] = True
+    konsoleh["contacts"] = CONTACTS[:1]
+    monkeypatch.setattr(
+        config, "KONSOLEH_ORDER_URL", config.KONSOLEH_BASE_URL + "/orders"
+    )
+    # WHEN the CLI opens the current Domainregistrierung entry.
+    result = order("sample.de")
+    # THEN it submits the lookup and shows the price without an order.
+    assert result.exit_code == 1, result.output
+    assert "Price:  5,83 € (jährlich)" in result.output
+    assert konsoleh["domain"] == "sample.de"
+    assert konsoleh["custom_nameservers"] is None
+    assert konsoleh["orders"] == []
+
+
+def test_current_checkout_matches_duplicate_names_by_email(konsoleh, monkeypatch):
+    # GIVEN the new form populates fields on input and two contacts share a name.
+    konsoleh["current_checkout"] = True
+    monkeypatch.setattr(
+        config, "KONSOLEH_ORDER_URL", config.KONSOLEH_BASE_URL + "/orders"
+    )
+    # WHEN the user names the second contact and authorizes the simulated order,
+    # THEN the review matches that contact and exactly one order is submitted.
+    result = order(
+        "sample.de", "--contact-email", "office@example.com", "--confirm-order"
+    )
+    assert result.exit_code == 0, result.output
+    assert "Order summary from Hetzner" in result.output
+    assert konsoleh["owner"]["emails"] == "office@example.com"
+    assert konsoleh["orders"] == [("sample.de", "office@example.com")]
 
 
 def test_confirmed_order_uses_the_chosen_contact(konsoleh):

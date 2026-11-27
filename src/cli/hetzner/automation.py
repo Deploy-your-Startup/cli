@@ -7,6 +7,8 @@ what happens and complete manual steps (login, 2FA, captcha).
 
 from __future__ import annotations
 
+import click
+
 from ..browser_runtime import launch_persistent_context
 from ..playwright_errors import playwright_error
 from . import _output as ui
@@ -337,30 +339,7 @@ class HetznerAutomation:
                     except playwright_error():
                         ui.warning("Could not navigate to the API tokens page.")
 
-        # Click "Add API Token"
-        try:
-            gen_btn = self.page.locator(config.SELECTORS_GENERATE_TOKEN_BUTTON).first
-            await gen_btn.click(timeout=10000)
-        except playwright_error():
-            ui.warning(
-                "Could not find 'Add API Token' button — please click it manually."
-            )
-
-        # The dialog's <hc-dialog> wrapper is a zero-size element, so we do NOT
-        # scope to it (that made wait_for(visible) hang). Instead we target the
-        # dialog's fields directly by their unique data-test selectors — they are
-        # distinct from anything on the page behind the dialog.
-
-        # Fill description (waiting for the input itself is what confirms the
-        # dialog is open).
-        try:
-            desc_input = self.page.locator(
-                config.SELECTORS_TOKEN_DESCRIPTION_INPUT
-            ).first
-            await desc_input.wait_for(state="visible", timeout=10000)
-            await desc_input.fill(token_name)
-        except playwright_error():
-            ui.warning("Could not fill token name — please enter manually.")
+        await self._open_token_dialog(token_name)
 
         # Select "Read & Write" (best effort — it is the default selection)
         try:
@@ -394,6 +373,30 @@ class HetznerAutomation:
             token = ui.ask("Paste API token here", password=True)
 
         return token if token else None
+
+    async def _open_token_dialog(self, token_name: str) -> None:
+        # The page can render the token list before Hetzner shows the action.
+        # Click a visible add button so hidden dialog controls cannot intercept it.
+        add_button = (
+            self.page.locator(config.SELECTORS_GENERATE_TOKEN_BUTTON)
+            .filter(visible=True)
+            .first
+        )
+        try:
+            await add_button.click(timeout=config.NAVIGATION_TIMEOUT)
+        except playwright_error():
+            raise click.ClickException(
+                "Hetzner did not show an available API token creation button. "
+                "Check the project's Security → API Tokens page and your access."
+            ) from None
+
+        description = self.page.locator(config.SELECTORS_TOKEN_DESCRIPTION_INPUT).first
+        try:
+            await description.fill(token_name, timeout=config.NAVIGATION_TIMEOUT)
+        except playwright_error():
+            raise click.ClickException(
+                "Hetzner did not open an editable API token creation form."
+            ) from None
 
     async def _submit_token_modal(self) -> bool:
         """Click the dialog's accept button and verify the token view appeared.

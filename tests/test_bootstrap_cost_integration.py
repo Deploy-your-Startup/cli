@@ -66,9 +66,12 @@ def provider(monkeypatch):
     class Provider(BaseHTTPRequestHandler):
         def do_GET(self):
             state["requests"].append((self.path, self.headers.get("Authorization")))
-            self.send_response(state["status"])
+            status, body = state.get("endpoints", {}).get(
+                self.path, (state["status"], state["body"])
+            )
+            self.send_response(status)
             self.end_headers()
-            self.wfile.write(json.dumps(state["body"]).encode())
+            self.wfile.write(json.dumps(body).encode())
 
         def log_message(self, format, *args):
             pass
@@ -227,6 +230,119 @@ def test_missing_prices_never_produce_partial_total(tmp_path, provider, category
     assert total.count("unavailable") == 2
 
 
+@pytest.fixture
+def live_capacity(provider):
+    def server(name, *locations, memory=4):
+        return {
+            "name": name,
+            "architecture": "x86",
+            "cpu_type": "shared",
+            "cores": 2,
+            "memory": memory,
+            "locations": list(locations),
+        }
+
+    def location(name, available):
+        return {"name": name, "available": available, "deprecation": None}
+
+    provider["endpoints"] = {
+        "/v1/servers?per_page=1": (200, {"servers": []}),
+        "/v1/server_types?per_page=50&page=1": (
+            200,
+            {
+                "server_types": [
+                    server("cx23", location("fsn1", False)),
+                    server("cpx12", location("hel1", True), memory=2),
+                ],
+                "meta": {"pagination": {"next_page": 2}},
+            },
+        ),
+        "/v1/server_types?per_page=50&page=2": (
+            200,
+            {
+                "server_types": [
+                    server("cpx22", location("nbg1", True), location("hel1", True))
+                ]
+            },
+        ),
+    }
+    pricing = provider["body"]["pricing"]
+    pricing["server_types"].append(
+        {
+            "name": "cpx22",
+            "prices": [price("6.00", "7.14", "hel1"), price("7.00", "8.33", "nbg1")],
+        }
+    )
+    pricing["primary_ips"][0]["prices"].append(price("3.00", "3.57", "hel1"))
+    return provider
+
+
+def test_cheapest_available_compares_ipv4_and_preserves_selected_plan(
+    tmp_path, live_capacity
+):
+    # GIVEN a cheaper listed server is unavailable and the cheapest bare server
+    # costs more once IPv4 is included.
+    ctx = project(
+        tmp_path,
+        "commented_value: true # preserve this\nsecret: !vault |\n  opaque\n",
+        cheapest_available=True,
+    )
+    target = ctx.deployment_dir / "group_vars/production.yml"
+    original = target.read_text()
+    # WHEN the user reviews and approves the monthly estimate.
+    denied = run_step(ctx, "n\n")
+    assert denied.exit_code == 1 and target.read_text() == original
+    assert "1 × cpx22 server (nbg1)" in denied.output
+    assert "16.66 EUR/month" in denied.output
+    approved = run_step(ctx, "y\n")
+    # THEN only the approved plan is written, with the original Vault block intact.
+    assert approved.exit_code == 0, approved.output
+    assert (
+        target.read_text() == original + "master_server_type: cpx22\nlocation: nbg1\n"
+    )
+    live_capacity["requests"].clear()
+    resumed = run_step(ctx, "y\n")
+    assert resumed.exit_code == 0, resumed.output
+    assert "Keeping the server type already configured" in resumed.output
+    assert live_capacity["requests"] == [("/v1/pricing", "Bearer synthetic-token")]
+
+
+@pytest.mark.parametrize(
+    "path, status, body, message",
+    [
+        (
+            "/v1/servers?per_page=1",
+            200,
+            {"servers": [{"name": "existing"}]},
+            "without existing servers",
+        ),
+        (
+            "/v1/server_types?per_page=50&page=1",
+            401,
+            {},
+            "Could not verify Hetzner server availability",
+        ),
+        (
+            "/v1/server_types?per_page=50&page=1",
+            200,
+            {"server_types": []},
+            "No available EU Hetzner plan",
+        ),
+    ],
+)
+def test_cheapest_available_aborts_on_unsafe_or_unverified_choices(
+    tmp_path, live_capacity, path, status, body, message
+):
+    # GIVEN a project with an unavailable or unsafe catalogue selection.
+    ctx = project(tmp_path, cheapest_available=True, non_interactive=True)
+    live_capacity["endpoints"][path] = (status, body)
+    # WHEN bootstrap attempts automated selection, THEN it cannot save a plan.
+    result = run_step(ctx)
+    assert result.exit_code == 1 and message in result.output
+    assert "synthetic-token" not in result.output
+    assert (ctx.deployment_dir / "group_vars/production.yml").read_text() == ""
+
+
 def test_wizard_routes_cost_before_auth_and_finalization(tmp_path, provider):
     # GIVEN contexts for each supported bootstrap provisioning mode.
     ctx = project(tmp_path, auth0_tenant="example.eu.auth0.com")
@@ -266,10 +382,15 @@ def test_wizard_routes_cost_before_auth_and_finalization(tmp_path, provider):
             "Cancelled before provisioning; nothing was created in Hetzner.",
         ),
         (["--yes", "--max-monthly-cost", "1"], "", "exceeds --max-monthly-cost"),
+        (
+            ["--yes", "--cheapest-available", "--max-monthly-cost", "1"],
+            "",
+            "exceeds --max-monthly-cost",
+        ),
     ],
 )
 def test_bootstrap_process_never_dispatches_after_cost_abort(
-    tmp_path, provider, options, answers, expected
+    tmp_path, provider, options, answers, expected, request
 ):
     import os
     import subprocess
@@ -278,6 +399,9 @@ def test_bootstrap_process_never_dispatches_after_cost_abort(
 
     from tests.vault_support import RealVault
 
+    cheapest = "--cheapest-available" in options
+    if cheapest:
+        request.getfixturevalue("live_capacity")
     # GIVEN a configured, resumable real Git project with a real encrypted Vault,
     # plus local stand-ins for Hetzner, GitHub and the OS password provider.
     ctx = project(tmp_path)
@@ -405,7 +529,7 @@ sys.exit(1)
     output = result.stdout + result.stderr
     assert result.returncode == 1, output
     assert expected in output, output
-    assert "Total per month" in output and "11.90" in output
+    assert "Total per month" in output and ("16.66" if cheapest else "11.90") in output
     assert "/v1/pricing" in [path for path, _ in provider["requests"]]
     assert "workflow run" not in log.read_text()
     assert "secret set" not in log.read_text()

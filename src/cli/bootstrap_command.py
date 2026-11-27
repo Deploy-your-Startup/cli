@@ -39,6 +39,7 @@ class BootstrapOptions:
 
     site_policy: Path | None
     max_monthly_cost: str | None
+    cheapest_available: bool
     verify_deployment: bool
     verify_timeout: int
     verbose: bool
@@ -53,6 +54,9 @@ class BootstrapOptions:
     template_source: str | None
     template_version: str | None
     auth0_tenant: str | None
+    oidc_issuer: str | None
+    oidc_client_id: str | None
+    oidc_client_secret_stdin: bool
     without_auth: bool
     sentry_org: str | None
     sentry_team: str | None
@@ -93,6 +97,10 @@ def _answered(value: str | None) -> str:
 
 
 def _read_hetzner_token_from_stdin(options: BootstrapOptions) -> None:
+    if options.hetzner_token_stdin and options.oidc_client_secret_stdin:
+        raise click.ClickException(
+            "--hetzner-token-stdin and --oidc-client-secret-stdin both need stdin."
+        )
     if not options.hetzner_token_stdin:
         return
     if options.hetzner_token:
@@ -357,6 +365,10 @@ def _summary(options: BootstrapOptions, cluster_config: dict | None) -> dict:
     summary["Provider"] = (
         "Hetzner" if options.provider == "hetzner" else "Bring your own server"
     )
+    if options.cheapest_available:
+        summary["Server plan"] = (
+            "Cheapest available in the EU, checked before deployment"
+        )
     if cluster_config:
         summary["Cluster owner"] = cluster_config["owner"]
         summary["Infrastructure"] = "Existing cluster; application deployment only"
@@ -399,6 +411,9 @@ def _wizard_context(
         template_source=_answered(options.template_source),
         template_version=_answered(options.template_version),
         auth0_tenant=options.auth0_tenant,
+        oidc_issuer=options.oidc_issuer,
+        oidc_client_id=options.oidc_client_id,
+        oidc_client_secret_stdin=options.oidc_client_secret_stdin,
         without_auth=options.without_auth,
         sentry_org=options.sentry_org,
         sentry_team=options.sentry_team,
@@ -415,6 +430,7 @@ def _wizard_context(
         cloudflare_api_token=options.cloudflare_token,
         cloudflare_account_id=options.cloudflare_account_id,
         max_monthly_cost=max_cost,
+        cheapest_available=options.cheapest_available,
         non_interactive=options.assume_yes,
         domain_owned=options.domain_owned,
         domain_contact=options.domain_contact,
@@ -477,6 +493,12 @@ def run_bootstrap(options: BootstrapOptions) -> None:
     _ask_stack(options, cluster_config)
     _ask_output_dir(options)
     _ask_provider(options)
+    if options.cheapest_available and (
+        options.kind != "fullstack" or options.provider != "hetzner" or cluster_config
+    ):
+        raise click.ClickException(
+            "--cheapest-available requires a new Hetzner full-stack server."
+        )
     if (options.shared_cluster or cluster_config) and options.kind != "fullstack":
         raise click.ClickException("Cluster options require --kind fullstack.")
     _ask_domain(options, cluster_config)
