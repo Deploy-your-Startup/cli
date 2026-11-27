@@ -248,6 +248,14 @@ def test_bootstrap_generates_secrets_uuid_pin_and_preserves_them_on_resume(
         if "/deploy-your-startup/.github/workflows/" in line
     ]
     assert shared_calls and all(f"@{revision}" in line for line in shared_calls)
+    # GIVEN an installed copy of the CLI in the project's ignored environment.
+    installed_cli = deployment / ".venv/site-packages/cli/wizard/base.py"
+    installed_cli.parent.mkdir(parents=True, exist_ok=True)
+    installed_cli.write_text('MARKER = "§§deploy_your_startup"\n')
+    subprocess.run(
+        ["git", "-C", str(project), "check-ignore", "--quiet", str(installed_cli)],
+        check=True,
+    )
     before = {
         path: path.read_bytes() for path in deployment.rglob("*") if path.is_file()
     }

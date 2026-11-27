@@ -48,17 +48,32 @@ def repo_exists(full_repo: str) -> bool:
 
 
 def has_placeholders(project_dir: Path) -> bool:
-    """Check if the project still contains §§deploy_your_startup placeholders."""
+    """Check project sources without scanning ignored dependencies or caches."""
     if not project_dir.exists():
         return False
-    for root, _dirs, files in os.walk(project_dir):
-        for f in files:
-            fp = Path(root) / f
-            try:
-                if "§§deploy_your_startup" in fp.read_text(errors="ignore"):
-                    return True
-            except (OSError, UnicodeDecodeError):
-                continue
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+            cwd=project_dir,
+            capture_output=True,
+            check=True,
+        )
+        files = (
+            project_dir / os.fsdecode(path)
+            for path in result.stdout.split(b"\0")
+            if path
+        )
+    except (OSError, subprocess.CalledProcessError):
+        files = (path for path in project_dir.rglob("*") if path.is_file())
+
+    for path in files:
+        if path.is_symlink():
+            continue
+        try:
+            if "§§deploy_your_startup" in path.read_text(errors="ignore"):
+                return True
+        except OSError:
+            continue
     return False
 
 

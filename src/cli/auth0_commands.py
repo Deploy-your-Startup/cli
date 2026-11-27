@@ -238,8 +238,13 @@ def configure_auth0(
         "oauth2_proxy_cookie_secret": cookie_secret,
         "auth_domain": f"https://{tenant}",
         "auth_audience": audience,
-        proxy_toggle: "true",
     }
+    if has_shared_proxy:
+        values.update(
+            oauth2_proxy_oidc_issuer_url=f"https://{tenant}/",
+            oauth2_proxy_bearer_enabled="true",
+        )
+    values[proxy_toggle] = "true"
     store_vault_fields(project_dir, target, values, "Auth0")
     click.echo(
         f"Auth0 app {project_name} configured in {tenant}; credentials saved in the project vault."

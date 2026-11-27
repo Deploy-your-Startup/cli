@@ -211,13 +211,10 @@ async def _async_register_domain(
     async with HetznerKonsoleHAutomation(headless=headless) as bot:
         # Step 1: Login to KonsoleH
         ui.step(1, "KonsoleH Login")
-        ok = await bot.login()
-        if not ok:
+        if not await bot.login():
             ui.error("KonsoleH login could not be completed.")
-            if not ui.confirm("Try to continue anyway?"):
-                return False
-        else:
-            ui.success("KonsoleH login successful!")
+            return False
+        ui.success("KonsoleH login successful!")
 
         # Step 2: Register domain
         ui.step(2, "Register Domain")

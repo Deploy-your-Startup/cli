@@ -9,6 +9,7 @@ import click
 
 from cli import wizard_output as ui
 
+from .authentication import choose_authentication
 from .base import WizardStep
 from .context import BootstrapContext
 from .steps.attached_dns import AttachedDnsStep
@@ -19,6 +20,7 @@ from .steps.cost import CostStep
 from .steps.domain import DomainStep
 from .steps.finalize import FinalizeStep
 from .steps.hetzner import HetznerStep
+from .steps.oidc import OidcStep
 from .steps.pitch_finalize import PitchFinalizeStep
 from .steps.pitch_project import PitchProjectStep
 from .steps.project import ProjectStep
@@ -67,39 +69,11 @@ def steps_for(ctx: BootstrapContext) -> list[type[WizardStep]]:
             steps[finalize:finalize] = [AttachedDnsStep, DomainStep]
     if ctx.auth0_tenant:
         steps.insert(-1, Auth0Step)
+    if ctx.oidc_issuer:
+        steps.insert(-1, OidcStep)
     if ctx.sentry_org:
         steps.insert(-1, SentryStep)
     return steps
-
-
-def _choose_authentication(ctx: BootstrapContext) -> None:
-    """Settle optional template login and check its CLI login up front."""
-    if ctx.auth0_tenant and ctx.without_auth:
-        raise click.ClickException("Use either --auth0-tenant or --without-auth.")
-    if ctx.kind != "pitch" and not ctx.auth0_tenant and not ctx.without_auth:
-        from cli.template_commands import template_authentication
-
-        if (
-            template_authentication(ctx.template_source, ctx.template_version)
-            == "auth0"
-        ):
-            if ctx.non_interactive:
-                raise click.ClickException(
-                    "This template supports Auth0: pass --auth0-tenant <tenant> "
-                    "or --without-auth before bootstrap."
-                )
-            if click.confirm("Set up Auth0 login for this template?", default=True):
-                ctx.auth0_tenant = click.prompt(
-                    "Auth0 tenant (for example, example.eu.auth0.com)"
-                )
-            else:
-                ctx.without_auth = True
-    if ctx.auth0_tenant:
-        if ctx.kind == "pitch":
-            raise click.ClickException("--auth0-tenant requires --kind fullstack.")
-        from cli.auth0_commands import check_auth0_login
-
-        check_auth0_login(ctx.auth0_tenant)
 
 
 def _choose_error_tracking(ctx: BootstrapContext) -> None:
@@ -172,7 +146,7 @@ def check_prerequisites(ctx: BootstrapContext) -> None:
         check_template_policy(
             ctx.template_source, ctx.template_version, ctx.site_policy
         )
-    _choose_authentication(ctx)
+    choose_authentication(ctx)
     _choose_error_tracking(ctx)
     if ctx.kind != "pitch":
         from cli.preflight import check_local_prerequisites
